@@ -1,0 +1,17 @@
+{
+  "name": "sistema-boleteria-institucional",
+  "version": "1.0.0",
+  "description": "Sistema completo de boletería institucional con mapa de asientos, QR con logo, Mercado Pago, Pago en Efectivo, Validación de Acceso en Puerta e Historial Excel.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "mercadopago": "^2.0.8",
+    "nodemailer": "^6.9.13",
+    "qrcode": "^1.5.3"
+  }
+}

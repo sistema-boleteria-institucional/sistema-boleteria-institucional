@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selección de Asientos y Checkout</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        h1 { margin-bottom: 20px; color: #38bdf8; }
+        .container { display: flex; flex-wrap: wrap; gap: 30px; max-width: 1100px; width: 100%; }
+        .mapa-section { flex: 2; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+        .checkout-section { flex: 1; background: #1e293b; padding: 25px; border-radius: 12px; height: fit-content; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+        .escenario { background: #475569; text-align: center; padding: 12px; font-weight: bold; border-radius: 6px; letter-spacing: 2px; margin-bottom: 30px; color: #cbd5e1; }
+        .grid-asientos { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+        .asiento { background-color: #16a34a; color: white; height: 45px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .asiento:hover { transform: scale(1.05); }
+        .asiento.ocupado { background-color: #64748b; cursor: not-allowed; }
+        .asiento.seleccionado { background-color: #0284c7; ring: 2px solid white; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 12px; transition: 0.2s; }
+        .btn-mp { background-color: #009ee3; color: white; }
+        .btn-mp:hover { background-color: #0082bc; }
+        .btn-efectivo { background-color: #475569; color: white; }
+        .btn-efectivo:hover { background-color: #334155; }
+        .resumen-box { background: #0f172a; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        #ticketResult img { max-width: 200px; margin-top: 10px; border-radius: 8px; border: 4px solid white; }
+    </style>
+</head>
+<body>
+
+    <h1>Selección de Asientos - Concierto de Gala 2026</h1>
+
+    <div class="container">
+        <div class="mapa-section">
+            <div class="escenario">ESCENARIO PRINCIPAL</div>
+            <div class="grid-asientos" id="gridAsientos"></div>
+        </div>
+
+        <div class="checkout-section">
+            <h2>Resumen de Compra</h2>
+            <div class="resumen-box">
+                <p>Asiento: <strong id="asientoTexto" style="color:#38bdf8;">Ninguno</strong></p>
+                <p>Monto Total: <strong style="color:#4ade80;">$1.500 ARS</strong></p>
+            </div>
+
+            <h3>Método de Pago</h3>
+            <button class="btn btn-mp" onclick="pagar('mercadopago')">Pagar con Mercado Pago</button>
+            <button class="btn btn-efectivo" onclick="pagar('efectivo')">Reservar Pago en Efectivo</button>
+
+            <div id="ticketResult" style="text-align:center; margin-top:20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let asientoSeleccionado = null;
+        const grid = document.getElementById('gridAsientos');
+
+        const filas = ['A', 'B', 'C', 'D'];
+        filas.forEach(f => {
+            for (let i = 1; i <= 6; i++) {
+                const id = `${f}-${i}`;
+                const btn = document.createElement('div');
+                btn.className = 'asiento';
+                btn.innerText = id;
+                btn.onclick = () => {
+                    document.querySelectorAll('.asiento').forEach(a => a.classList.remove('seleccionado'));
+                    btn.classList.add('seleccionado');
+                    asientoSeleccionado = id;
+                    document.getElementById('asientoTexto').innerText = id;
+                };
+                grid.appendChild(btn);
+            }
+        });
+
+        async function pagar(metodo) {
+            if (!asientoSeleccionado) return alert('Por favor selecciona un asiento antes de continuar.');
+
+            const res = await fetch('/api/crear-reserva', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    eventoId: 'EV-101',
+                    asientoId: asientoSeleccionado,
+                    metodoPago: metodo,
+                    monto: 1500,
+                    cliente: { nombre: 'Juan Pérez', email: 'juan@email.com' }
+                })
+            });
+
+            const data = await res.json();
+            if (data.exito) {
+                if (metodo === 'mercadopago') {
+                    window.location.href = data.init_point;
+                } else {
+                    document.getElementById('ticketResult').innerHTML = `
+                        <div style="background:#166534; padding:15px; border-radius:8px;">
+                            <p style="margin:0; font-weight:bold;">✅ Reserva Registrada (${data.reserva.idReserva})</p>
+                            <small>Muestra este QR en boletería para abonar</small><br>
+                            <img src="${data.reserva.qrTicket}" alt="Ticket QR"/>
+                        </div>`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
