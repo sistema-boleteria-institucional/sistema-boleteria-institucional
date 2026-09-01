@@ -271,62 +271,66 @@
                 console.error("Error al cargar eventos:", err);
             }
         }
+async function cargarMapaAsientos() {
+    const eventoId = document.getElementById('selEventoVenta').value;
+    const gridIzq = document.getElementById('gridPlateaIzq');
+    const gridDer = document.getElementById('gridPlateaDer');
+    const gridG1 = document.getElementById('gridGrada1');
+    const gridG2 = document.getElementById('gridGrada2');
 
-        async function cargarMapaAsientos() {
-            const eventoId = document.getElementById('selEventoVenta').value;
-            const gridIzq = document.getElementById('gridPlateaIzq');
-            const gridDer = document.getElementById('gridPlateaDer');
-            const gridG1 = document.getElementById('gridGrada1');
-            const gridG2 = document.getElementById('gridGrada2');
+    gridIzq.innerHTML = '';
+    gridDer.innerHTML = '';
+    gridG1.innerHTML = '';
+    gridG2.innerHTML = '';
+    asientoSeleccionado = null;
+    document.getElementById('lblAsiento').innerText = 'Ninguno';
+    document.getElementById('lblPrecio').innerText = '$0';
 
-            gridIzq.innerHTML = '';
-            gridDer.innerHTML = '';
-            gridG1.innerHTML = '';
-            gridG2.innerHTML = '';
-            asientoSeleccionado = null;
-            document.getElementById('lblAsiento').innerText = 'Ninguno';
-            document.getElementById('lblPrecio').innerText = '$0';
+    if(!eventoId) return;
 
-            if(!eventoId) return;
+    try {
+        const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+        const asientos = await res.json();
 
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                const asientos = await res.json();
+        asientos.forEach(a => {
+            const div = document.createElement('div');
+            div.classList.add('asiento');
 
-                asientos.forEach(a => {
-                    const div = document.createElement('div');
-                    div.classList.add('asiento');
-
-                    if (a.vendido === 1) {
-                        div.classList.add('vendido');
-                    } else if (a.habilitado === 0) {
-                        div.classList.add('bloqueado');
-                    } else {
-                        div.classList.add('disponible');
-                        div.onclick = () => seleccionarAsiento(div, a);
-                    }
-
-                    const partes = a.codigoAsiento.split('-');
-                    const numAsiento = parseInt(partes[1] ? partes[1].replace(/[^0-9]/g, '') : 0);
-                    div.innerText = a.codigoAsiento.replace('GEN-', '');
-
-                    if(a.tipoZona === 'General') {
-                        if (numAsiento >= 1 && numAsiento <= 8) {
-                            gridIzq.appendChild(div);
-                        } else {
-                            gridDer.appendChild(div);
-                        }
-                    } else if(a.codigoAsiento.startsWith('G1')) {
-                        gridG1.appendChild(div);
-                    } else if(a.codigoAsiento.startsWith('G2')) {
-                        gridG2.appendChild(div);
-                    }
-                });
-            } catch(err) {
-                console.error("Error al cargar asientos:", err);
+            if (a.vendido === 1) {
+                div.classList.add('vendido');
+            } else if (a.habilitado === 0) {
+                div.classList.add('bloqueado');
+            } else {
+                div.classList.add('disponible');
+                div.onclick = () => seleccionarAsiento(div, a);
             }
-        }
 
+            // Muestra la letra y número del asiento (Ej: A1, B12)
+            const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
+            div.innerText = codigoLimpio;
+
+            if(a.tipoZona === 'General') {
+                // Extrae el número al final del código del asiento (ej. de 'A12' extrae '12')
+                const matchNum = codigoLimpio.match(/\d+$/);
+                const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
+
+                if (numAsiento >= 1 && numAsiento <= 8) {
+                    gridIzq.appendChild(div);
+                } else {
+                    gridDer.appendChild(div);
+                }
+            } else if(a.codigoAsiento.startsWith('G1')) {
+                gridG1.appendChild(div);
+            } else if(a.codigoAsiento.startsWith('G2')) {
+                gridG2.appendChild(div);
+            }
+        });
+    } catch(err) {
+        console.error("Error al cargar asientos:", err);
+    }
+}
+         
+                        
         function seleccionarAsiento(elem, asientoData) {
             document.querySelectorAll('.asiento.seleccionado').forEach(e => {
                 e.classList.remove('seleccionado');
