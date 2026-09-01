@@ -4,24 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Boletería Institucional</title>
-    <!-- Hoja de estilos externa -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- MODAL INICIO DE SESIÓN -->
+    <!-- MODAL DE ACCESO -->
     <div id="modalLogin" class="modal">
         <div class="modal-content">
             <h2>Iniciar Sesión</h2>
             <div class="form-group">
-                <label>Nombre de Usuario:</label>
-                <input type="text" id="loginUsuario" placeholder="Ej: gogalarza">
+                <label>Usuario:</label>
+                <input type="text" id="loginUsuario" placeholder="Ej: vendedor1">
             </div>
             <div class="form-group">
-                <label>Contraseña / Clave:</label>
+                <label>Contraseña:</label>
                 <input type="password" id="loginClave" placeholder="******">
             </div>
-            <button class="btn-primary" onclick="iniciarSesionBackend()">Ingresar al Sistema</button>
+            <button class="btn-primary" onclick="iniciarSesionBackend()">Ingresar</button>
             <div id="loginError" style="color: #ef4444; font-size: 0.85em; margin-top: 10px;"></div>
         </div>
     </div>
@@ -29,14 +28,16 @@
     <!-- PANEL PRINCIPAL -->
     <div id="appContainer" class="container">
         <header>
-            <h2>Sistema Boletería Institucional</h2>
-            <div class="operario-info">Usuario: <span id="lblOperario">No identificado</span> (<span id="lblTipo"></span>)</div>
+            <h2>Boletería Institucional</h2>
+            <div class="operario-info">Usuario: <span id="lblOperario">-</span> (<span id="lblTipo"></span>)</div>
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">Venta de Entradas</button>
-            <button class="tab-btn" id="btnTabCrear" onclick="mostrarTab('tabCrearEvento', this)">Configurar Eventos</button>
-            <button class="tab-btn" id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">Gestión Usuarios (Solo Adm)</button>
+            <button class="tab-btn active" id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">Venta</button>
+            <button class="tab-btn" id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">Informes</button>
+            <button class="tab-btn" id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">Configurar Eventos</button>
+            <button class="tab-btn" id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">Usuarios</button>
+            <button class="tab-btn" id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">Superusuario</button>
         </div>
 
         <!-- PESTAÑA VENTA -->
@@ -54,11 +55,9 @@
             </div>
 
             <div class="layout-venta">
-                <!-- MAPA DE LA SALA -->
                 <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
                     <div class="escenario">ESCENARIO</div>
 
-                    <!-- PLATEA GENERAL (DIVIDIDA EN IZQUIERDA Y DERECHA) -->
                     <div class="platea-container">
                         <div>
                             <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">Asientos 1 - 8</h4>
@@ -71,7 +70,6 @@
                         </div>
                     </div>
 
-                    <!-- GRADAS LATERALES Y CABINA -->
                     <div class="gradas-container">
                         <div>
                             <h4 style="text-align:center; margin-bottom:5px;">Grada Izq</h4>
@@ -87,30 +85,22 @@
                     </div>
                 </div>
 
-                <!-- FORMULARIO VENTA -->
-                <div style="background: #0f172a; padding: 20px; border-radius: 8px; height: fit-content; border: 1px solid #334155;">
+                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
                     <h3>Detalle de Reserva</h3>
                     <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
-                    <p>Monto: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
+                    <p>Monto Final: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
+
+                    <div class="form-group" style="display:flex; gap:5px;">
+                        <input type="text" id="txtCupon" placeholder="Código Cupón">
+                        <button class="btn-primary" style="width: auto;" onclick="aplicarCupon()">Aplicar</button>
+                    </div>
                     
                     <hr style="border-color: #334155; margin: 15px 0;">
 
-                    <div class="form-group">
-                        <label>Nombre *</label>
-                        <input type="text" id="txtNombre">
-                    </div>
-                    <div class="form-group">
-                        <label>Apellido *</label>
-                        <input type="text" id="txtApellido">
-                    </div>
-                    <div class="form-group">
-                        <label>Teléfono / Contacto *</label>
-                        <input type="text" id="txtContacto">
-                    </div>
-                    <div class="form-group">
-                        <label>Email (Opcional)</label>
-                        <input type="email" id="txtEmail">
-                    </div>
+                    <div class="form-group"><label>Nombre *</label><input type="text" id="txtNombre"></div>
+                    <div class="form-group"><label>Apellido *</label><input type="text" id="txtApellido"></div>
+                    <div class="form-group"><label>Teléfono (WhatsApp) *</label><input type="text" id="txtContacto"></div>
+                    <div class="form-group"><label>Email (Opcional)</label><input type="email" id="txtEmail"></div>
                     <div class="form-group">
                         <label>Método de Pago *</label>
                         <select id="selMetodoPago">
@@ -119,218 +109,185 @@
                         </select>
                     </div>
 
-                    <button class="btn-primary" onclick="procesarVenta()">Registrar y Generar Ticket</button>
-                    <div id="msgVenta" style="margin-top: 15px;"></div>
+                    <button class="btn-primary" onclick="procesarVenta()">Registrar y Generar Entrada</button>
                 </div>
             </div>
         </div>
 
-        <!-- PESTAÑA CREAR EVENTO -->
+        <!-- PESTAÑA INFORMES -->
+        <div id="tabInformes" class="tab-content">
+            <h3>Informes de Ventas</h3>
+            <div class="form-group" style="max-width: 350px;">
+                <label>Seleccionar Evento:</label>
+                <select id="selEventoInforme" onchange="cargarDetalleInforme()"></select>
+            </div>
+            <div id="resumenInformeContainer">
+                <div class="tarjetas-resumen">
+                    <div>Entradas Vendidas: <strong id="infVendidas" style="color:#38bdf8;">0</strong></div>
+                    <div>Asistentes Reales: <strong id="infAsistentes" style="color:#22c55e;">0</strong></div>
+                    <div>Total Recaudado: <strong id="infRecaudado" style="color:#eab308;">$0</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PESTAÑA CONFIGURAR EVENTOS -->
         <div id="tabCrearEvento" class="tab-content">
-            <h3>Crear Nuevo Evento</h3>
+            <h3>Crear / Modificar Evento</h3>
             <div style="max-width: 500px;">
-                <div class="form-group">
-                    <label>ID del Evento (Código único):</label>
-                    <input type="text" id="evId" placeholder="Ej: EV-2026">
-                </div>
-                <div class="form-group">
-                    <label>Nombre del Evento:</label>
-                    <input type="text" id="evNombre" placeholder="Ej: Concierto Anual">
-                </div>
-                <div class="form-group">
-                    <label>Fecha:</label>
-                    <input type="date" id="evFecha">
-                </div>
-                <div class="form-group">
-                    <label>Hora:</label>
-                    <input type="time" id="evHora">
-                </div>
-                
-                <hr style="border-color: #334155; margin: 20px 0;">
-                <h4>Precios y Capacidad Disponibles</h4>
-
-                <div class="form-group">
-                    <label>Precio Entrada General ($):</label>
-                    <input type="number" id="evPrecioGen" value="1500">
-                </div>
-                <div class="form-group">
-                    <label>Asientos Disponibles General (Máx 112):</label>
-                    <input type="number" id="evDispGen" value="112" max="112">
-                </div>
-
-                <div class="form-group">
-                    <label>Precio Entrada Especial Gradas ($):</label>
-                    <input type="number" id="evPrecioGrada" value="3000">
-                </div>
-                <div class="form-group">
-                    <label>Asientos Disponibles Gradas (Máx 24):</label>
-                    <input type="number" id="evDispGrada" value="24" max="24">
-                </div>
-
-                <button class="btn-primary" onclick="crearEvento()">Guardar Evento y Generar Mapa</button>
+                <div class="form-group"><label>ID Evento (Único):</label><input type="text" id="evId"></div>
+                <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre"></div>
+                <div class="form-group"><label>Fecha:</label><input type="date" id="evFecha"></div>
+                <div class="form-group"><label>Hora:</label><input type="time" id="evHora"></div>
+                <div class="form-group"><label>Precio General ($):</label><input type="number" id="evPrecioGen" value="1500"></div>
+                <div class="form-group"><label>Precio Gradas ($):</label><input type="number" id="evPrecioGrada" value="3000"></div>
+                <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
             </div>
         </div>
 
-        <!-- PESTAÑA REGISTRO DE USUARIOS -->
+        <!-- PESTAÑA GESTIÓN USUARIOS -->
         <div id="tabCrearUsuario" class="tab-content">
-            <h3>Gestión de Usuarios (Solo Administradores)</h3>
+            <h3>Gestión de Usuarios</h3>
             <div style="max-width: 500px;">
+                <div class="form-group"><label>Usuario:</label><input type="text" id="usrNombre"></div>
+                <div class="form-group"><label>ID Operario:</label><input type="text" id="usrIdentificacion"></div>
+                <div class="form-group"><label>Contraseña:</label><input type="password" id="usrClave"></div>
                 <div class="form-group">
-                    <label>Nombre de Usuario:</label>
-                    <input type="text" id="usrNombre" placeholder="Ej: operario1">
-                </div>
-                <div class="form-group">
-                    <label>Identificación (ID Operario):</label>
-                    <input type="text" id="usrIdentificacion" placeholder="Ej: OP-001">
-                </div>
-                <div class="form-group">
-                    <label>Contraseña / Clave:</label>
-                    <input type="password" id="usrClave" placeholder="******">
-                </div>
-                <div class="form-group">
-                    <label>Tipo de Usuario:</label>
+                    <label>Tipo:</label>
                     <select id="usrTipo">
                         <option value="vendedor">Vendedor</option>
-                        <option value="adm">Administrador (ADM)</option>
+                        <option value="adm">Administrador</option>
                     </select>
                 </div>
                 <button class="btn-primary" onclick="guardarNuevoUsuario()">Registrar Usuario</button>
             </div>
+        </div>
+
+        <!-- PESTAÑA SUPERUSUARIO -->
+        <div id="tabSuperAdmin" class="tab-content">
+            <h3>Panel de Superusuario</h3>
+            <div class="form-group" style="max-width: 500px;">
+                <label>Email Predeterminado para Informes Automáticos (12hs):</label>
+                <div style="display:flex; gap: 10px;">
+                    <input type="email" id="txtEmailInforme" placeholder="correo@institucion.com">
+                    <button class="btn-primary" style="width: auto;" onclick="guardarEmailInforme()">Guardar</button>
+                </div>
+            </div>
+            <h4>Usuarios Registrados</h4>
+            <table class="tabla-admin">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>ID</th>
+                        <th>Tipo</th>
+                        <th>Clave</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyUsuarios"></tbody>
+            </table>
         </div>
     </div>
 
     <script>
         let usuarioSesion = null;
         let asientoSeleccionado = null;
-
-        window.onload = () => {
-            cargarEventosEnSelect();
-        };
+        let descuentoAplicado = 0;
 
         async function iniciarSesionBackend() {
             const usuario = document.getElementById('loginUsuario').value.trim();
             const clave = document.getElementById('loginClave').value;
-            const lblError = document.getElementById('loginError');
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usuario, clave })
+            });
+            const data = await res.json();
 
-            lblError.innerText = '';
+            if (data.exito) {
+                usuarioSesion = data;
+                document.getElementById('lblOperario').innerText = data.usuario;
+                document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
+                document.getElementById('modalLogin').style.display = 'none';
+                document.getElementById('appContainer').style.display = 'block';
 
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario, clave })
-                });
-
-                const data = await res.json();
-
-                if (data.exito) {
-                    usuarioSesion = data;
-                    document.getElementById('lblOperario').innerText = data.usuario;
-                    document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
-                    document.getElementById('modalLogin').style.display = 'none';
-                    document.getElementById('appContainer').style.display = 'block';
-
-                    if (data.tipo === 'adm') {
-                        document.getElementById('btnTabUsuarios').style.display = 'inline-block';
-                    }
-                    cargarEventosEnSelect();
-                } else {
-                    lblError.innerText = data.mensaje || 'Error al autenticar';
+                if (data.tipo === 'adm' || data.tipo === 'super') {
+                    document.getElementById('btnTabCrear').style.display = 'inline-block';
+                    document.getElementById('btnTabUsuarios').style.display = 'inline-block';
                 }
-            } catch (err) {
-                lblError.innerText = 'Error de conexión con el servidor backend';
+                if (data.tipo === 'super') {
+                    document.getElementById('btnTabSuper').style.display = 'inline-block';
+                    cargarUsuariosSuper();
+                }
+                cargarEventosEnSelect();
+            } else {
+                document.getElementById('loginError').innerText = data.mensaje;
             }
         }
 
         function mostrarTab(tabId, btn) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            
             document.getElementById(tabId).classList.add('active');
             if(btn) btn.classList.add('active');
         }
 
         async function cargarEventosEnSelect() {
-            try {
-                const res = await fetch('/api/eventos');
-                const eventos = await res.json();
-                const select = document.getElementById('selEventoVenta');
-                
-                select.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-                if(eventos.length > 0) {
-                    eventos.forEach(ev => {
-                        const opt = document.createElement('option');
-                        opt.value = ev.id;
-                        opt.innerText = `${ev.nombre} (${ev.fecha} - ${ev.hora})`;
-                        select.appendChild(opt);
-                    });
-                } else {
-                    select.innerHTML = '<option value="">-- No hay eventos creados --</option>';
-                }
-            } catch(err) {
-                console.error("Error al cargar eventos:", err);
-            }
+            const res = await fetch('/api/eventos');
+            const eventos = await res.json();
+            const selVenta = document.getElementById('selEventoVenta');
+            const selInf = document.getElementById('selEventoInforme');
+            
+            selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+            selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+
+            eventos.forEach(ev => {
+                const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
+                selVenta.innerHTML += opt;
+                selInf.innerHTML += opt;
+            });
         }
-async function cargarMapaAsientos() {
-    const eventoId = document.getElementById('selEventoVenta').value;
-    const gridIzq = document.getElementById('gridPlateaIzq');
-    const gridDer = document.getElementById('gridPlateaDer');
-    const gridG1 = document.getElementById('gridGrada1');
-    const gridG2 = document.getElementById('gridGrada2');
 
-    gridIzq.innerHTML = '';
-    gridDer.innerHTML = '';
-    gridG1.innerHTML = '';
-    gridG2.innerHTML = '';
-    asientoSeleccionado = null;
-    document.getElementById('lblAsiento').innerText = 'Ninguno';
-    document.getElementById('lblPrecio').innerText = '$0';
+        async function cargarMapaAsientos() {
+            const eventoId = document.getElementById('selEventoVenta').value;
+            const gridIzq = document.getElementById('gridPlateaIzq');
+            const gridDer = document.getElementById('gridPlateaDer');
+            const gridG1 = document.getElementById('gridGrada1');
+            const gridG2 = document.getElementById('gridGrada2');
 
-    if(!eventoId) return;
+            gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
+            asientoSeleccionado = null;
+            document.getElementById('lblAsiento').innerText = 'Ninguno';
+            document.getElementById('lblPrecio').innerText = '$0';
 
-    try {
-        const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-        const asientos = await res.json();
+            if(!eventoId) return;
 
-        asientos.forEach(a => {
-            const div = document.createElement('div');
-            div.classList.add('asiento');
+            const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+            const asientos = await res.json();
 
-            if (a.vendido === 1) {
-                div.classList.add('vendido');
-            } else if (a.habilitado === 0) {
-                div.classList.add('bloqueado');
-            } else {
-                div.classList.add('disponible');
-                div.onclick = () => seleccionarAsiento(div, a);
-            }
+            asientos.forEach(a => {
+                const div = document.createElement('div');
+                div.classList.add('asiento');
 
-            // Muestra la letra y número del asiento (Ej: A1, B12)
-            const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
-            div.innerText = codigoLimpio;
-
-            if(a.tipoZona === 'General') {
-                // Extrae el número al final del código del asiento (ej. de 'A12' extrae '12')
-                const matchNum = codigoLimpio.match(/\d+$/);
-                const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
-
-                if (numAsiento >= 1 && numAsiento <= 8) {
-                    gridIzq.appendChild(div);
-                } else {
-                    gridDer.appendChild(div);
+                if (a.vendido === 1) div.classList.add('vendido');
+                else if (a.habilitado === 0) div.classList.add('bloqueado');
+                else {
+                    div.classList.add('disponible');
+                    div.onclick = () => seleccionarAsiento(div, a);
                 }
-            } else if(a.codigoAsiento.startsWith('G1')) {
-                gridG1.appendChild(div);
-            } else if(a.codigoAsiento.startsWith('G2')) {
-                gridG2.appendChild(div);
-            }
-        });
-    } catch(err) {
-        console.error("Error al cargar asientos:", err);
-    }
-}
-         
-                        
+
+                const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
+                div.innerText = codigoLimpio;
+
+                if(a.tipoZona === 'General') {
+                    const matchNum = codigoLimpio.match(/\d+$/);
+                    const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
+                    if (numAsiento >= 1 && numAsiento <= 8) gridIzq.appendChild(div);
+                    else gridDer.appendChild(div);
+                } else if(a.codigoAsiento.startsWith('G1')) gridG1.appendChild(div);
+                else if(a.codigoAsiento.startsWith('G2')) gridG2.appendChild(div);
+            });
+        }
+
         function seleccionarAsiento(elem, asientoData) {
             document.querySelectorAll('.asiento.seleccionado').forEach(e => {
                 e.classList.remove('seleccionado');
@@ -342,60 +299,117 @@ async function cargarMapaAsientos() {
 
             asientoSeleccionado = asientoData;
             document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
-            document.getElementById('lblPrecio').innerText = `$${asientoData.precio}`;
+            const precioCalculado = asientoData.precio * (1 - descuentoAplicado / 100);
+            document.getElementById('lblPrecio').innerText = `$${precioCalculado}`;
         }
 
-        async function crearEvento() {
-            const body = {
-                id: document.getElementById('evId').value.trim(),
-                nombre: document.getElementById('evNombre').value.trim(),
-                fecha: document.getElementById('evFecha').value,
-                hora: document.getElementById('evHora').value,
-                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
-                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
-                dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
-                dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
-            };
-
-            if(!body.id || !body.nombre || !body.fecha || !body.hora) {
-                return alert('Por favor completa todos los campos del evento.');
-            }
-
-            try {
-                const res = await fetch('/api/eventos/crear', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-
-                const data = await res.json();
+        async function aplicarCupon() {
+            const codigo = document.getElementById('txtCupon').value.trim();
+            if(!codigo) return;
+            const res = await fetch('/api/cupones/validar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ codigo })
+            });
+            const data = await res.json();
+            if(data.valido) {
+                descuentoAplicado = data.porcentaje;
+                alert(`Cupón aplicado: ${data.porcentaje}% de descuento`);
+                if(asientoSeleccionado) seleccionarAsiento(document.querySelector('.asiento.seleccionado'), asientoSeleccionado);
+            } else {
                 alert(data.mensaje);
-
-                if(data.exito) {
-                    await cargarEventosEnSelect();
-                    mostrarTab('tabVenta', document.getElementById('btnTabVenta'));
-                }
-            } catch(err) {
-                alert('Error al conectar con el servidor');
             }
         }
 
-        async function guardarNuevoUsuario() {
+        async function procesarVenta() {
+            if(!asientoSeleccionado) return alert('Debes seleccionar un asiento');
             const body = {
-                usuario: document.getElementById('usrNombre').value.trim(),
-                identificacion: document.getElementById('usrIdentificacion').value.trim(),
-                clave: document.getElementById('usrClave').value,
-                tipo: document.getElementById('usrTipo').value
+                evento_id: document.getElementById('selEventoVenta').value,
+                asiento_id: asientoSeleccionado.id,
+                nombre: document.getElementById('txtNombre').value.trim(),
+                apellido: document.getElementById('txtApellido').value.trim(),
+                contacto: document.getElementById('txtContacto').value.trim(),
+                email: document.getElementById('txtEmail').value.trim(),
+                metodo_pago: document.getElementById('selMetodoPago').value,
+                monto_total: asientoSeleccionado.precio * (1 - descuentoAplicado / 100)
             };
 
-            const res = await fetch('/api/usuarios/crear', {
+            if(!body.nombre || !body.apellido || !body.contacto) return alert('Completa los campos obligatorios');
+
+            const res = await fetch('/api/ventas/procesar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
             });
-
             const data = await res.json();
             alert(data.mensaje);
+            if(data.exito) cargarMapaAsientos();
+        }
+
+        async function cargarUsuariosSuper() {
+            const res = await fetch('/api/super/usuarios');
+            const usuarios = await res.json();
+            const tbody = document.getElementById('tbodyUsuarios');
+            tbody.innerHTML = '';
+
+            usuarios.forEach(u => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${u.usuario}</td>
+                        <td>${u.identificacion}</td>
+                        <td>${u.tipo}</td>
+                        <td id="pass-${u.id}">••••••••</td>
+                        <td>
+                            <button class="btn-primary" style="padding:5px;" onclick="revelarClave(${u.id})">Ver Clave</button>
+                            <button class="btn-primary" style="padding:5px; background:var(--ocupado);" onclick="eliminarUsuario(${u.id})">Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function revelarClave(userId) {
+            const claveSuper = prompt("Ingresa tu clave de Superusuario para revelar la contraseña:");
+            if(!claveSuper) return;
+
+            const res = await fetch('/api/super/revelar-clave', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ claveSuper, usuarioIdTarget: userId })
+            });
+            const data = await res.json();
+            if(data.exito) {
+                document.getElementById(`pass-${userId}`).innerText = data.clave;
+            } else {
+                alert(data.mensaje);
+            }
+        }
+
+        async function eliminarUsuario(userId) {
+            if(!confirm("¿Deseas eliminar este usuario?")) return;
+            await fetch(`/api/super/usuarios/${userId}`, { method: 'DELETE' });
+            cargarUsuariosSuper();
+        }
+
+        async function guardarEmailInforme() {
+            const email = document.getElementById('txtEmailInforme').value.trim();
+            const res = await fetch('/api/config/email-informe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email })
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+        }
+
+        async function cargarDetalleInforme() {
+            const eventoId = document.getElementById('selEventoInforme').value;
+            if(!eventoId) return;
+            const res = await fetch(`/api/informe/${eventoId}`);
+            const data = await res.json();
+            document.getElementById('infVendidas').innerText = data.vendidas || 0;
+            document.getElementById('infAsistentes').innerText = data.asistentes || 0;
+            document.getElementById('infRecaudado').innerText = `$${data.recaudado || 0}`;
         }
     </script>
 </body>
