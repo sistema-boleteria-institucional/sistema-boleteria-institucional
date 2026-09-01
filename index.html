@@ -3,102 +3,459 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Selección de Asientos y Checkout</title>
+    <title>Sistema de Boletería Institucional</title>
     <style>
-        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #0f172a; color: #f8fafc; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { margin-bottom: 20px; color: #38bdf8; }
-        .container { display: flex; flex-wrap: wrap; gap: 30px; max-width: 1100px; width: 100%; }
-        .mapa-section { flex: 2; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
-        .checkout-section { flex: 1; background: #1e293b; padding: 25px; border-radius: 12px; height: fit-content; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
-        .escenario { background: #475569; text-align: center; padding: 12px; font-weight: bold; border-radius: 6px; letter-spacing: 2px; margin-bottom: 30px; color: #cbd5e1; }
-        .grid-asientos { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
-        .asiento { background-color: #16a34a; color: white; height: 45px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .asiento:hover { transform: scale(1.05); }
-        .asiento.ocupado { background-color: #64748b; cursor: not-allowed; }
-        .asiento.seleccionado { background-color: #0284c7; ring: 2px solid white; }
-        .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 12px; transition: 0.2s; }
-        .btn-mp { background-color: #009ee3; color: white; }
-        .btn-mp:hover { background-color: #0082bc; }
-        .btn-efectivo { background-color: #475569; color: white; }
-        .btn-efectivo:hover { background-color: #334155; }
-        .resumen-box { background: #0f172a; padding: 15px; border-radius: 8px; margin: 15px 0; }
-        #ticketResult img { max-width: 200px; margin-top: 10px; border-radius: 8px; border: 4px solid white; }
+        :root {
+            --bg-main: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #2563eb;
+            --text: #f8fafc;
+            --disponible: #22c55e;
+            --ocupado: #ef4444;
+            --bloqueado: #64748b;
+            --seleccionado: #0284c7;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 15px 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .operario-info {
+            font-weight: bold;
+            color: #38bdf8;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            background: #334155;
+            color: var(--text);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+        }
+
+        .tab-content {
+            display: none;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
+            box-sizing: border-box;
+        }
+
+        button.btn-primary {
+            background: var(--accent);
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Contenedor del Mapa */
+        .layout-venta {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        .seccion-zona {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .grid-general {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .grid-gradas {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .grada-subgrid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .asiento {
+            padding: 8px 2px;
+            text-align: center;
+            font-size: 0.75em;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .asiento.disponible { background: var(--disponible); color: black; }
+        .asiento.vendido { background: var(--ocupado); color: white; cursor: not-allowed; }
+        .asiento.bloqueado { background: var(--bloqueado); color: white; cursor: not-allowed; }
+        .asiento.seleccionado { background: var(--seleccionado); color: white; ring: 2px solid white; }
+
+        .leyenda {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+        }
+        .item-leyenda { display: flex; align-items: center; gap: 5px; }
+        .box-color { width: 15px; height: 15px; border-radius: 3px; }
+
+        /* Modal de Login */
+        .modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 8px;
+            width: 320px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Selección de Asientos - Concierto de Gala 2026</h1>
+    <div id="modalLogin" class="modal">
+        <div class="modal-content">
+            <h2>Identificación de Operario</h2>
+            <div class="form-group">
+                <label>ID o Nombre de Operario:</label>
+                <input type="text" id="operarioInput" placeholder="Ej: Operario Caja 1" value="1">
+            </div>
+            <button class="btn-primary" onclick="iniciarSesion()">Ingresar al Sistema</button>
+        </div>
+    </div>
 
     <div class="container">
-        <div class="mapa-section">
-            <div class="escenario">ESCENARIO PRINCIPAL</div>
-            <div class="grid-asientos" id="gridAsientos"></div>
+        <header>
+            <h2>Sistema Boletería Institucional</h2>
+            <div class="operario-info">Operario Activo: <span id="lblOperario">No identificado</span></div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="mostrarTab('tabVenta')">Venta de Entradas</button>
+            <button class="tab-btn" onclick="mostrarTab('tabCrearEvento')">Crear / Configurar Evento</button>
         </div>
 
-        <div class="checkout-section">
-            <h2>Resumen de Compra</h2>
-            <div class="resumen-box">
-                <p>Asiento: <strong id="asientoTexto" style="color:#38bdf8;">Ninguno</strong></p>
-                <p>Monto Total: <strong style="color:#4ade80;">$1.500 ARS</strong></p>
+        <div id="tabVenta" class="tab-content active">
+            <div class="form-group" style="max-width: 300px;">
+                <label>Seleccionar Evento:</label>
+                <select id="selEventoVenta" onchange="cargarMapaAsientos()"></select>
             </div>
 
-            <h3>Método de Pago</h3>
-            <button class="btn btn-mp" onclick="pagar('mercadopago')">Pagar con Mercado Pago</button>
-            <button class="btn btn-efectivo" onclick="pagar('efectivo')">Reservar Pago en Efectivo</button>
+            <div class="leyenda">
+                <div class="item-leyenda"><div class="box-color" style="background: var(--disponible)"></div> Disponible</div>
+                <div class="item-leyenda"><div class="box-color" style="background: var(--ocupado)"></div> Vendido</div>
+                <div class="item-leyenda"><div class="box-color" style="background: var(--bloqueado)"></div> No Disponible</div>
+                <div class="item-leyenda"><div class="box-color" style="background: var(--seleccionado)"></div> Seleccionado</div>
+            </div>
 
-            <div id="ticketResult" style="text-align:center; margin-top:20px;"></div>
+            <div class="layout-venta">
+                <div>
+                    <div class="seccion-zona">
+                        <h3>Entrada General (7 Filas x 16 Asientos)</h3>
+                        <div id="gridGeneral" class="grid-general"></div>
+                    </div>
+
+                    <div class="seccion-zona">
+                        <h3>Entrada Especial (2 Gradas x 3 Filas x 4 Asientos)</h3>
+                        <div class="grid-gradas">
+                            <div>
+                                <h4>Grada 1</h4>
+                                <div id="gridGrada1" class="grada-subgrid"></div>
+                            </div>
+                            <div>
+                                <h4>Grada 2</h4>
+                                <div id="gridGrada2" class="grada-subgrid"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background: #0f172a; padding: 20px; border-radius: 8px; height: fit-content;">
+                    <h3>Detalle de Reserva</h3>
+                    <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
+                    <p>Monto: <strong id="lblPrecio">$0</strong></p>
+                    
+                    <hr style="border-color: #334155; margin: 15px 0;">
+
+                    <div class="form-group">
+                        <label>Nombre *</label>
+                        <input type="text" id="txtNombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Apellido *</label>
+                        <input type="text" id="txtApellido" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Teléfono / Contacto *</label>
+                        <input type="text" id="txtContacto" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email (Opcional)</label>
+                        <input type="email" id="txtEmail">
+                    </div>
+                    <div class="form-group">
+                        <label>Método de Pago *</label>
+                        <select id="selMetodoPago">
+                            <option value="efectivo">Efectivo</option>
+                            <option value="mercadopago">Mercado Pago</option>
+                        </select>
+                    </div>
+
+                    <button class="btn-primary" onclick="procesarVenta()">Registrar y Generar Ticket</button>
+                    <div id="msgVenta" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tabCrearEvento" class="tab-content">
+            <h3>Crear Nuevo Evento</h3>
+            <div style="max-width: 500px;">
+                <div class="form-group">
+                    <label>ID del Evento (Código único):</label>
+                    <input type="text" id="evId" placeholder="Ej: EV-2026">
+                </div>
+                <div class="form-group">
+                    <label>Nombre del Evento:</label>
+                    <input type="text" id="evNombre" placeholder="Ej: Concierto Anual">
+                </div>
+                <div class="form-group">
+                    <label>Fecha:</label>
+                    <input type="date" id="evFecha">
+                </div>
+                <div class="form-group">
+                    <label>Hora:</label>
+                    <input type="time" id="evHora">
+                </div>
+                
+                <hr style="border-color: #334155; margin: 20px 0;">
+                <h4>Precios y Capacidad Disponible</h4>
+
+                <div class="form-group">
+                    <label>Precio Entrada General ($):</label>
+                    <input type="number" id="evPrecioGen" value="1500">
+                </div>
+                <div class="form-group">
+                    <label>Asientos Disponibles General (Máx 112):</label>
+                    <input type="number" id="evDispGen" value="112" max="112">
+                </div>
+
+                <div class="form-group">
+                    <label>Precio Entrada Especial Gradas ($):</label>
+                    <input type="number" id="evPrecioGrada" value="3000">
+                </div>
+                <div class="form-group">
+                    <label>Asientos Disponibles Gradas (Máx 24):</label>
+                    <input type="number" id="evDispGrada" value="24" max="24">
+                </div>
+
+                <button class="btn-primary" onclick="crearEvento()">Guardar Evento y Generar Mapa</button>
+            </div>
         </div>
     </div>
 
     <script>
+        let operarioActualId = null;
         let asientoSeleccionado = null;
-        const grid = document.getElementById('gridAsientos');
 
-        const filas = ['A', 'B', 'C', 'D'];
-        filas.forEach(f => {
-            for (let i = 1; i <= 6; i++) {
-                const id = `${f}-${i}`;
-                const btn = document.createElement('div');
-                btn.className = 'asiento';
-                btn.innerText = id;
-                btn.onclick = () => {
-                    document.querySelectorAll('.asiento').forEach(a => a.classList.remove('seleccionado'));
-                    btn.classList.add('seleccionado');
-                    asientoSeleccionado = id;
-                    document.getElementById('asientoTexto').innerText = id;
-                };
-                grid.appendChild(btn);
-            }
-        });
+        // Autenticación de Operario
+        function iniciarSesion() {
+            const input = document.getElementById('operarioInput').value;
+            if(!input) return alert('Ingrese un ID de operario válido');
+            
+            operarioActualId = input;
+            document.getElementById('lblOperario').innerText = `ID #${operarioActualId}`;
+            document.getElementById('modalLogin').style.display = 'none';
+        }
 
-        async function pagar(metodo) {
-            if (!asientoSeleccionado) return alert('Por favor selecciona un asiento antes de continuar.');
+        // Cambio de Pestañas
+        function mostrarTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
 
-            const res = await fetch('/api/crear-reserva', {
+        // Crear Evento
+        async function crearEvento() {
+            const body = {
+                id: document.getElementById('evId').value,
+                nombre: document.getElementById('evNombre').value,
+                fecha: document.getElementById('evFecha').value,
+                hora: document.getElementById('evHora').value,
+                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
+                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
+                totalDisponiblesGeneral: parseInt(document.getElementById('evDispGen').value),
+                totalDisponiblesGradas: parseInt(document.getElementById('evDispGrada').value)
+            };
+
+            const res = await fetch('/api/eventos/crear', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    eventoId: 'EV-101',
-                    asientoId: asientoSeleccionado,
-                    metodoPago: metodo,
-                    monto: 1500,
-                    cliente: { nombre: 'Juan Pérez', email: 'juan@email.com' }
-                })
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
             });
 
             const data = await res.json();
-            if (data.exito) {
-                if (metodo === 'mercadopago') {
-                    window.location.href = data.init_point;
-                } else {
-                    document.getElementById('ticketResult').innerHTML = `
-                        <div style="background:#166534; padding:15px; border-radius:8px;">
-                            <p style="margin:0; font-weight:bold;">✅ Reserva Registrada (${data.reserva.idReserva})</p>
-                            <small>Muestra este QR en boletería para abonar</small><br>
-                            <img src="${data.reserva.qrTicket}" alt="Ticket QR"/>
-                        </div>`;
+            if(data.exito) {
+                alert('Evento creado con éxito');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        }
+
+        // Cargar mapa visual de asientos
+        async function cargarMapaAsientos() {
+            const eventoId = document.getElementById('selEventoVenta').value;
+            if(!eventoId) return;
+
+            const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+            const asientos = await res.json();
+
+            const gridGeneral = document.getElementById('gridGeneral');
+            const gridGrada1 = document.getElementById('gridGrada1');
+            const gridGrada2 = document.getElementById('gridGrada2');
+
+            gridGeneral.innerHTML = '';
+            gridGrada1.innerHTML = '';
+            gridGrada2.innerHTML = '';
+
+            asientos.forEach(a => {
+                const el = document.createElement('div');
+                let estadoClass = 'disponible';
+                if(!a.habilitado) estadoClass = 'bloqueado';
+                if(a.vendido) estadoClass = 'vendido';
+
+                el.className = `asiento ${estadoClass}`;
+                el.innerText = a.codigoAsiento.replace('GEN-', '');
+
+                if(a.habilitado && !a.vendido) {
+                    el.onclick = () => seleccionarAsiento(a, el);
                 }
+
+                if(a.tipoZona === 'General') {
+                    gridGeneral.appendChild(el);
+                } else if(a.codigoAsiento.startsWith('G1')) {
+                    gridGrada1.appendChild(el);
+                } else if(a.codigoAsiento.startsWith('G2')) {
+                    gridGrada2.appendChild(el);
+                }
+            });
+        }
+
+        function seleccionarAsiento(asiento, elemento) {
+            document.querySelectorAll('.asiento').forEach(a => a.classList.remove('seleccionado'));
+            elemento.classList.add('seleccionado');
+            asientoSeleccionado = asiento;
+
+            document.getElementById('lblAsiento').innerText = asiento.codigoAsiento;
+            document.getElementById('lblPrecio').innerText = `$${asiento.precio}`;
+        }
+
+        // Registrar Venta
+        async function procesarVenta() {
+            if(!asientoSeleccionado) return alert('Seleccione un asiento');
+
+            const body = {
+                eventoId: document.getElementById('selEventoVenta').value,
+                codigoAsiento: asientoSeleccionado.codigoAsiento,
+                metodoPago: document.getElementById('selMetodoPago').value,
+                clienteNombre: document.getElementById('txtNombre').value,
+                clienteApellido: document.getElementById('txtApellido').value,
+                clienteContacto: document.getElementById('txtContacto').value,
+                clienteEmail: document.getElementById('txtEmail').value,
+                operarioId: operarioActualId
+            };
+
+            if(!body.clienteNombre || !body.clienteApellido || !body.clienteContacto) {
+                return alert('Por favor complete los campos obligatorios (*)');
+            }
+
+            const res = await fetch('/api/ventas/registrar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+
+            const data = await res.json();
+            const msgDiv = document.getElementById('msgVenta');
+
+            if(data.exito) {
+                msgDiv.innerHTML = `<p style="color:#22c55e;">✅ Venta Exitosa #${data.idReserva}</p>`;
+                asientoSeleccionado = null;
+                document.getElementById('lblAsiento').innerText = 'Ninguno';
+                document.getElementById('lblPrecio').innerText = '$0';
+                cargarMapaAsientos();
+            } else {
+                msgDiv.innerHTML = `<p style="color:#ef4444;">❌ ${data.mensaje}</p>`;
             }
         }
     </script>
