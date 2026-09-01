@@ -377,10 +377,10 @@
             </div>
         </div>
     </div>
-
     <script>
     let usuarioSesion = null;
     let asientoSeleccionado = null;
+    let asientosActuales = [];
 
     window.onload = () => {
         cargarEventosEnSelect();
@@ -452,6 +452,62 @@
         }
     }
 
+    async function cargarMapaAsientos() {
+        const eventoId = document.getElementById('selEventoVenta').value;
+        const gridGen = document.getElementById('gridGeneral');
+        const gridG1 = document.getElementById('gridGrada1');
+        const gridG2 = document.getElementById('gridGrada2');
+
+        gridGen.innerHTML = '';
+        gridG1.innerHTML = '';
+        gridG2.innerHTML = '';
+        asientoSeleccionado = null;
+        document.getElementById('lblAsiento').innerText = 'Ninguno';
+        document.getElementById('lblPrecio').innerText = '$0';
+
+        if (!eventoId) return;
+
+        try {
+            const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+            asientosActuales = await res.json();
+
+            asientosActuales.forEach(a => {
+                const div = document.createElement('div');
+                div.classList.add('asiento');
+                div.innerText = a.codigoAsiento;
+
+                if (a.vendido === 1) {
+                    div.classList.add('vendido');
+                } else if (a.habilitado === 0) {
+                    div.classList.add('bloqueado');
+                } else {
+                    div.classList.add('disponible');
+                    div.onclick = () => seleccionarAsiento(a, div);
+                }
+
+                if (a.tipoZona === 'General') {
+                    gridGen.appendChild(div);
+                } else if (a.codigoAsiento.startsWith('G1')) {
+                    gridG1.appendChild(div);
+                } else if (a.codigoAsiento.startsWith('G2')) {
+                    gridG2.appendChild(div);
+                }
+            });
+        } catch(err) {
+            console.error("Error al cargar mapa:", err);
+        }
+    }
+
+    function seleccionarAsiento(asiento, elemento) {
+        document.querySelectorAll('.asiento.seleccionado').forEach(el => el.classList.remove('seleccionado'));
+        
+        asientoSeleccionado = asiento;
+        elemento.classList.add('seleccionado');
+
+        document.getElementById('lblAsiento').innerText = `${asiento.codigoAsiento} (${asiento.tipoZona})`;
+        document.getElementById('lblPrecio').innerText = `$${asiento.precio}`;
+    }
+
     async function crearEvento() {
         const body = {
             id: document.getElementById('evId').value.trim(),
@@ -479,11 +535,60 @@
             alert(data.mensaje);
 
             if(data.exito) {
-                cargarEventosEnSelect();
+                await cargarEventosEnSelect();
                 mostrarTab('tabVenta', document.getElementById('btnTabVenta'));
             }
         } catch(err) {
             alert('Error al conectar con el servidor');
+        }
+    }
+
+    async function procesarVenta() {
+        if (!asientoSeleccionado) {
+            return alert('Por favor selecciona un asiento disponible en el mapa.');
+        }
+
+        const nombre = document.getElementById('txtNombre').value.trim();
+        const apellido = document.getElementById('txtApellido').value.trim();
+        const contacto = document.getElementById('txtContacto').value.trim();
+
+        if (!nombre || !apellido || !contacto) {
+            return alert('Por favor completa los campos obligatorios del cliente.');
+        }
+
+        const body = {
+            eventoId: document.getElementById('selEventoVenta').value,
+            asientoId: asientoSeleccionado.id,
+            asientoCodigo: asientoSeleccionado.codigoAsiento,
+            monto: asientoSeleccionado.precio,
+            metodoPago: document.getElementById('selMetodoPago').value,
+            clienteNombre: nombre,
+            clienteApellido: apellido,
+            clienteContacto: contacto,
+            clienteEmail: document.getElementById('txtEmail').value.trim(),
+            operarioId: usuarioSesion ? usuarioSesion.usuario : 'desconocido'
+        };
+
+        try {
+            const res = await fetch('/api/reservas/crear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+
+            const data = await res.json();
+            if (data.exito) {
+                alert('¡Venta realizada con éxito!');
+                document.getElementById('txtNombre').value = '';
+                document.getElementById('txtApellido').value = '';
+                document.getElementById('txtContacto').value = '';
+                document.getElementById('txtEmail').value = '';
+                cargarMapaAsientos();
+            } else {
+                alert('Error al realizar la venta: ' + data.mensaje);
+            }
+        } catch(err) {
+            alert('Error de servidor al procesar la reserva');
         }
     }
 
@@ -505,5 +610,6 @@
         alert(data.mensaje);
     }
 </script>
+            
 </body>
 </html>
