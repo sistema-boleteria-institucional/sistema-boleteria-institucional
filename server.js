@@ -10,6 +10,14 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// OBTENER LISTA DE TODOS LOS EVENTOS
+app.get('/api/eventos', (req, res) => {
+    db.all(`SELECT * FROM eventos`, [], (err, filas) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(filas);
+    });
+});
+
 // ==========================================
 // 1. CREAR EVENTO Y CONFIGURAR ASIENTOS Y PRECIOS
 // ==========================================
