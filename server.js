@@ -4,8 +4,16 @@ const db = require('./database');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
+// 1. Servir archivos estáticos directamente desde la RAÍZ (ya no desde /public)
+app.use(express.static(__dirname));
+
+// 2. Ruta principal para cargar index.html desde la raíz
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Endpoint Consultar Historial Dashboard
 app.get('/api/eventos/:id/historial', (req, res) => {
     const eventoId = req.params.id;
     db.get(`SELECT * FROM eventos WHERE id = ?`, [eventoId], (err, evento) => {
