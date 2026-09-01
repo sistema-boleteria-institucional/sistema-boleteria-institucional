@@ -212,9 +212,7 @@ table.tabla-admin th, table.tabla-admin td {
     text-align: left;
 }
 
-table.tabla-admin th {
-    background: #0f172a;
-}
+table.tabla-admin th { background: #0f172a; }
 
 .tarjetas-resumen {
     display: flex;
