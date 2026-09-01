@@ -1,0 +1,203 @@
+:root {
+    --bg-main: #0f172a;
+    --card-bg: #1e293b;
+    --accent: #2563eb;
+    --text-main: #ffffff;
+    --disponible: #22c55e;
+    --ocupado: #ef4444;
+    --bloqueado: #64748b;
+    --seleccionado: #0284c7;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: none;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card-bg);
+    padding: 15px 25px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #334155;
+}
+
+.operario-info { font-weight: bold; color: #38bdf8; }
+
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+
+.tab-btn {
+    background: #334155;
+    color: var(--text-main);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.tab-btn.active { background: var(--accent); }
+
+.tab-content {
+    display: none;
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+}
+
+.tab-content.active { display: block; }
+
+.form-group { margin-bottom: 15px; }
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.9em;
+    color: var(--text-main);
+    font-weight: 600;
+}
+
+input, select, button {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    background: #0f172a;
+    color: #ffffff;
+    box-sizing: border-box;
+}
+
+button.btn-primary {
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    color: white;
+    padding: 12px;
+}
+
+.layout-venta {
+    display: grid;
+    grid-template-columns: 2.2fr 1fr;
+    gap: 20px;
+}
+
+.escenario {
+    background: #334155;
+    color: #f8fafc;
+    text-align: center;
+    padding: 12px;
+    font-weight: bold;
+    font-size: 1.1em;
+    letter-spacing: 2px;
+    border-radius: 6px;
+    margin-bottom: 25px;
+    border: 2px solid #475569;
+}
+
+.platea-container {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+
+.bloque-platea {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 5px;
+}
+
+.pasillo-central {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75em;
+    color: #64748b;
+    writing-mode: vertical-lr;
+    letter-spacing: 3px;
+}
+
+.gradas-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    background: #0f172a;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px dashed #334155;
+}
+
+.grada-subgrid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+}
+
+.cabina-tecnica {
+    background: #1e293b;
+    border: 1px solid #475569;
+    padding: 15px 25px;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #94a3b8;
+}
+
+.asiento {
+    padding: 8px 2px;
+    text-align: center;
+    font-size: 0.7em;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.asiento.disponible { background: var(--disponible); color: black; }
+.asiento.vendido { background: var(--ocupado); color: white; cursor: not-allowed; }
+.asiento.bloqueado { background: var(--bloqueado); color: white; cursor: not-allowed; }
+.asiento.seleccionado { background: var(--seleccionado); color: white; border: 2px solid white; }
+
+.leyenda {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    font-size: 0.85em;
+}
+.item-leyenda { display: flex; align-items: center; gap: 5px; color: var(--text-main); }
+.box-color { width: 15px; height: 15px; border-radius: 3px; }
+
+.modal {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: var(--card-bg);
+    padding: 30px;
+    border-radius: 8px;
+    width: 320px;
+    border: 1px solid #334155;
+}
+
+h2, h3, h4 { color: #ffffff; margin-top: 0; }
