@@ -1,7 +1,7 @@
 // ==========================================
 // AUTENTICACIÓN Y GESTIÓN DE USUARIOS
 // ==========================================
-
+const db = require('./database');
 // Login de usuarios
 app.post('/api/login', (req, res) => {
     const { usuario, clave } = req.body;
