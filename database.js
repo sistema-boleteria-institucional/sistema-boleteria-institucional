@@ -1,59 +1,55 @@
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-
-const dbPath = path.resolve(__dirname, 'boleteria.db');
-const db = new sqlite3.Database(dbPath);
+const db = new sqlite3.Database('./boleteria.db');
 
 db.serialize(() => {
-    // 1. Tabla de Operarios/Vendedores
+    // 1. Tabla de Usuarios
     db.run(`CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        rol TEXT NOT NULL DEFAULT 'operario'
+        usuario TEXT UNIQUE,
+        identificacion TEXT UNIQUE,
+        clave TEXT,
+        tipo TEXT -- 'adm' o 'vendedor'
     )`);
 
-    // Insertar operario por defecto
-    db.run(`INSERT OR IGNORE INTO usuarios (id, nombre, rol) VALUES (1, 'Operario Caja 1', 'operario')`);
+    // Insertar Superusuario por defecto si no existe
+    const stmt = db.prepare(`INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`);
+    stmt.run('gogalarza', 'gonzalog2019', 'Limon2.0grana', 'adm');
+    stmt.finalize();
 
-    // 2. Tabla de Eventos (Fecha y Hora)
+    // 2. Tabla de Eventos
     db.run(`CREATE TABLE IF NOT EXISTS eventos (
         id TEXT PRIMARY KEY,
-        nombre TEXT NOT NULL,
-        fecha TEXT NOT NULL,
-        hora TEXT NOT NULL
+        nombre TEXT,
+        fecha TEXT,
+        hora TEXT
     )`);
 
-    // 3. Tabla de Asientos del Evento
+    // 3. Tabla de Asientos
     db.run(`CREATE TABLE IF NOT EXISTS asientos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         eventoId TEXT,
         codigoAsiento TEXT,
-        tipoZona TEXT, -- 'General' o 'Grada'
+        tipoZona TEXT,
         precio REAL,
-        habilitado INTEGER DEFAULT 1, -- 1: Disponible para venta, 0: Bloqueado
-        vendido INTEGER DEFAULT 0,    -- 1: Vendido, 0: Libres
-        FOREIGN KEY(eventoId) REFERENCES eventos(id)
+        habilitado INTEGER,
+        vendido INTEGER
     )`);
 
-    // 4. Tabla de Reservas / Ventas Detalladas
+    // 4. Tabla de Reservas
     db.run(`CREATE TABLE IF NOT EXISTS reservas (
         idReserva TEXT PRIMARY KEY,
         eventoId TEXT,
         asientoCodigo TEXT,
         fechaVenta TEXT,
         horaVenta TEXT,
-        metodoPago TEXT, -- 'mercadopago' o 'efectivo'
+        metodoPago TEXT,
         monto REAL,
-        clienteNombre TEXT NOT NULL,
-        clienteApellido TEXT NOT NULL,
-        clienteContacto TEXT NOT NULL,
-        clienteEmail TEXT, -- Opcional
-        operarioId INTEGER,
-        qrTicket TEXT,
-        ingresado INTEGER DEFAULT 0,
-        fechaIngreso TEXT,
-        FOREIGN KEY(eventoId) REFERENCES eventos(id),
-        FOREIGN KEY(operarioId) REFERENCES usuarios(id)
+        clienteNombre TEXT,
+        clienteApellido TEXT,
+        clienteContacto TEXT,
+        clienteEmail TEXT,
+        operarioId TEXT,
+        qrTicket TEXT
     )`);
 });
 
