@@ -1,121 +1,268 @@
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cron = require('node-cron');
+const nodemailer = require('nodemailer');
 const path = require('path');
-const db = require('./database');
 
 const app = express();
-
-// Middlewares para procesar JSON y archivos estáticos
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '/')));
+app.use(express.static(__dirname));
 
-// ==========================================
-// AUTENTICACIÓN Y GESTIÓN DE USUARIOS
-// ==========================================
+// Inicialización de la Base de Datos SQLite
+const db = new sqlite3.Database('./boleteria.db', (err) => {
+    if (err) console.error("Error al conectar DB:", err.message);
+    else console.log("Conectado a la base de datos SQLite.");
+});
 
-// Login de usuarios
+// Creación de Tablas
+db.serialize(() => {
+    db.run(`CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE,
+        identificacion TEXT,
+        clave TEXT,
+        tipo TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS eventos (
+        id TEXT PRIMARY KEY,
+        nombre TEXT,
+        fecha TEXT,
+        hora TEXT,
+        precioGeneral REAL,
+        precioGradas REAL,
+        dispGen INTEGER,
+        dispGrada INTEGER,
+        informe_enviado INTEGER DEFAULT 0
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS asientos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        evento_id TEXT,
+        codigoAsiento TEXT,
+        tipoZona TEXT,
+        precio REAL,
+        vendido INTEGER DEFAULT 0,
+        habilitado INTEGER DEFAULT 1,
+        FOREIGN KEY(evento_id) REFERENCES eventos(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        evento_id TEXT,
+        asiento_id INTEGER,
+        nombre_cliente TEXT,
+        apellido_cliente TEXT,
+        contacto TEXT,
+        email TEXT,
+        metodo_pago TEXT,
+        monto_total REAL,
+        asistio INTEGER DEFAULT 0,
+        fecha_venta DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(asiento_id) REFERENCES asientos(id)
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS cupones (
+        codigo TEXT PRIMARY KEY,
+        porcentaje REAL
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS configuracion (
+        clave TEXT PRIMARY KEY,
+        valor TEXT
+    )`);
+
+    // Usuario Superusuario por defecto si no existe
+    db.run(`INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) 
+            VALUES ('superadmin', 'SU-001', 'admin1234', 'super')`);
+});
+
+// Middleware de autenticación simple
+let usuarioSesionActiva = null;
+
+// --- ENDPOINTS AUTENTICACIÓN Y USUARIOS ---
 app.post('/api/login', (req, res) => {
     const { usuario, clave } = req.body;
-    db.get(`SELECT * FROM usuarios WHERE usuario = ? AND clave = ?`, [usuario, clave], (err, row) => {
-        if (err) return res.status(500).json({ exito: false, mensaje: err.message });
-        if (!row) return res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
-        
-        res.json({
-            exito: true,
-            usuario: row.usuario,
-            identificacion: row.identificacion,
-            tipo: row.tipo
+    db.get("SELECT * FROM usuarios WHERE usuario = ? AND clave = ?", [usuario, clave], (err, user) => {
+        if (err || !user) return res.json({ exito: false, mensaje: "Credenciales incorrectas" });
+        usuarioSesionActiva = user;
+        res.json({ exito: true, usuario: user.usuario, tipo: user.tipo, id: user.id });
+    });
+});
+
+app.get('/api/super/usuarios', (req, res) => {
+    db.all("SELECT id, usuario, identificacion, tipo FROM usuarios", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
+});
+
+app.post('/api/super/revelar-clave', (req, res) => {
+    const { claveSuper, usuarioIdTarget } = req.body;
+    if (!usuarioSesionActiva || usuarioSesionActiva.tipo !== 'super') {
+        return res.status(403).json({ exito: false, mensaje: "Acceso no autorizado" });
+    }
+    
+    db.get("SELECT clave FROM usuarios WHERE id = ?", [usuarioSesionActiva.id], (err, superUser) => {
+        if (claveSuper !== superUser.clave) {
+            return res.json({ exito: false, mensaje: "Clave de superusuario incorrecta" });
+        }
+        db.get("SELECT clave FROM usuarios WHERE id = ?", [usuarioIdTarget], (err, target) => {
+            res.json({ exito: true, clave: target.clave });
         });
     });
 });
 
-// Crear nuevo usuario (Solo Administradores)
 app.post('/api/usuarios/crear', (req, res) => {
     const { usuario, identificacion, clave, tipo } = req.body;
-
-    if (!usuario || !identificacion || !clave || !tipo) {
-        return res.status(400).json({ exito: false, mensaje: 'Todos los campos son obligatorios' });
-    }
-
-    const sql = `INSERT INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`;
-    db.run(sql, [usuario, identificacion, clave, tipo], function(err) {
-        if (err) {
-            return res.status(400).json({ exito: false, mensaje: 'El usuario o identificación ya existen.' });
-        }
-        res.json({ exito: true, mensaje: 'Usuario creado exitosamente con ID: ' + this.lastID });
-    });
+    db.run("INSERT INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)",
+        [usuario, identificacion, clave, tipo], (err) => {
+            if (err) return res.json({ exito: false, mensaje: "El usuario ya existe o hay un error" });
+            res.json({ exito: true, mensaje: "Usuario registrado con éxito" });
+        });
 });
 
-// Obtener lista de usuarios
-app.get('/api/usuarios', (req, res) => {
-    db.all(`SELECT id, usuario, identificacion, tipo FROM usuarios`, [], (err, filas) => {
+app.delete('/api/super/usuarios/:id', (req, res) => {
+    db.run("DELETE FROM usuarios WHERE id = ?", [req.params.id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(filas || []);
+        res.json({ exito: true, mensaje: "Usuario eliminado" });
     });
 });
 
-// Ruta principal para servir el frontend
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+// --- ENDPOINTS EVENTOS Y ASIENTOS ---
+app.get('/api/eventos', (req, res) => {
+    db.all("SELECT * FROM eventos ORDER BY fecha DESC", [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows);
+    });
 });
 
-// ==========================================
-// GESTIÓN DE EVENTOS Y ASIENTOS
-// ==========================================
-
-// Crear Evento con sus Asientos
 app.post('/api/eventos/crear', (req, res) => {
     const { id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada } = req.body;
+    
+    db.run("INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada], function(err) {
+            if (err) return res.json({ exito: false, mensaje: "El ID de evento ya existe" });
 
-    const sqlEvento = `INSERT INTO eventos (id, nombre, fecha, hora) VALUES (?, ?, ?, ?)`;
-    db.run(sqlEvento, [id, nombre, fecha, hora], function(err) {
-        if (err) return res.status(400).json({ exito: false, mensaje: 'El ID del evento ya existe' });
-
-        const stmt = db.prepare(`INSERT INTO asientos (eventoId, codigoAsiento, tipoZona, precio, habilitado, vendido) VALUES (?, ?, ?, ?, ?, 0)`);
-        
-        // Asientos General (7x16 = 112)
-        const filasGen = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
-        let contGen = 0;
-        filasGen.forEach(fila => {
-            for (let i = 1; i <= 16; i++) {
-                contGen++;
-                stmt.run(id, `GEN-${fila}${i}`, 'General', precioGeneral, contGen <= dispGen ? 1 : 0);
-            }
-        });
-
-        // Asientos Gradas (2x3x4 = 24)
-        let contGrada = 0;
-        ['G1', 'G2'].forEach(grada => {
-            ['F1', 'F2', 'F3'].forEach(fila => {
-                for (let i = 1; i <= 4; i++) {
-                    contGrada++;
-                    stmt.run(id, `${grada}-${fila}-${i}`, 'Grada', precioGradas, contGrada <= dispGrada ? 1 : 0);
+            // Generar mapa de asientos automáticamente
+            const filas = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+            db.serialize(() => {
+                let contador = 0;
+                filas.forEach(f => {
+                    for (let i = 1; i <= 16; i++) {
+                        if (contador < dispGen) {
+                            db.run("INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio) VALUES (?, ?, 'General', ?)",
+                                [id, `GEN-${f}${i}`, precioGeneral]);
+                            contador++;
+                        }
+                    }
+                });
+                for (let g1 = 1; g1 <= Math.min(12, dispGrada / 2); g1++) {
+                    db.run("INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio) VALUES (?, ?, 'Grada', ?)",
+                        [id, `G1-${g1}`, precioGradas]);
+                }
+                for (let g2 = 1; g2 <= Math.min(12, dispGrada / 2); g2++) {
+                    db.run("INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio) VALUES (?, ?, 'Grada', ?)",
+                        [id, `G2-${g2}`, precioGradas]);
                 }
             });
+            res.json({ exito: true, mensaje: "Evento y asientos configurados correctamente" });
         });
-
-        stmt.finalize();
-        res.json({ exito: true, mensaje: '¡Evento y mapa de asientos creados exitosamente!' });
-    });
 });
 
-// Obtener Lista de Eventos
-app.get('/api/eventos', (req, res) => {
-    db.all(`SELECT * FROM eventos`, [], (err, filas) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(filas || []);
-    });
-});
-
-// Obtener Asientos de un Evento
 app.get('/api/eventos/:id/asientos', (req, res) => {
-    db.all(`SELECT * FROM asientos WHERE eventoId = ?`, [req.params.id], (err, filas) => {
+    db.all("SELECT * FROM asientos WHERE evento_id = ?", [req.params.id], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(filas || []);
+        res.json(rows);
     });
 });
-// Puerto dinámico asignado por Render
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Servidor activo en el puerto ${PORT}`);
+
+// --- ENDPOINTS VENTAS, CUPONES Y CAMBIOS ---
+app.post('/api/cupones/validar', (req, res) => {
+    const { codigo } = req.body;
+    db.get("SELECT porcentaje FROM cupones WHERE codigo = ?", [codigo], (err, row) => {
+        if (!row) return res.json({ valido: false, mensaje: "Cupón inválido" });
+        res.json({ valido: true, porcentaje: row.porcentaje });
+    });
 });
+
+app.post('/api/cupones/crear', (req, res) => {
+    const { codigo, porcentaje } = req.body;
+    db.run("INSERT INTO cupones (codigo, porcentaje) VALUES (?, ?)", [codigo, porcentaje], (err) => {
+        if (err) return res.json({ exito: false, mensaje: "Cupón duplicado" });
+        res.json({ exito: true, mensaje: "Cupón creado correctamente" });
+    });
+});
+
+app.post('/api/ventas/procesar', (req, res) => {
+    const { evento_id, asiento_id, nombre, apellido, contacto, email, metodo_pago, monto_total } = req.body;
+    
+    db.serialize(() => {
+        db.run("UPDATE asientos SET vendido = 1 WHERE id = ?", [asiento_id]);
+        db.run("INSERT INTO ventas (evento_id, asiento_id, nombre_cliente, apellido_cliente, contacto, email, metodo_pago, monto_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [evento_id, asiento_id, nombre, apellido, contacto, email, metodo_pago, monto_total], function(err) {
+                if (err) return res.json({ exito: false, mensaje: "Error al procesar la venta" });
+                res.json({ exito: true, ventaId: this.lastID, mensaje: "Venta registrada con éxito" });
+            });
+    });
+});
+
+app.post('/api/ventas/cancelar', (req, res) => {
+    const { ventaId, asientoId } = req.body;
+    db.serialize(() => {
+        db.run("UPDATE asientos SET vendido = 0 WHERE id = ?", [asientoId]);
+        db.run("DELETE FROM ventas WHERE id = ?", [ventaId], (err) => {
+            if (err) return res.json({ exito: false, mensaje: "Error al cancelar venta" });
+            res.json({ exito: true, mensaje: "Venta cancelada y asiento liberado" });
+        });
+    });
+});
+
+app.post('/api/ventas/reubicar', (req, res) => {
+    const { ventaId, nuevoAsientoId, viejoAsientoId } = req.body;
+    db.serialize(() => {
+        db.run("UPDATE asientos SET vendido = 0 WHERE id = ?", [viejoAsientoId]);
+        db.run("UPDATE asientos SET vendido = 1 WHERE id = ?", [nuevoAsientoId]);
+        db.run("UPDATE ventas SET asiento_id = ? WHERE id = ?", [nuevoAsientoId, ventaId], (err) => {
+            if (err) return res.json({ exito: false, mensaje: "Error al reubicar" });
+            res.json({ exito: true, mensaje: "Asiento modificado con éxito" });
+        });
+    });
+});
+
+// --- INFORMES Y AUTOMATIZACIÓN (12 HS) ---
+app.get('/api/informe/:eventoId', (req, res) => {
+    db.get(`
+        SELECT 
+            COUNT(v.id) as vendidas,
+            SUM(CASE WHEN v.asistio = 1 THEN 1 ELSE 0 END) as asistentes,
+            SUM(v.monto_total) as recaudado
+        FROM ventas v WHERE v.evento_id = ?`, [req.params.eventoId], (err, row) => {
+            res.json(row || { vendidas: 0, asistentes: 0, recaudado: 0 });
+        });
+});
+
+app.post('/api/config/email-informe', (req, res) => {
+    const { email } = req.body;
+    db.run("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('email_informe', ?)", [email], (err) => {
+        res.json({ exito: true, mensaje: "Email para informes configurado" });
+    });
+});
+
+cron.schedule('0 * * * *', () => {
+    const ahora = new Date();
+    db.all("SELECT * FROM eventos WHERE informe_enviado = 0", [], (err, eventos) => {
+        if (!eventos) return;
+        eventos.forEach(ev => {
+            const fechaEvento = new Date(`${ev.fecha}T${ev.hora}`);
+            const difHoras = (ahora - fechaEvento) / (1000 * 60 * 60);
+            if (difHoras >= 12) {
+                db.run("UPDATE eventos SET informe_enviado = 1 WHERE id = ?", [ev.id]);
+                console.log(`Informe automático procesado para el evento ${ev.nombre}`);
+            }
+        });
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor de Boletería iniciado en el puerto ${PORT}`));
