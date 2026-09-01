@@ -8,13 +8,13 @@
 </head>
 <body>
 
-    <!-- MODAL DE ACCESO -->
+    <!-- MODAL DE SESIÓN -->
     <div id="modalLogin" class="modal">
         <div class="modal-content">
             <h2>Iniciar Sesión</h2>
             <div class="form-group">
                 <label>Usuario:</label>
-                <input type="text" id="loginUsuario" placeholder="Ej: vendedor1">
+                <input type="text" id="loginUsuario" placeholder="Ej: operario1">
             </div>
             <div class="form-group">
                 <label>Contraseña:</label>
@@ -36,6 +36,7 @@
             <button class="tab-btn active" id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">Venta</button>
             <button class="tab-btn" id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">Informes</button>
             <button class="tab-btn" id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">Configurar Eventos</button>
+            <button class="tab-btn" id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">Cupones</button>
             <button class="tab-btn" id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">Usuarios</button>
             <button class="tab-btn" id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">Superusuario</button>
         </div>
@@ -127,24 +128,40 @@
                     <div>Asistentes Reales: <strong id="infAsistentes" style="color:#22c55e;">0</strong></div>
                     <div>Total Recaudado: <strong id="infRecaudado" style="color:#eab308;">$0</strong></div>
                 </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn-primary" onclick="window.print()">Descargar PDF / Imprimir</button>
+                    <button class="btn-primary" style="background:#25D366;" onclick="compartirWhatsApp()">Enviar por WhatsApp</button>
+                </div>
             </div>
         </div>
 
-        <!-- PESTAÑA CONFIGURAR EVENTOS -->
+        <!-- PESTAÑA EVENTOS -->
         <div id="tabCrearEvento" class="tab-content">
-            <h3>Crear / Modificar Evento</h3>
+            <h3>Crear / Configurar Evento</h3>
             <div style="max-width: 500px;">
-                <div class="form-group"><label>ID Evento (Único):</label><input type="text" id="evId"></div>
-                <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre"></div>
+                <div class="form-group"><label>ID Evento (Único):</label><input type="text" id="evId" placeholder="EV-2026"></div>
+                <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre" placeholder="Festival de Música"></div>
                 <div class="form-group"><label>Fecha:</label><input type="date" id="evFecha"></div>
                 <div class="form-group"><label>Hora:</label><input type="time" id="evHora"></div>
                 <div class="form-group"><label>Precio General ($):</label><input type="number" id="evPrecioGen" value="1500"></div>
+                <div class="form-group"><label>Disponibles General (Máx 112):</label><input type="number" id="evDispGen" value="112"></div>
                 <div class="form-group"><label>Precio Gradas ($):</label><input type="number" id="evPrecioGrada" value="3000"></div>
+                <div class="form-group"><label>Disponibles Gradas (Máx 24):</label><input type="number" id="evDispGrada" value="24"></div>
                 <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
             </div>
         </div>
 
-        <!-- PESTAÑA GESTIÓN USUARIOS -->
+        <!-- PESTAÑA CUPONES -->
+        <div id="tabCupones" class="tab-content">
+            <h3>Gestión de Cupones de Descuento</h3>
+            <div style="max-width: 400px;">
+                <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="DESCUENTO10"></div>
+                <div class="form-group"><label>Porcentaje (%):</label><input type="number" id="cupPorcentaje" placeholder="10"></div>
+                <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
+            </div>
+        </div>
+
+        <!-- PESTAÑA USUARIOS -->
         <div id="tabCrearUsuario" class="tab-content">
             <h3>Gestión de Usuarios</h3>
             <div style="max-width: 500px;">
@@ -177,7 +194,7 @@
                 <thead>
                     <tr>
                         <th>Usuario</th>
-                        <th>ID</th>
+                        <th>ID Operario</th>
                         <th>Tipo</th>
                         <th>Clave</th>
                         <th>Acción</th>
@@ -196,31 +213,37 @@
         async function iniciarSesionBackend() {
             const usuario = document.getElementById('loginUsuario').value.trim();
             const clave = document.getElementById('loginClave').value;
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ usuario, clave })
-            });
-            const data = await res.json();
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario, clave })
+                });
+                const data = await res.json();
 
-            if (data.exito) {
-                usuarioSesion = data;
-                document.getElementById('lblOperario').innerText = data.usuario;
-                document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
-                document.getElementById('modalLogin').style.display = 'none';
-                document.getElementById('appContainer').style.display = 'block';
+                if (data.exito) {
+                    usuarioSesion = data;
+                    document.getElementById('lblOperario').innerText = data.usuario;
+                    document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
+                    document.getElementById('modalLogin').style.display = 'none';
+                    document.getElementById('appContainer').style.display = 'block';
 
-                if (data.tipo === 'adm' || data.tipo === 'super') {
-                    document.getElementById('btnTabCrear').style.display = 'inline-block';
-                    document.getElementById('btnTabUsuarios').style.display = 'inline-block';
+                    if (data.tipo === 'adm' || data.tipo === 'super') {
+                        document.getElementById('btnTabCrear').style.display = 'inline-block';
+                        document.getElementById('btnTabUsuarios').style.display = 'inline-block';
+                        document.getElementById('btnTabCupones').style.display = 'inline-block';
+                    }
+                    if (data.tipo === 'super') {
+                        document.getElementById('btnTabSuper').style.display = 'inline-block';
+                        cargarUsuariosSuper();
+                    }
+                    cargarEventosEnSelect();
+                } else {
+                    document.getElementById('loginError').innerText = data.mensaje;
                 }
-                if (data.tipo === 'super') {
-                    document.getElementById('btnTabSuper').style.display = 'inline-block';
-                    cargarUsuariosSuper();
-                }
-                cargarEventosEnSelect();
-            } else {
-                document.getElementById('loginError').innerText = data.mensaje;
+            } catch (err) {
+                document.getElementById('loginError').innerText = 'Error al conectar con el servidor';
             }
         }
 
@@ -232,19 +255,23 @@
         }
 
         async function cargarEventosEnSelect() {
-            const res = await fetch('/api/eventos');
-            const eventos = await res.json();
-            const selVenta = document.getElementById('selEventoVenta');
-            const selInf = document.getElementById('selEventoInforme');
-            
-            selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-            selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+            try {
+                const res = await fetch('/api/eventos');
+                const eventos = await res.json();
+                const selVenta = document.getElementById('selEventoVenta');
+                const selInf = document.getElementById('selEventoInforme');
+                
+                selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+                selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
 
-            eventos.forEach(ev => {
-                const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
-                selVenta.innerHTML += opt;
-                selInf.innerHTML += opt;
-            });
+                eventos.forEach(ev => {
+                    const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
+                    selVenta.innerHTML += opt;
+                    selInf.innerHTML += opt;
+                });
+            } catch (err) {
+                console.error("Error al obtener eventos:", err);
+            }
         }
 
         async function cargarMapaAsientos() {
@@ -300,7 +327,7 @@
             asientoSeleccionado = asientoData;
             document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
             const precioCalculado = asientoData.precio * (1 - descuentoAplicado / 100);
-            document.getElementById('lblPrecio').innerText = `$${precioCalculado}`;
+            document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
         }
 
         async function aplicarCupon() {
@@ -322,7 +349,7 @@
         }
 
         async function procesarVenta() {
-            if(!asientoSeleccionado) return alert('Debes seleccionar un asiento');
+            if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
             const body = {
                 evento_id: document.getElementById('selEventoVenta').value,
                 asiento_id: asientoSeleccionado.id,
@@ -334,7 +361,7 @@
                 monto_total: asientoSeleccionado.precio * (1 - descuentoAplicado / 100)
             };
 
-            if(!body.nombre || !body.apellido || !body.contacto) return alert('Completa los campos obligatorios');
+            if(!body.nombre || !body.apellido || !body.contacto) return alert('Por favor completa todos los campos obligatorios (*)');
 
             const res = await fetch('/api/ventas/procesar', {
                 method: 'POST',
@@ -343,7 +370,80 @@
             });
             const data = await res.json();
             alert(data.mensaje);
-            if(data.exito) cargarMapaAsientos();
+            if(data.exito) {
+                descuentoAplicado = 0;
+                document.getElementById('txtCupon').value = '';
+                document.getElementById('txtNombre').value = '';
+                document.getElementById('txtApellido').value = '';
+                document.getElementById('txtContacto').value = '';
+                document.getElementById('txtEmail').value = '';
+                cargarMapaAsientos();
+            }
+        }
+
+        async function crearEvento() {
+            const body = {
+                id: document.getElementById('evId').value.trim(),
+                nombre: document.getElementById('evNombre').value.trim(),
+                fecha: document.getElementById('evFecha').value,
+                hora: document.getElementById('evHora').value,
+                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
+                dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
+                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
+                dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
+            };
+
+            if(!body.id || !body.nombre || !body.fecha || !body.hora) return alert('Completa todos los campos obligatorios del evento');
+
+            const res = await fetch('/api/eventos/crear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+            if(data.exito) cargarEventosEnSelect();
+        }
+
+        async function crearCupon() {
+            const body = {
+                codigo: document.getElementById('cupCodigo').value.trim(),
+                porcentaje: parseFloat(document.getElementById('cupPorcentaje').value)
+            };
+            if(!body.codigo || isNaN(body.porcentaje)) return alert('Ingresa un código y porcentaje válido.');
+
+            const res = await fetch('/api/cupones/crear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+        }
+
+        async function guardarNuevoUsuario() {
+            const body = {
+                usuario: document.getElementById('usrNombre').value.trim(),
+                identificacion: document.getElementById('usrIdentificacion').value.trim(),
+                clave: document.getElementById('usrClave').value,
+                tipo: document.getElementById('usrTipo').value
+            };
+
+            if(!body.usuario || !body.identificacion || !body.clave) return alert('Por favor completa todos los campos del usuario.');
+
+            const res = await fetch('/api/usuarios/crear', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+            if(data.exito) {
+                document.getElementById('usrNombre').value = '';
+                document.getElementById('usrIdentificacion').value = '';
+                document.getElementById('usrClave').value = '';
+                if(usuarioSesion && usuarioSesion.tipo === 'super') cargarUsuariosSuper();
+            }
         }
 
         async function cargarUsuariosSuper() {
@@ -360,8 +460,8 @@
                         <td>${u.tipo}</td>
                         <td id="pass-${u.id}">••••••••</td>
                         <td>
-                            <button class="btn-primary" style="padding:5px;" onclick="revelarClave(${u.id})">Ver Clave</button>
-                            <button class="btn-primary" style="padding:5px; background:var(--ocupado);" onclick="eliminarUsuario(${u.id})">Eliminar</button>
+                            <button class="btn-primary" style="padding:5px; width:auto;" onclick="revelarClave(${u.id})">Ver Clave</button>
+                            <button class="btn-primary" style="padding:5px; width:auto; background:var(--ocupado);" onclick="eliminarUsuario(${u.id})">Eliminar</button>
                         </td>
                     </tr>
                 `;
@@ -386,13 +486,15 @@
         }
 
         async function eliminarUsuario(userId) {
-            if(!confirm("¿Deseas eliminar este usuario?")) return;
+            if(!confirm("¿Seguro que deseas eliminar este usuario?")) return;
             await fetch(`/api/super/usuarios/${userId}`, { method: 'DELETE' });
             cargarUsuariosSuper();
         }
 
         async function guardarEmailInforme() {
             const email = document.getElementById('txtEmailInforme').value.trim();
+            if(!email) return alert('Ingresa un correo electrónico válido');
+
             const res = await fetch('/api/config/email-informe', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -405,11 +507,19 @@
         async function cargarDetalleInforme() {
             const eventoId = document.getElementById('selEventoInforme').value;
             if(!eventoId) return;
+
             const res = await fetch(`/api/informe/${eventoId}`);
             const data = await res.json();
             document.getElementById('infVendidas').innerText = data.vendidas || 0;
             document.getElementById('infAsistentes').innerText = data.asistentes || 0;
-            document.getElementById('infRecaudado').innerText = `$${data.recaudado || 0}`;
+            document.getElementById('infRecaudado').innerText = `$${(data.recaudado || 0).toFixed(2)}`;
+        }
+
+        function compartirWhatsApp() {
+            const vendidas = document.getElementById('infVendidas').innerText;
+            const recaudado = document.getElementById('infRecaudado').innerText;
+            const texto = encodeURIComponent(`*Informe de Evento*\nEntradas Vendidas: ${vendidas}\nTotal Recaudado: ${recaudado}`);
+            window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
         }
     </script>
 </body>
