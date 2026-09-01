@@ -59,6 +59,61 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// ==========================================
+// GESTIÓN DE EVENTOS Y ASIENTOS
+// ==========================================
+
+// Crear Evento con sus Asientos
+app.post('/api/eventos/crear', (req, res) => {
+    const { id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada } = req.body;
+
+    const sqlEvento = `INSERT INTO eventos (id, nombre, fecha, hora) VALUES (?, ?, ?, ?)`;
+    db.run(sqlEvento, [id, nombre, fecha, hora], function(err) {
+        if (err) return res.status(400).json({ exito: false, mensaje: 'El ID del evento ya existe' });
+
+        const stmt = db.prepare(`INSERT INTO asientos (eventoId, codigoAsiento, tipoZona, precio, habilitado, vendido) VALUES (?, ?, ?, ?, ?, 0)`);
+        
+        // Asientos General (7x16 = 112)
+        const filasGen = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+        let contGen = 0;
+        filasGen.forEach(fila => {
+            for (let i = 1; i <= 16; i++) {
+                contGen++;
+                stmt.run(id, `GEN-${fila}${i}`, 'General', precioGeneral, contGen <= dispGen ? 1 : 0);
+            }
+        });
+
+        // Asientos Gradas (2x3x4 = 24)
+        let contGrada = 0;
+        ['G1', 'G2'].forEach(grada => {
+            ['F1', 'F2', 'F3'].forEach(fila => {
+                for (let i = 1; i <= 4; i++) {
+                    contGrada++;
+                    stmt.run(id, `${grada}-${fila}-${i}`, 'Grada', precioGradas, contGrada <= dispGrada ? 1 : 0);
+                }
+            });
+        });
+
+        stmt.finalize();
+        res.json({ exito: true, mensaje: '¡Evento y mapa de asientos creados exitosamente!' });
+    });
+});
+
+// Obtener Lista de Eventos
+app.get('/api/eventos', (req, res) => {
+    db.all(`SELECT * FROM eventos`, [], (err, filas) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(filas || []);
+    });
+});
+
+// Obtener Asientos de un Evento
+app.get('/api/eventos/:id/asientos', (req, res) => {
+    db.all(`SELECT * FROM asientos WHERE eventoId = ?`, [req.params.id], (err, filas) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(filas || []);
+    });
+});
 // Puerto dinámico asignado por Render
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
