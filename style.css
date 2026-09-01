@@ -36,7 +36,7 @@ header {
 
 .operario-info { font-weight: bold; color: #38bdf8; }
 
-.tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+.tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
 
 .tab-btn {
     background: #334155;
@@ -198,6 +198,36 @@ button.btn-primary {
     border-radius: 8px;
     width: 320px;
     border: 1px solid #334155;
+}
+
+table.tabla-admin {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+table.tabla-admin th, table.tabla-admin td {
+    border: 1px solid #334155;
+    padding: 10px;
+    text-align: left;
+}
+
+table.tabla-admin th {
+    background: #0f172a;
+}
+
+.tarjetas-resumen {
+    display: flex;
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.tarjetas-resumen > div {
+    background: #0f172a;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    flex: 1;
 }
 
 h2, h3, h4 { color: #ffffff; margin-top: 0; }
