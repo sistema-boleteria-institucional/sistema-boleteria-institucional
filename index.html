@@ -4,199 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Boletería Institucional</title>
-    <style>
-        :root {
-            --bg-main: #0f172a;
-            --card-bg: #1e293b;
-            --accent: #2563eb;
-            --text-main: #ffffff;
-            --text-muted: #94a3b8;
-            --disponible: #22c55e;
-            --ocupado: #ef4444;
-            --bloqueado: #64748b;
-            --seleccionado: #0284c7;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-main);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: none; /* Oculto hasta hacer login */
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--card-bg);
-            padding: 15px 25px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #334155;
-        }
-
-        .operario-info {
-            font-weight: bold;
-            color: #38bdf8;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .tab-btn {
-            background: #334155;
-            color: var(--text-main);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .tab-btn.active {
-            background: var(--accent);
-        }
-
-        .tab-content {
-            display: none;
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.9em;
-            color: var(--text-main);
-            font-weight: 600;
-        }
-
-        input, select, button {
-            width: 100%;
-            padding: 10px;
-            border-radius: 6px;
-            border: 1px solid #475569;
-            background: #0f172a;
-            color: #ffffff;
-            box-sizing: border-box;
-        }
-
-        input:focus, select:focus {
-            outline: 2px solid var(--accent);
-        }
-
-        button.btn-primary {
-            background: var(--accent);
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            color: white;
-            padding: 12px;
-        }
-
-        button.btn-primary:hover {
-            background: #1d4ed8;
-        }
-
-        .layout-venta {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
-        }
-
-        .seccion-zona {
-            background: #0f172a;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #334155;
-        }
-
-        .grid-general {
-            display: grid;
-            grid-template-columns: repeat(16, 1fr);
-            gap: 6px;
-            margin-top: 10px;
-        }
-
-        .grid-gradas {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-top: 10px;
-        }
-
-        .grada-subgrid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
-        }
-
-        .asiento {
-            padding: 8px 2px;
-            text-align: center;
-            font-size: 0.75em;
-            font-weight: bold;
-            border-radius: 4px;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .asiento.disponible { background: var(--disponible); color: black; }
-        .asiento.vendido { background: var(--ocupado); color: white; cursor: not-allowed; }
-        .asiento.bloqueado { background: var(--bloqueado); color: white; cursor: not-allowed; }
-        .asiento.seleccionado { background: var(--seleccionado); color: white; border: 2px solid white; }
-
-        .leyenda {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
-            font-size: 0.85em;
-        }
-        .item-leyenda { display: flex; align-items: center; gap: 5px; color: var(--text-main); }
-        .box-color { width: 15px; height: 15px; border-radius: 3px; }
-
-        /* MODAL LOGIN OBLIGATORIO */
-        .modal {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.95);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background: var(--card-bg);
-            padding: 30px;
-            border-radius: 8px;
-            width: 320px;
-            border: 1px solid #334155;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-        }
-
-        h2, h3, h4 { color: #ffffff; margin-top: 0; }
-    </style>
+    <!-- Hoja de estilos externa -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -232,7 +41,7 @@
 
         <!-- PESTAÑA VENTA -->
         <div id="tabVenta" class="tab-content active">
-            <div class="form-group" style="max-width: 300px;">
+            <div class="form-group" style="max-width: 350px;">
                 <label>Seleccionar Evento:</label>
                 <select id="selEventoVenta" onchange="cargarMapaAsientos()"></select>
             </div>
@@ -245,32 +54,44 @@
             </div>
 
             <div class="layout-venta">
-                <div>
-                    <div class="seccion-zona">
-                        <h3>Entrada General (7 Filas x 16 Asientos)</h3>
-                        <div id="gridGeneral" class="grid-general"></div>
+                <!-- MAPA DE LA SALA -->
+                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+                    <div class="escenario">ESCENARIO</div>
+
+                    <!-- PLATEA GENERAL (DIVIDIDA EN IZQUIERDA Y DERECHA) -->
+                    <div class="platea-container">
+                        <div>
+                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">Asientos 1 - 8</h4>
+                            <div id="gridPlateaIzq" class="bloque-platea"></div>
+                        </div>
+                        <div class="pasillo-central">PASILLO</div>
+                        <div>
+                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">Asientos 9 - 16</h4>
+                            <div id="gridPlateaDer" class="bloque-platea"></div>
+                        </div>
                     </div>
 
-                    <div class="seccion-zona">
-                        <h3>Entrada Especial (2 Gradas x 3 Filas x 4 Asientos)</h3>
-                        <div class="grid-gradas">
-                            <div>
-                                <h4>Grada 1</h4>
-                                <div id="gridGrada1" class="grada-subgrid"></div>
-                            </div>
-                            <div>
-                                <h4>Grada 2</h4>
-                                <div id="gridGrada2" class="grada-subgrid"></div>
-                            </div>
+                    <!-- GRADAS LATERALES Y CABINA -->
+                    <div class="gradas-container">
+                        <div>
+                            <h4 style="text-align:center; margin-bottom:5px;">Grada Izq</h4>
+                            <div id="gridGrada1" class="grada-subgrid"></div>
+                        </div>
+
+                        <div class="cabina-tecnica">CABINA TÉCNICA</div>
+
+                        <div>
+                            <h4 style="text-align:center; margin-bottom:5px;">Grada Der</h4>
+                            <div id="gridGrada2" class="grada-subgrid"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- FORMULARIO REGISTRO -->
+                <!-- FORMULARIO VENTA -->
                 <div style="background: #0f172a; padding: 20px; border-radius: 8px; height: fit-content; border: 1px solid #334155;">
                     <h3>Detalle de Reserva</h3>
-                    <p style="color:var(--text-main);">Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
-                    <p style="color:var(--text-main);">Monto: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
+                    <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
+                    <p>Monto: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
                     
                     <hr style="border-color: #334155; margin: 15px 0;">
 
@@ -377,155 +198,193 @@
             </div>
         </div>
     </div>
+
     <script>
-    let usuarioSesion = null;
-    let asientoSeleccionado = null;
-    let asientosActuales = [];
+        let usuarioSesion = null;
+        let asientoSeleccionado = null;
 
-    window.onload = () => {
-        cargarEventosEnSelect();
-    };
-
-    async function iniciarSesionBackend() {
-        const usuario = document.getElementById('loginUsuario').value.trim();
-        const clave = document.getElementById('loginClave').value;
-        const lblError = document.getElementById('loginError');
-
-        lblError.innerText = '';
-
-        try {
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ usuario, clave })
-            });
-
-            const data = await res.json();
-
-            if (data.exito) {
-                usuarioSesion = data;
-                document.getElementById('lblOperario').innerText = data.usuario;
-                document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
-                document.getElementById('modalLogin').style.display = 'none';
-                document.getElementById('appContainer').style.display = 'block';
-
-                if (data.tipo === 'adm') {
-                    document.getElementById('btnTabUsuarios').style.display = 'inline-block';
-                }
-                cargarEventosEnSelect();
-            } else {
-                lblError.innerText = data.mensaje || 'Error al autenticar';
-            }
-        } catch (err) {
-            lblError.innerText = 'Error de conexión con el servidor backend';
-        }
-    }
-
-    function mostrarTab(tabId, btn) {
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        
-        document.getElementById(tabId).classList.add('active');
-        if(btn) btn.classList.add('active');
-    }
-
-    async function cargarEventosEnSelect() {
-        try {
-            const res = await fetch('/api/eventos');
-            const eventos = await res.json();
-            const select = document.getElementById('selEventoVenta');
-            
-            select.innerHTML = '';
-            if(eventos.length > 0) {
-                select.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-                eventos.forEach(ev => {
-                    const opt = document.createElement('option');
-                    opt.value = ev.id;
-                    opt.innerText = `${ev.nombre} (${ev.fecha} - ${ev.hora})`;
-                    select.appendChild(opt);
-                });
-            } else {
-                select.innerHTML = '<option value="">-- No hay eventos creados --</option>';
-            }
-        } catch(err) {
-            console.error("Error al cargar eventos:", err);
-        }
-    }
-
-    async function cargarMapaAsientos() {
-        const eventoId = document.getElementById('selEventoVenta').value;
-        const gridGen = document.getElementById('gridGeneral');
-        const gridG1 = document.getElementById('gridGrada1');
-        const gridG2 = document.getElementById('gridGrada2');
-
-        gridGen.innerHTML = '';
-        gridG1.innerHTML = '';
-        gridG2.innerHTML = '';
-        asientoSeleccionado = null;
-        document.getElementById('lblAsiento').innerText = 'Ninguno';
-        document.getElementById('lblPrecio').innerText = '$0';
-
-        if (!eventoId) return;
-
-        try {
-            const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-            asientosActuales = await res.json();
-
-            asientosActuales.forEach(a => {
-                const div = document.createElement('div');
-                div.classList.add('asiento');
-                div.innerText = a.codigoAsiento;
-
-                if (a.vendido === 1) {
-                    div.classList.add('vendido');
-                } else if (a.habilitado === 0) {
-                    div.classList.add('bloqueado');
-                } else {
-                    div.classList.add('disponible');
-                    div.onclick = () => seleccionarAsiento(a, div);
-                }
-
-                if (a.tipoZona === 'General') {
-                    gridGen.appendChild(div);
-                } else if (a.codigoAsiento.startsWith('G1')) {
-                    gridG1.appendChild(div);
-                } else if (a.codigoAsiento.startsWith('G2')) {
-                    gridG2.appendChild(div);
-                }
-            });
-        } catch(err) {
-            console.error("Error al cargar mapa:", err);
-        }
-    }
-
-    function seleccionarAsiento(asiento, elemento) {
-        document.querySelectorAll('.asiento.seleccionado').forEach(el => el.classList.remove('seleccionado'));
-        
-        asientoSeleccionado = asiento;
-        elemento.classList.add('seleccionado');
-
-        document.getElementById('lblAsiento').innerText = `${asiento.codigoAsiento} (${asiento.tipoZona})`;
-        document.getElementById('lblPrecio').innerText = `$${asiento.precio}`;
-    }
-
-    async function crearEvento() {
-        const body = {
-            id: document.getElementById('evId').value.trim(),
-            nombre: document.getElementById('evNombre').value.trim(),
-            fecha: document.getElementById('evFecha').value,
-            hora: document.getElementById('evHora').value,
-            precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
-            precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
-            dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
-            dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
+        window.onload = () => {
+            cargarEventosEnSelect();
         };
 
-        if(!body.id || !body.nombre || !body.fecha || !body.hora) {
-            return alert('Por favor completa todos los campos del evento.');
+        async function iniciarSesionBackend() {
+            const usuario = document.getElementById('loginUsuario').value.trim();
+            const clave = document.getElementById('loginClave').value;
+            const lblError = document.getElementById('loginError');
+
+            lblError.innerText = '';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario, clave })
+                });
+
+                const data = await res.json();
+
+                if (data.exito) {
+                    usuarioSesion = data;
+                    document.getElementById('lblOperario').innerText = data.usuario;
+                    document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
+                    document.getElementById('modalLogin').style.display = 'none';
+                    document.getElementById('appContainer').style.display = 'block';
+
+                    if (data.tipo === 'adm') {
+                        document.getElementById('btnTabUsuarios').style.display = 'inline-block';
+                    }
+                    cargarEventosEnSelect();
+                } else {
+                    lblError.innerText = data.mensaje || 'Error al autenticar';
+                }
+            } catch (err) {
+                lblError.innerText = 'Error de conexión con el servidor backend';
+            }
         }
 
-        try {
-            const res = await fetch('/api/eventos/crear', {
+        function mostrarTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            if(btn) btn.classList.add('active');
+        }
+
+        async function cargarEventosEnSelect() {
+            try {
+                const res = await fetch('/api/eventos');
+                const eventos = await res.json();
+                const select = document.getElementById('selEventoVenta');
+                
+                select.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+                if(eventos.length > 0) {
+                    eventos.forEach(ev => {
+                        const opt = document.createElement('option');
+                        opt.value = ev.id;
+                        opt.innerText = `${ev.nombre} (${ev.fecha} - ${ev.hora})`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">-- No hay eventos creados --</option>';
+                }
+            } catch(err) {
+                console.error("Error al cargar eventos:", err);
+            }
+        }
+
+        async function cargarMapaAsientos() {
+            const eventoId = document.getElementById('selEventoVenta').value;
+            const gridIzq = document.getElementById('gridPlateaIzq');
+            const gridDer = document.getElementById('gridPlateaDer');
+            const gridG1 = document.getElementById('gridGrada1');
+            const gridG2 = document.getElementById('gridGrada2');
+
+            gridIzq.innerHTML = '';
+            gridDer.innerHTML = '';
+            gridG1.innerHTML = '';
+            gridG2.innerHTML = '';
+            asientoSeleccionado = null;
+            document.getElementById('lblAsiento').innerText = 'Ninguno';
+            document.getElementById('lblPrecio').innerText = '$0';
+
+            if(!eventoId) return;
+
+            try {
+                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+                const asientos = await res.json();
+
+                asientos.forEach(a => {
+                    const div = document.createElement('div');
+                    div.classList.add('asiento');
+
+                    if (a.vendido === 1) {
+                        div.classList.add('vendido');
+                    } else if (a.habilitado === 0) {
+                        div.classList.add('bloqueado');
+                    } else {
+                        div.classList.add('disponible');
+                        div.onclick = () => seleccionarAsiento(div, a);
+                    }
+
+                    const partes = a.codigoAsiento.split('-');
+                    const numAsiento = parseInt(partes[1] ? partes[1].replace(/[^0-9]/g, '') : 0);
+                    div.innerText = a.codigoAsiento.replace('GEN-', '');
+
+                    if(a.tipoZona === 'General') {
+                        if (numAsiento >= 1 && numAsiento <= 8) {
+                            gridIzq.appendChild(div);
+                        } else {
+                            gridDer.appendChild(div);
+                        }
+                    } else if(a.codigoAsiento.startsWith('G1')) {
+                        gridG1.appendChild(div);
+                    } else if(a.codigoAsiento.startsWith('G2')) {
+                        gridG2.appendChild(div);
+                    }
+                });
+            } catch(err) {
+                console.error("Error al cargar asientos:", err);
+            }
+        }
+
+        function seleccionarAsiento(elem, asientoData) {
+            document.querySelectorAll('.asiento.seleccionado').forEach(e => {
+                e.classList.remove('seleccionado');
+                e.classList.add('disponible');
+            });
+
+            elem.classList.remove('disponible');
+            elem.classList.add('seleccionado');
+
+            asientoSeleccionado = asientoData;
+            document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
+            document.getElementById('lblPrecio').innerText = `$${asientoData.precio}`;
+        }
+
+        async function crearEvento() {
+            const body = {
+                id: document.getElementById('evId').value.trim(),
+                nombre: document.getElementById('evNombre').value.trim(),
+                fecha: document.getElementById('evFecha').value,
+                hora: document.getElementById('evHora').value,
+                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
+                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
+                dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
+                dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
+            };
+
+            if(!body.id || !body.nombre || !body.fecha || !body.hora) {
+                return alert('Por favor completa todos los campos del evento.');
+            }
+
+            try {
+                const res = await fetch('/api/eventos/crear', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json();
+                alert(data.mensaje);
+
+                if(data.exito) {
+                    await cargarEventosEnSelect();
+                    mostrarTab('tabVenta', document.getElementById('btnTabVenta'));
+                }
+            } catch(err) {
+                alert('Error al conectar con el servidor');
+            }
+        }
+
+        async function guardarNuevoUsuario() {
+            const body = {
+                usuario: document.getElementById('usrNombre').value.trim(),
+                identificacion: document.getElementById('usrIdentificacion').value.trim(),
+                clave: document.getElementById('usrClave').value,
+                tipo: document.getElementById('usrTipo').value
+            };
+
+            const res = await fetch('/api/usuarios/crear', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
@@ -533,83 +392,7 @@
 
             const data = await res.json();
             alert(data.mensaje);
-
-            if(data.exito) {
-                await cargarEventosEnSelect();
-                mostrarTab('tabVenta', document.getElementById('btnTabVenta'));
-            }
-        } catch(err) {
-            alert('Error al conectar con el servidor');
         }
-    }
-
-    async function procesarVenta() {
-        if (!asientoSeleccionado) {
-            return alert('Por favor selecciona un asiento disponible en el mapa.');
-        }
-
-        const nombre = document.getElementById('txtNombre').value.trim();
-        const apellido = document.getElementById('txtApellido').value.trim();
-        const contacto = document.getElementById('txtContacto').value.trim();
-
-        if (!nombre || !apellido || !contacto) {
-            return alert('Por favor completa los campos obligatorios del cliente.');
-        }
-
-        const body = {
-            eventoId: document.getElementById('selEventoVenta').value,
-            asientoId: asientoSeleccionado.id,
-            asientoCodigo: asientoSeleccionado.codigoAsiento,
-            monto: asientoSeleccionado.precio,
-            metodoPago: document.getElementById('selMetodoPago').value,
-            clienteNombre: nombre,
-            clienteApellido: apellido,
-            clienteContacto: contacto,
-            clienteEmail: document.getElementById('txtEmail').value.trim(),
-            operarioId: usuarioSesion ? usuarioSesion.usuario : 'desconocido'
-        };
-
-        try {
-            const res = await fetch('/api/reservas/crear', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
-
-            const data = await res.json();
-            if (data.exito) {
-                alert('¡Venta realizada con éxito!');
-                document.getElementById('txtNombre').value = '';
-                document.getElementById('txtApellido').value = '';
-                document.getElementById('txtContacto').value = '';
-                document.getElementById('txtEmail').value = '';
-                cargarMapaAsientos();
-            } else {
-                alert('Error al realizar la venta: ' + data.mensaje);
-            }
-        } catch(err) {
-            alert('Error de servidor al procesar la reserva');
-        }
-    }
-
-    async function guardarNuevoUsuario() {
-        const body = {
-            usuario: document.getElementById('usrNombre').value.trim(),
-            identificacion: document.getElementById('usrIdentificacion').value.trim(),
-            clave: document.getElementById('usrClave').value,
-            tipo: document.getElementById('usrTipo').value
-        };
-
-        const res = await fetch('/api/usuarios/crear', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-
-        const data = await res.json();
-        alert(data.mensaje);
-    }
-</script>
-            
+    </script>
 </body>
 </html>
