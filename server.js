@@ -1,7 +1,18 @@
+const express = require('express');
+const path = require('path');
+const db = require('./database');
+
+const app = express();
+
+// Middlewares para procesar JSON y archivos estáticos
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, '/')));
+
 // ==========================================
 // AUTENTICACIÓN Y GESTIÓN DE USUARIOS
 // ==========================================
-const db = require('./database');
+
 // Login de usuarios
 app.post('/api/login', (req, res) => {
     const { usuario, clave } = req.body;
@@ -42,8 +53,14 @@ app.get('/api/usuarios', (req, res) => {
         res.json(filas || []);
     });
 });
+
+// Ruta principal para servir el frontend
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Puerto dinámico asignado por Render
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Servidor activo en el puerto ${PORT}`);
 });
-
