@@ -1,11 +1,12 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cron = require('node-cron');
-const nodemailer = require('nodemailer');
 const path = require('path');
 
 const app = express();
 app.use(express.json());
+
+// Sirve archivos estáticos desde la raíz del proyecto
 app.use(express.static(__dirname));
 
 // Inicialización de la Base de Datos SQLite
@@ -14,7 +15,7 @@ const db = new sqlite3.Database('./boleteria.db', (err) => {
     else console.log("Conectado a la base de datos SQLite.");
 });
 
-// Creación de Tablas
+// Estructura de Tablas
 db.serialize(() => {
     db.run(`CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,15 +73,14 @@ db.serialize(() => {
         valor TEXT
     )`);
 
-    // Usuario Superusuario por defecto si no existe
+    // Superusuario semilla por defecto
     db.run(`INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) 
             VALUES ('superadmin', 'SU-001', 'admin1234', 'super')`);
 });
 
-// Middleware de autenticación simple
 let usuarioSesionActiva = null;
 
-// --- ENDPOINTS AUTENTICACIÓN Y USUARIOS ---
+// --- AUTENTICACIÓN Y USUARIOS ---
 app.post('/api/login', (req, res) => {
     const { usuario, clave } = req.body;
     db.get("SELECT * FROM usuarios WHERE usuario = ? AND clave = ?", [usuario, clave], (err, user) => {
@@ -104,10 +104,11 @@ app.post('/api/super/revelar-clave', (req, res) => {
     }
     
     db.get("SELECT clave FROM usuarios WHERE id = ?", [usuarioSesionActiva.id], (err, superUser) => {
-        if (claveSuper !== superUser.clave) {
+        if (err || !superUser || claveSuper !== superUser.clave) {
             return res.json({ exito: false, mensaje: "Clave de superusuario incorrecta" });
         }
         db.get("SELECT clave FROM usuarios WHERE id = ?", [usuarioIdTarget], (err, target) => {
+            if (err || !target) return res.json({ exito: false, mensaje: "Usuario no encontrado" });
             res.json({ exito: true, clave: target.clave });
         });
     });
@@ -117,7 +118,7 @@ app.post('/api/usuarios/crear', (req, res) => {
     const { usuario, identificacion, clave, tipo } = req.body;
     db.run("INSERT INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)",
         [usuario, identificacion, clave, tipo], (err) => {
-            if (err) return res.json({ exito: false, mensaje: "El usuario ya existe o hay un error" });
+            if (err) return res.json({ exito: false, mensaje: "El usuario ya existe o hubo un error al registrar" });
             res.json({ exito: true, mensaje: "Usuario registrado con éxito" });
         });
 });
@@ -129,7 +130,7 @@ app.delete('/api/super/usuarios/:id', (req, res) => {
     });
 });
 
-// --- ENDPOINTS EVENTOS Y ASIENTOS ---
+// --- EVENTOS Y MAPA DE ASIENTOS ---
 app.get('/api/eventos', (req, res) => {
     db.all("SELECT * FROM eventos ORDER BY fecha DESC", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -142,9 +143,8 @@ app.post('/api/eventos/crear', (req, res) => {
     
     db.run("INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada], function(err) {
-            if (err) return res.json({ exito: false, mensaje: "El ID de evento ya existe" });
+            if (err) return res.json({ exito: false, mensaje: "El ID de evento ya existe o es inválido" });
 
-            // Generar mapa de asientos automáticamente
             const filas = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
             db.serialize(() => {
                 let contador = 0;
@@ -157,16 +157,19 @@ app.post('/api/eventos/crear', (req, res) => {
                         }
                     }
                 });
-                for (let g1 = 1; g1 <= Math.min(12, dispGrada / 2); g1++) {
+                const limiteG1 = Math.min(12, Math.floor(dispGrada / 2));
+                const limiteG2 = Math.min(12, Math.ceil(dispGrada / 2));
+                
+                for (let g1 = 1; g1 <= limiteG1; g1++) {
                     db.run("INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio) VALUES (?, ?, 'Grada', ?)",
                         [id, `G1-${g1}`, precioGradas]);
                 }
-                for (let g2 = 1; g2 <= Math.min(12, dispGrada / 2); g2++) {
+                for (let g2 = 1; g2 <= limiteG2; g2++) {
                     db.run("INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio) VALUES (?, ?, 'Grada', ?)",
                         [id, `G2-${g2}`, precioGradas]);
                 }
             });
-            res.json({ exito: true, mensaje: "Evento y asientos configurados correctamente" });
+            res.json({ exito: true, mensaje: "Evento y mapa creados exitosamente" });
         });
 });
 
@@ -177,11 +180,11 @@ app.get('/api/eventos/:id/asientos', (req, res) => {
     });
 });
 
-// --- ENDPOINTS VENTAS, CUPONES Y CAMBIOS ---
+// --- VENTAS, CUPONES Y CAMBIOS ---
 app.post('/api/cupones/validar', (req, res) => {
     const { codigo } = req.body;
     db.get("SELECT porcentaje FROM cupones WHERE codigo = ?", [codigo], (err, row) => {
-        if (!row) return res.json({ valido: false, mensaje: "Cupón inválido" });
+        if (err || !row) return res.json({ valido: false, mensaje: "Cupón inválido" });
         res.json({ valido: true, porcentaje: row.porcentaje });
     });
 });
@@ -189,8 +192,8 @@ app.post('/api/cupones/validar', (req, res) => {
 app.post('/api/cupones/crear', (req, res) => {
     const { codigo, porcentaje } = req.body;
     db.run("INSERT INTO cupones (codigo, porcentaje) VALUES (?, ?)", [codigo, porcentaje], (err) => {
-        if (err) return res.json({ exito: false, mensaje: "Cupón duplicado" });
-        res.json({ exito: true, mensaje: "Cupón creado correctamente" });
+        if (err) return res.json({ exito: false, mensaje: "El cupón ya existe" });
+        res.json({ exito: true, mensaje: "Cupón registrado correctamente" });
     });
 });
 
@@ -201,7 +204,7 @@ app.post('/api/ventas/procesar', (req, res) => {
         db.run("UPDATE asientos SET vendido = 1 WHERE id = ?", [asiento_id]);
         db.run("INSERT INTO ventas (evento_id, asiento_id, nombre_cliente, apellido_cliente, contacto, email, metodo_pago, monto_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [evento_id, asiento_id, nombre, apellido, contacto, email, metodo_pago, monto_total], function(err) {
-                if (err) return res.json({ exito: false, mensaje: "Error al procesar la venta" });
+                if (err) return res.json({ exito: false, mensaje: "Error al registrar venta" });
                 res.json({ exito: true, ventaId: this.lastID, mensaje: "Venta registrada con éxito" });
             });
     });
@@ -224,13 +227,13 @@ app.post('/api/ventas/reubicar', (req, res) => {
         db.run("UPDATE asientos SET vendido = 0 WHERE id = ?", [viejoAsientoId]);
         db.run("UPDATE asientos SET vendido = 1 WHERE id = ?", [nuevoAsientoId]);
         db.run("UPDATE ventas SET asiento_id = ? WHERE id = ?", [nuevoAsientoId, ventaId], (err) => {
-            if (err) return res.json({ exito: false, mensaje: "Error al reubicar" });
-            res.json({ exito: true, mensaje: "Asiento modificado con éxito" });
+            if (err) return res.json({ exito: false, mensaje: "Error al reubicar asiento" });
+            res.json({ exito: true, mensaje: "Asiento reubicado con éxito" });
         });
     });
 });
 
-// --- INFORMES Y AUTOMATIZACIÓN (12 HS) ---
+// --- INFORMES Y CONFIGURACIÓN ---
 app.get('/api/informe/:eventoId', (req, res) => {
     db.get(`
         SELECT 
@@ -238,6 +241,7 @@ app.get('/api/informe/:eventoId', (req, res) => {
             SUM(CASE WHEN v.asistio = 1 THEN 1 ELSE 0 END) as asistentes,
             SUM(v.monto_total) as recaudado
         FROM ventas v WHERE v.evento_id = ?`, [req.params.eventoId], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
             res.json(row || { vendidas: 0, asistentes: 0, recaudado: 0 });
         });
 });
@@ -245,10 +249,12 @@ app.get('/api/informe/:eventoId', (req, res) => {
 app.post('/api/config/email-informe', (req, res) => {
     const { email } = req.body;
     db.run("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES ('email_informe', ?)", [email], (err) => {
-        res.json({ exito: true, mensaje: "Email para informes configurado" });
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ exito: true, mensaje: "Email para informes configurado con éxito" });
     });
 });
 
+// Tarea programada cada hora para verificar informes pasadas las 12 horas
 cron.schedule('0 * * * *', () => {
     const ahora = new Date();
     db.all("SELECT * FROM eventos WHERE informe_enviado = 0", [], (err, eventos) => {
@@ -258,11 +264,11 @@ cron.schedule('0 * * * *', () => {
             const difHoras = (ahora - fechaEvento) / (1000 * 60 * 60);
             if (difHoras >= 12) {
                 db.run("UPDATE eventos SET informe_enviado = 1 WHERE id = ?", [ev.id]);
-                console.log(`Informe automático procesado para el evento ${ev.nombre}`);
+                console.log(`Informe procesado automáticamente para el evento ID: ${ev.id}`);
             }
         });
     });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor de Boletería iniciado en el puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor de Boletería iniciado en puerto ${PORT}`));
