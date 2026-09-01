@@ -379,60 +379,97 @@
     </div>
 
     <script>
-        let usuarioSesion = null;
-        let asientoSeleccionado = null;
+    let usuarioSesion = null;
+    let asientoSeleccionado = null;
 
-        async function iniciarSesionBackend() {
-            const usuario = document.getElementById('loginUsuario').value.trim();
-            const clave = document.getElementById('loginClave').value;
-            const lblError = document.getElementById('loginError');
+    window.onload = () => {
+        cargarEventosEnSelect();
+    };
 
-            lblError.innerText = '';
+    async function iniciarSesionBackend() {
+        const usuario = document.getElementById('loginUsuario').value.trim();
+        const clave = document.getElementById('loginClave').value;
+        const lblError = document.getElementById('loginError');
 
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario, clave })
-                });
+        lblError.innerText = '';
 
-                const data = await res.json();
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ usuario, clave })
+            });
 
-                if (data.exito) {
-                    usuarioSesion = data;
-                    document.getElementById('lblOperario').innerText = data.usuario;
-                    document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
-                    document.getElementById('modalLogin').style.display = 'none';
-                    document.getElementById('appContainer').style.display = 'block';
+            const data = await res.json();
 
-                    if (data.tipo === 'adm') {
-                        document.getElementById('btnTabUsuarios').style.display = 'inline-block';
-                    }
-                } else {
-                    lblError.innerText = data.mensaje || 'Error al autenticar';
+            if (data.exito) {
+                usuarioSesion = data;
+                document.getElementById('lblOperario').innerText = data.usuario;
+                document.getElementById('lblTipo').innerText = data.tipo.toUpperCase();
+                document.getElementById('modalLogin').style.display = 'none';
+                document.getElementById('appContainer').style.display = 'block';
+
+                if (data.tipo === 'adm') {
+                    document.getElementById('btnTabUsuarios').style.display = 'inline-block';
                 }
-            } catch (err) {
-                lblError.innerText = 'Error de conexión con el servidor backend';
+                cargarEventosEnSelect();
+            } else {
+                lblError.innerText = data.mensaje || 'Error al autenticar';
             }
+        } catch (err) {
+            lblError.innerText = 'Error de conexión con el servidor backend';
         }
+    }
 
-        function mostrarTab(tabId, btn) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    function mostrarTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById(tabId).classList.add('active');
+        if(btn) btn.classList.add('active');
+    }
+
+    async function cargarEventosEnSelect() {
+        try {
+            const res = await fetch('/api/eventos');
+            const eventos = await res.json();
+            const select = document.getElementById('selEventoVenta');
             
-            document.getElementById(tabId).classList.add('active');
-            if(btn) btn.classList.add('active');
+            select.innerHTML = '';
+            if(eventos.length > 0) {
+                select.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+                eventos.forEach(ev => {
+                    const opt = document.createElement('option');
+                    opt.value = ev.id;
+                    opt.innerText = `${ev.nombre} (${ev.fecha} - ${ev.hora})`;
+                    select.appendChild(opt);
+                });
+            } else {
+                select.innerHTML = '<option value="">-- No hay eventos creados --</option>';
+            }
+        } catch(err) {
+            console.error("Error al cargar eventos:", err);
+        }
+    }
+
+    async function crearEvento() {
+        const body = {
+            id: document.getElementById('evId').value.trim(),
+            nombre: document.getElementById('evNombre').value.trim(),
+            fecha: document.getElementById('evFecha').value,
+            hora: document.getElementById('evHora').value,
+            precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
+            precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
+            dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
+            dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
+        };
+
+        if(!body.id || !body.nombre || !body.fecha || !body.hora) {
+            return alert('Por favor completa todos los campos del evento.');
         }
 
-        async function guardarNuevoUsuario() {
-            const body = {
-                usuario: document.getElementById('usrNombre').value.trim(),
-                identificacion: document.getElementById('usrIdentificacion').value.trim(),
-                clave: document.getElementById('usrClave').value,
-                tipo: document.getElementById('usrTipo').value
-            };
-
-            const res = await fetch('/api/usuarios/crear', {
+        try {
+            const res = await fetch('/api/eventos/crear', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(body)
@@ -440,7 +477,33 @@
 
             const data = await res.json();
             alert(data.mensaje);
+
+            if(data.exito) {
+                cargarEventosEnSelect();
+                mostrarTab('tabVenta', document.getElementById('btnTabVenta'));
+            }
+        } catch(err) {
+            alert('Error al conectar con el servidor');
         }
-    </script>
+    }
+
+    async function guardarNuevoUsuario() {
+        const body = {
+            usuario: document.getElementById('usrNombre').value.trim(),
+            identificacion: document.getElementById('usrIdentificacion').value.trim(),
+            clave: document.getElementById('usrClave').value,
+            tipo: document.getElementById('usrTipo').value
+        };
+
+        const res = await fetch('/api/usuarios/crear', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+        alert(data.mensaje);
+    }
+</script>
 </body>
 </html>
