@@ -1,24 +1,17 @@
 const express = require('express');
-const { createClient } = require('@libsql/client/web');
-
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN
-});
-
-const cron = require('node-cron');
+const { createClient } = require('@libsql/client');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Conexión a la base de datos persistente en Turso
+// Conexión única a la base de datos persistente en Turso
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN
 });
 
-// Inicialización de Tablas en la Nube y Carga de Datos Iniciales
+// Inicialización de esquema y datos por defecto
 async function initDB() {
     try {
         await db.execute(`CREATE TABLE IF NOT EXISTS usuarios (
@@ -77,13 +70,13 @@ async function initDB() {
             valor TEXT
         )`);
 
-        // Insertar superusuario inicial si no existe
+        // Superusuario predeterminado
         await db.execute({
             sql: `INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`,
             args: ['superadmin', 'SU-001', 'admin1234', 'super']
         });
 
-        console.log("Base de datos e inicialización listas en Turso.");
+        console.log("Base de datos inicializada correctamente en Turso.");
     } catch (error) {
         console.error("Error al inicializar la base de datos:", error);
     }
@@ -91,7 +84,7 @@ async function initDB() {
 
 initDB();
 
-// --- AUTENTICACIÓN Y GESTIÓN DE USUARIOS ---
+// --- RUTAS DE AUTENTICACIÓN Y USUARIOS ---
 
 app.post('/api/login', async (req, res) => {
     try {
@@ -149,7 +142,7 @@ app.delete('/api/super/usuarios/:id', async (req, res) => {
     }
 });
 
-// --- GESTIÓN DE EVENTOS Y ASIENTOS ---
+// --- RUTAS DE EVENTOS Y ASIENTOS ---
 
 app.get('/api/eventos', async (req, res) => {
     try {
@@ -169,7 +162,6 @@ app.post('/api/eventos/crear', async (req, res) => {
             args: [id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada]
         });
 
-        // Generar asientos iniciales
         const filas = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
         let contador = 0;
         for (const f of filas) {
@@ -183,7 +175,7 @@ app.post('/api/eventos/crear', async (req, res) => {
                 }
             }
         }
-        res.json({ exito: true, mensaje: "Evento guardado de forma permanente" });
+        res.json({ exito: true, mensaje: "Evento creado exitosamente" });
     } catch (err) {
         console.error("Error al crear evento:", err);
         res.json({ exito: false, mensaje: "Error al crear el evento" });
@@ -203,7 +195,7 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     }
 });
 
-// --- PROCESAMIENTO DE VENTAS ---
+// --- RUTAS DE VENTAS ---
 
 app.post('/api/ventas/procesar', async (req, res) => {
     const { evento_id, asiento_id, nombre, apellido, contacto, email, metodo_pago, monto_total } = req.body;
@@ -220,6 +212,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// Arrancar Servidor
+// Puerto dinámico de Render
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor iniciado y conectado a Turso en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor ejecutándose en puerto ${PORT}`));
