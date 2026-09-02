@@ -671,5 +671,104 @@
             window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
         }
     </script>
+
+    <!-- ... tu HTML de la página ... -->
+
+    <script>
+        // ... todo tu código JavaScript actual ...
+
+        // =======================================================
+        // LÓGICA PARA DETALLE DE VENTAS Y ENVIAR ENTRADAS (QR)
+        // =======================================================
+        let eventoSeleccionadoActual = null;
+
+        async function seleccionarEventoInforme(eventoId) {
+            eventoSeleccionadoActual = eventoId;
+            
+            // 1. Cargar Totales
+            const res = await fetch(`/api/informe/${eventoId}`);
+            const data = await res.json();
+            
+            if (document.getElementById('cantVendidas')) document.getElementById('cantVendidas').innerText = data.vendidas;
+            if (document.getElementById('cantAsistentes')) document.getElementById('cantAsistentes').innerText = data.asistentes;
+            if (document.getElementById('montoRecaudado')) document.getElementById('montoRecaudado').innerText = `$${data.recaudado.toLocaleString()}`;
+
+            // 2. Cargar Listado de Ventas
+            await cargarTablaDetalleVentas(eventoId);
+            const sec = document.getElementById('seccionEntradasVendidas');
+            if (sec) sec.classList.remove('d-none');
+        }
+
+        async function actualizarListaVentas() {
+            if (eventoSeleccionadoActual) {
+                await cargarTablaDetalleVentas(eventoSeleccionadoActual);
+            }
+        }
+
+        async function cargarTablaDetalleVentas(eventoId) {
+            const res = await fetch(`/api/ventas/detalle/${eventoId}`);
+            const ventas = await res.json();
+            const tbody = document.getElementById('tablaDetalleVentas');
+            if (!tbody) return;
+            
+            tbody.innerHTML = '';
+
+            if (ventas.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No hay entradas vendidas registradas para este evento.</td></tr>';
+                return;
+            }
+
+            ventas.forEach(v => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${v.nombre} ${v.apellido}</strong></td>
+                        <td>${v.email || '<span class="text-muted">N/A</span>'}</td>
+                        <td>${v.telefono || '<span class="text-muted">N/A</span>'}</td>
+                        <td><span class="badge bg-primary fs-6">${v.codigoAsiento}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-success me-1" onclick="enviarWhatsApp('${v.telefono}', '${v.nombre}', '${v.codigoAsiento}', '${v.id}')">
+                                📱 WhatsApp
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="enviarEmailTicket('${v.id}')" ${!v.email ? 'disabled' : ''}>
+                                ✉️ Email
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function enviarWhatsApp(telefono, nombre, asiento, ventaId) {
+            if (!telefono || telefono === 'undefined') {
+                alert('El comprador no tiene un número de teléfono registrado.');
+                return;
+            }
+            const numLimpio = telefono.replace(/\D/g, '');
+            const ticketUrl = `${window.location.origin}/entrada.html?id=${ventaId}`;
+            
+            const mensaje = encodeURIComponent(
+                `Hola ${nombre}, ¡gracias por tu compra!\n\n` +
+                `🎫 *Tu Entrada Digital*\n` +
+                `📍 Asiento: *${asiento}*\n\n` +
+                `Puedes ver y descargar tu entrada con tu código QR único desde el siguiente enlace:\n` +
+                `${ticketUrl}`
+            );
+
+            window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+        }
+
+        async function enviarEmailTicket(ventaId) {
+            const res = await fetch('/api/entradas/enviar-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+            });
+            const result = await res.json();
+            alert(result.mensaje);
+        }
+    </script>
+</body>
+</html>
+
 </body>
 </html>
