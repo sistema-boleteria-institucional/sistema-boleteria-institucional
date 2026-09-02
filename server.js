@@ -44,14 +44,23 @@ function inicializarAsientos(eventoId) {
     if (asientosMap[eventoId]) return;
     
     const eventoObj = eventos.find(e => e.id === eventoId);
-    const pGen = eventoObj ? eventoObj.precioGeneral : 1500;
-    const pGrada = eventoObj ? eventoObj.precioGradas : 3000;
+    
+    // Valores predeterminados o los ingresados por el operador
+    const pGen = eventoObj ? Number(eventoObj.precioGeneral) : 1500;
+    const pGrada = eventoObj ? Number(eventoObj.precioGradas) : 3000;
+    
+    // Asignación de capacidad respetando los topes máximos
+    const maxGenConfig = eventoObj ? Number(eventoObj.dispGen) : 112;
+    const maxGradaConfig = eventoObj ? Number(eventoObj.dispGrada) : 24;
+
+    const totalGen = Math.min(maxGenConfig, 112);     // Tope máximo 112
+    const totalGrada = Math.min(maxGradaConfig, 24);   // Tope máximo 24
 
     let lista = [];
     let idCounter = 1;
 
-    // Generar 16 asientos para Platea / General (8 Izq - 8 Der)
-    for (let i = 1; i <= 16; i++) {
+    // Generar la cantidad exacta de asientos de General asignados
+    for (let i = 1; i <= totalGen; i++) {
         lista.push({
             id: idCounter++,
             codigoAsiento: `GEN-A${i}`,
@@ -63,8 +72,11 @@ function inicializarAsientos(eventoId) {
         });
     }
 
-    // Generar asientos para Grada 1 y Grada 2 (4 en cada una)
-    for (let i = 1; i <= 4; i++) {
+    // Generar la cantidad exacta de asientos de Gradas asignados (repartidos entre Grada 1 y 2)
+    const porGrada1 = Math.ceil(totalGrada / 2);
+    const porGrada2 = totalGrada - porGrada1;
+
+    for (let i = 1; i <= porGrada1; i++) {
         lista.push({ 
             id: idCounter++, 
             codigoAsiento: `G1-${i}`, 
@@ -74,6 +86,8 @@ function inicializarAsientos(eventoId) {
             habilitado: 1, 
             asistio: 0 
         });
+    }
+    for (let i = 1; i <= porGrada2; i++) {
         lista.push({ 
             id: idCounter++, 
             codigoAsiento: `G2-${i}`, 
@@ -87,7 +101,6 @@ function inicializarAsientos(eventoId) {
 
     asientosMap[eventoId] = lista;
 }
-
 // Inicializar asientos para el evento predeterminado
 inicializarAsientos('EV-2026');
 
