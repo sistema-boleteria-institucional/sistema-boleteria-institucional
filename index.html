@@ -14,7 +14,7 @@
             <h2>Iniciar Sesión</h2>
             <div class="form-group">
                 <label>Usuario:</label>
-                <input type="text" id="loginUsuario" placeholder="Ej: operario1">
+                <input type="text" id="loginUsuario" placeholder="Ej: admin">
             </div>
             <div class="form-group">
                 <label>Contraseña:</label>
@@ -67,12 +67,12 @@
 
                     <div class="platea-container">
                         <div>
-                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">Asientos 1 - 8</h4>
+                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">General (Bloque Izq)</h4>
                             <div id="gridPlateaIzq" class="bloque-platea"></div>
                         </div>
                         <div class="pasillo-central">PASILLO</div>
                         <div>
-                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">Asientos 9 - 16</h4>
+                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">General (Bloque Der)</h4>
                             <div id="gridPlateaDer" class="bloque-platea"></div>
                         </div>
                     </div>
@@ -149,10 +149,29 @@
                 <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre" placeholder="Festival de Música"></div>
                 <div class="form-group"><label>Fecha:</label><input type="date" id="evFecha"></div>
                 <div class="form-group"><label>Hora:</label><input type="time" id="evHora"></div>
-                <div class="form-group"><label>Precio General ($):</label><input type="number" id="evPrecioGen" value="1500"></div>
-                <div class="form-group"><label>Disponibles General (Máx 112):</label><input type="number" id="evDispGen" value="112"></div>
-                <div class="form-group"><label>Precio Gradas ($):</label><input type="number" id="evPrecioGrada" value="3000"></div>
-                <div class="form-group"><label>Disponibles Gradas (Máx 24):</label><input type="number" id="evDispGrada" value="24"></div>
+                
+                <hr style="border-color: #334155; margin: 15px 0;">
+
+                <div class="form-group">
+                    <label>Precio General ($):</label>
+                    <input type="number" id="evPrecioGen" value="1500" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Cantidad Asientos General (Máximo 112):</label>
+                    <input type="number" id="evDispGen" value="112" min="1" max="112">
+                </div>
+
+                <hr style="border-color: #334155; margin: 15px 0;">
+
+                <div class="form-group">
+                    <label>Precio Gradas ($):</label>
+                    <input type="number" id="evPrecioGrada" value="3000" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Cantidad Asientos Gradas (Máximo 24):</label>
+                    <input type="number" id="evDispGrada" value="24" min="1" max="24">
+                </div>
+
                 <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
             </div>
         </div>
@@ -338,17 +357,26 @@
                         const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
                         div.innerText = codigoLimpio;
 
-                        if(a.tipoZona === 'General') {
+                        if(a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) {
                             const matchNum = codigoLimpio.match(/\d+$/);
                             const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
-                            if (numAsiento >= 1 && numAsiento <= 8) gridIzq.appendChild(div);
-                            else gridDer.appendChild(div);
-                        } else if(a.codigoAsiento.startsWith('G1')) gridG1.appendChild(div);
-                        else if(a.codigoAsiento.startsWith('G2')) gridG2.appendChild(div);
+                            
+                            // Distribución en filas de 16 asientos (1-8 Bloque Izquierdo, 9-16 Bloque Derecho)
+                            const posEnFila = ((numAsiento - 1) % 16) + 1;
+                            if (posEnFila >= 1 && posEnFila <= 8) {
+                                gridIzq.appendChild(div);
+                            } else {
+                                gridDer.appendChild(div);
+                            }
+                        } else if(a.codigoAsiento.startsWith('G1')) {
+                            gridG1.appendChild(div);
+                        } else if(a.codigoAsiento.startsWith('G2')) {
+                            gridG2.appendChild(div);
+                        }
                     });
                 }
             } catch(e) {
-                console.error(e);
+                console.error("Error al cargar asientos:", e);
             }
         }
 
@@ -427,18 +455,30 @@
         }
 
         async function crearEvento() {
+            const dispGenVal = parseInt(document.getElementById('evDispGen').value) || 0;
+            const dispGradaVal = parseInt(document.getElementById('evDispGrada').value) || 0;
+
+            if (dispGenVal > 112) {
+                return alert('La cantidad máxima de asientos en General es 112.');
+            }
+            if (dispGradaVal > 24) {
+                return alert('La cantidad máxima de asientos en Gradas es 24.');
+            }
+
             const body = {
                 id: document.getElementById('evId').value.trim(),
                 nombre: document.getElementById('evNombre').value.trim(),
                 fecha: document.getElementById('evFecha').value,
                 hora: document.getElementById('evHora').value,
-                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value),
-                dispGen: parseInt(document.getElementById('evDispGen').value) || 112,
-                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value),
-                dispGrada: parseInt(document.getElementById('evDispGrada').value) || 24
+                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
+                dispGen: dispGenVal,
+                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0,
+                dispGrada: dispGradaVal
             };
 
-            if(!body.id || !body.nombre || !body.fecha || !body.hora) return alert('Completa todos los campos obligatorios del evento');
+            if(!body.id || !body.nombre || !body.fecha || !body.hora) {
+                return alert('Completa todos los campos obligatorios del evento');
+            }
 
             try {
                 const res = await fetch('/api/eventos/crear', {
@@ -448,7 +488,9 @@
                 });
                 const data = await res.json();
                 alert(data.mensaje);
-                if(data.exito) cargarEventosEnSelect();
+                if(data.exito) {
+                    cargarEventosEnSelect();
+                }
             } catch(e) {
                 alert('Error al guardar evento.');
             }
