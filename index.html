@@ -139,32 +139,30 @@
                     <button class="btn-primary" style="background:#25D366;" onclick="compartirWhatsApp()">Enviar por WhatsApp</button>
                 </div>
             </div>
-<!-- TABLA DETALLADA DE ENTRADAS VENDIDAS PARA EL VENDEDOR -->
-<div id="seccionEntradasVendidas" class="card mt-4 d-none">
-    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">📋 Listado de Entradas Vendidas</h5>
-        <button class="btn btn-sm btn-outline-light" onclick="actualizarListaVentas()">🔄 Actualizar</button>
-    </div>
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Cliente</th>
-                        <th>Email</th>
-                        <th>Teléfono</th>
-                        <th>Asiento</th>
-                        <th class="text-center">Enviar Entrada (QR)</th>
-                    </tr>
-                </thead>
-                <tbody id="tablaDetalleVentas">
-                    <!-- Se llena con app.js -->
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
 
+            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS -->
+            <div id="seccionEntradasVendidas" class="card mt-4 d-none" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4 style="margin: 0;">📋 Listado de Entradas Vendidas</h4>
+                    <button class="btn-primary" style="width: auto; padding: 5px 12px;" onclick="actualizarListaVentas()">🔄 Actualizar</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="tabla-admin" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Email</th>
+                                <th>Teléfono</th>
+                                <th>Asiento</th>
+                                <th style="text-align: center;">Enviar Entrada (QR)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaDetalleVentas">
+                            <tr><td colspan="5" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- PESTAÑA EVENTOS -->
@@ -387,7 +385,6 @@
                             const matchNum = codigoLimpio.match(/\d+$/);
                             const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
                             
-                            // Distribución en filas de 16 asientos (1-8 Bloque Izquierdo, 9-16 Bloque Derecho)
                             const posEnFila = ((numAsiento - 1) % 16) + 1;
                             if (posEnFila >= 1 && posEnFila <= 8) {
                                 gridIzq.appendChild(div);
@@ -659,6 +656,9 @@
                 document.getElementById('infVendidas').innerText = data.vendidas || 0;
                 document.getElementById('infAsistentes').innerText = data.asistentes || 0;
                 document.getElementById('infRecaudado').innerText = `$${(data.recaudado || 0).toFixed(2)}`;
+
+                // Cargar también la lista detallada de compradores
+                cargarTablaDetalleVentas(eventoId);
             } catch(e) {
                 console.error(e);
             }
@@ -670,105 +670,91 @@
             const texto = encodeURIComponent(`*Informe de Evento*\nEntradas Vendidas: ${vendidas}\nTotal Recaudado: ${recaudado}`);
             window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
         }
-    </script>
-
-    <!-- ... tu HTML de la página ... -->
-
-    <script>
-        // ... todo tu código JavaScript actual ...
 
         // =======================================================
-        // LÓGICA PARA DETALLE DE VENTAS Y ENVIAR ENTRADAS (QR)
+        // LÓGICA AGREGADA PARA LISTAR COMPRAS Y ENVIAR QR
         // =======================================================
-        let eventoSeleccionadoActual = null;
-
-        async function seleccionarEventoInforme(eventoId) {
-            eventoSeleccionadoActual = eventoId;
-            
-            // 1. Cargar Totales
-            const res = await fetch(`/api/informe/${eventoId}`);
-            const data = await res.json();
-            
-            if (document.getElementById('cantVendidas')) document.getElementById('cantVendidas').innerText = data.vendidas;
-            if (document.getElementById('cantAsistentes')) document.getElementById('cantAsistentes').innerText = data.asistentes;
-            if (document.getElementById('montoRecaudado')) document.getElementById('montoRecaudado').innerText = `$${data.recaudado.toLocaleString()}`;
-
-            // 2. Cargar Listado de Ventas
-            await cargarTablaDetalleVentas(eventoId);
-            const sec = document.getElementById('seccionEntradasVendidas');
-            if (sec) sec.classList.remove('d-none');
-        }
-
-        async function actualizarListaVentas() {
-            if (eventoSeleccionadoActual) {
-                await cargarTablaDetalleVentas(eventoSeleccionadoActual);
-            }
-        }
-
         async function cargarTablaDetalleVentas(eventoId) {
-            const res = await fetch(`/api/ventas/detalle/${eventoId}`);
-            const ventas = await res.json();
             const tbody = document.getElementById('tablaDetalleVentas');
-            if (!tbody) return;
-            
-            tbody.innerHTML = '';
+            if(!tbody) return;
 
-            if (ventas.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No hay entradas vendidas registradas para este evento.</td></tr>';
-                return;
+            try {
+                const res = await fetch(`/api/eventos/${eventoId}/ventas`);
+                if (!res.ok) throw new Error('Error al obtener ventas');
+                const ventas = await res.json();
+
+                tbody.innerHTML = '';
+
+                if (!ventas || ventas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 10px;">No hay entradas vendidas para este evento.</td></tr>';
+                    return;
+                }
+
+                ventas.forEach(v => {
+                    const nombreCompleto = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'Cliente';
+                    const tel = v.contacto || v.telefono || '';
+                    const mail = v.email || '';
+                    const asiento = v.codigoAsiento || v.asiento || 'General';
+                    const ventaId = v.id || v.idEntrada;
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><strong>${nombreCompleto}</strong></td>
+                            <td>${mail || '<span style="color:#64748b;">N/A</span>'}</td>
+                            <td>${tel || '<span style="color:#64748b;">N/A</span>'}</td>
+                            <td><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em;">${asiento}</span></td>
+                            <td style="text-align: center;">
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
+                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}')">
+                                    💬 WA
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em;" 
+                                    onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
+                                    ✉️ Email
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error("Error al cargar listado de ventas:", err);
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 10px;">Error al cargar las ventas del servidor.</td></tr>';
             }
-
-            ventas.forEach(v => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${v.nombre} ${v.apellido}</strong></td>
-                        <td>${v.email || '<span class="text-muted">N/A</span>'}</td>
-                        <td>${v.telefono || '<span class="text-muted">N/A</span>'}</td>
-                        <td><span class="badge bg-primary fs-6">${v.codigoAsiento}</span></td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-success me-1" onclick="enviarWhatsApp('${v.telefono}', '${v.nombre}', '${v.codigoAsiento}', '${v.id}')">
-                                📱 WhatsApp
-                            </button>
-                            <button class="btn btn-sm btn-outline-primary" onclick="enviarEmailTicket('${v.id}')" ${!v.email ? 'disabled' : ''}>
-                                ✉️ Email
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
         }
 
-        function enviarWhatsApp(telefono, nombre, asiento, ventaId) {
-            if (!telefono || telefono === 'undefined') {
-                alert('El comprador no tiene un número de teléfono registrado.');
-                return;
+        function actualizarListaVentas() {
+            const eventoId = document.getElementById('selEventoInforme').value;
+            if (eventoId) {
+                cargarTablaDetalleVentas(eventoId);
+            } else {
+                alert('Selecciona un evento primero.');
             }
-            const numLimpio = telefono.replace(/\D/g, '');
-            const ticketUrl = `${window.location.origin}/entrada.html?id=${ventaId}`;
+        }
+
+        function enviarWhatsApp(telefono, cliente, asiento, ventaId) {
+            if (!telefono) return alert('El cliente no tiene registrado número de teléfono.');
             
+            const numLimpio = telefono.replace(/\D/g, '');
+            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}`;
             const mensaje = encodeURIComponent(
-                `Hola ${nombre}, ¡gracias por tu compra!\n\n` +
+                `Hola ${cliente}, ¡gracias por tu compra!\n\n` +
                 `🎫 *Tu Entrada Digital*\n` +
                 `📍 Asiento: *${asiento}*\n\n` +
-                `Puedes ver y descargar tu entrada con tu código QR único desde el siguiente enlace:\n` +
-                `${ticketUrl}`
+                `Accede a tu código QR con este enlace:\n${urlEntrada}`
             );
 
             window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
         }
 
-        async function enviarEmailTicket(ventaId) {
-            const res = await fetch('/api/entradas/enviar-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
-            });
-            const result = await res.json();
-            alert(result.mensaje);
+        function enviarEmailTicket(email, cliente, ventaId) {
+            if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
+
+            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}`;
+            const asunto = encodeURIComponent('Tu Entrada Digital para el Evento');
+            const cuerpo = encodeURIComponent(`Hola ${cliente},\n\nAquí tienes el acceso a tu entrada digital en formato QR:\n${urlEntrada}\n\n¡Te esperamos!`);
+
+            window.open(`mailto:${email}?subject=${asunto}&body=${cuerpo}`, '_blank');
         }
     </script>
-</body>
-</html>
-
 </body>
 </html>
