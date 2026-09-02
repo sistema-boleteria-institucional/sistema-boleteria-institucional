@@ -1,7 +1,6 @@
 {
-  "name": "boleteria",
+  "name": "sistema-boleteria",
   "version": "1.0.0",
-  "description": "Sistema de Boletería Persistente",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
