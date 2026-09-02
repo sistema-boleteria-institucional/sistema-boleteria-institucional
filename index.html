@@ -139,6 +139,32 @@
                     <button class="btn-primary" style="background:#25D366;" onclick="compartirWhatsApp()">Enviar por WhatsApp</button>
                 </div>
             </div>
+<!-- TABLA DETALLADA DE ENTRADAS VENDIDAS PARA EL VENDEDOR -->
+<div id="seccionEntradasVendidas" class="card mt-4 d-none">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">📋 Listado de Entradas Vendidas</h5>
+        <button class="btn btn-sm btn-outline-light" onclick="actualizarListaVentas()">🔄 Actualizar</button>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Email</th>
+                        <th>Teléfono</th>
+                        <th>Asiento</th>
+                        <th class="text-center">Enviar Entrada (QR)</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaDetalleVentas">
+                    <!-- Se llena con app.js -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
         </div>
 
         <!-- PESTAÑA EVENTOS -->
