@@ -9,6 +9,7 @@ app.use(express.static(__dirname));
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN
+  scheme: 'https'
 });
 
 // Inicialización de esquema y datos por defecto
