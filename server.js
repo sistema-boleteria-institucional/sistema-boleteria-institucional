@@ -1,18 +1,17 @@
 const express = require('express');
-const { createClient } = require('@libsql/client/http'); // <--- Usar cliente HTTP directo
+const { createClient } = require('@libsql/client');
 
 const app = express();
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Conexión directa HTTPS a Turso
+// Conexión principal a la base de datos 'boleteria' en Turso
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN
-  scheme: 'https'
 });
 
-// Inicialización de esquema y datos por defecto
+// Inicialización de Tablas y Superusuario
 async function initDB() {
     try {
         await db.execute(`CREATE TABLE IF NOT EXISTS usuarios (
@@ -71,13 +70,13 @@ async function initDB() {
             valor TEXT
         )`);
 
-        // Superusuario predeterminado
+        // Inserción del superusuario por defecto
         await db.execute({
             sql: `INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`,
             args: ['superadmin', 'SU-001', 'admin1234', 'super']
         });
 
-        console.log("Base de datos inicializada correctamente en Turso.");
+        console.log("Base de datos e inicialización conectadas correctamente a Turso.");
     } catch (error) {
         console.error("Error al inicializar la base de datos:", error);
     }
@@ -176,7 +175,7 @@ app.post('/api/eventos/crear', async (req, res) => {
                 }
             }
         }
-        res.json({ exito: true, mensaje: "Evento creado exitosamente" });
+        res.json({ exito: true, mensaje: "Evento guardado permanentemente" });
     } catch (err) {
         console.error("Error al crear evento:", err);
         res.json({ exito: false, mensaje: "Error al crear el evento" });
@@ -213,6 +212,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// Puerto dinámico de Render
+// Puerto de ejecución en Render
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor ejecutándose en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor activo en el puerto ${PORT}`));
