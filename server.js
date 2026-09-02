@@ -12,74 +12,81 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN
 });
 
-// Inicialización de Tablas en la Nube
+// Inicialización de Tablas en la Nube y Carga de Datos Iniciales
 async function initDB() {
-    await db.execute(`CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT UNIQUE,
-        identificacion TEXT,
-        clave TEXT,
-        tipo TEXT
-    )`);
+    try {
+        await db.execute(`CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT UNIQUE,
+            identificacion TEXT,
+            clave TEXT,
+            tipo TEXT
+        )`);
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS eventos (
-        id TEXT PRIMARY KEY,
-        nombre TEXT,
-        fecha TEXT,
-        hora TEXT,
-        precioGeneral REAL,
-        precioGradas REAL,
-        dispGen INTEGER,
-        dispGrada INTEGER,
-        informe_enviado INTEGER DEFAULT 0
-    )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS eventos (
+            id TEXT PRIMARY KEY,
+            nombre TEXT,
+            fecha TEXT,
+            hora TEXT,
+            precioGeneral REAL,
+            precioGradas REAL,
+            dispGen INTEGER,
+            dispGrada INTEGER,
+            informe_enviado INTEGER DEFAULT 0
+        )`);
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS asientos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        evento_id TEXT,
-        codigoAsiento TEXT,
-        tipoZona TEXT,
-        precio REAL,
-        vendido INTEGER DEFAULT 0,
-        habilitado INTEGER DEFAULT 1,
-        FOREIGN KEY(evento_id) REFERENCES eventos(id)
-    )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS asientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evento_id TEXT,
+            codigoAsiento TEXT,
+            tipoZona TEXT,
+            precio REAL,
+            vendido INTEGER DEFAULT 0,
+            habilitado INTEGER DEFAULT 1,
+            FOREIGN KEY(evento_id) REFERENCES eventos(id)
+        )`);
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS ventas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        evento_id TEXT,
-        asiento_id INTEGER,
-        nombre_cliente TEXT,
-        apellido_cliente TEXT,
-        contacto TEXT,
-        email TEXT,
-        metodo_pago TEXT,
-        monto_total REAL,
-        asistio INTEGER DEFAULT 0,
-        fecha_venta DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(asiento_id) REFERENCES asientos(id)
-    )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS ventas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            evento_id TEXT,
+            asiento_id INTEGER,
+            nombre_cliente TEXT,
+            apellido_cliente TEXT,
+            contacto TEXT,
+            email TEXT,
+            metodo_pago TEXT,
+            monto_total REAL,
+            asistio INTEGER DEFAULT 0,
+            fecha_venta DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(asiento_id) REFERENCES asientos(id)
+        )`);
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS cupones (
-        codigo TEXT PRIMARY KEY,
-        porcentaje REAL
-    )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS cupones (
+            codigo TEXT PRIMARY KEY,
+            porcentaje REAL
+        )`);
 
-    await db.execute(`CREATE TABLE IF NOT EXISTS configuracion (
-        clave TEXT PRIMARY KEY,
-        valor TEXT
-    )`);
+        await db.execute(`CREATE TABLE IF NOT EXISTS configuracion (
+            clave TEXT PRIMARY KEY,
+            valor TEXT
+        )`);
 
-    // Insertar superusuario inicial si la tabla está vacía
-    await db.execute({
-        sql: `INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`,
-        args: ['superadmin', 'SU-001', 'admin1234', 'super']
-    });
+        // Insertar superusuario inicial si no existe
+        await db.execute({
+            sql: `INSERT OR IGNORE INTO usuarios (usuario, identificacion, clave, tipo) VALUES (?, ?, ?, ?)`,
+            args: ['superadmin', 'SU-001', 'admin1234', 'super']
+        });
+
+        console.log("Base de datos e inicialización listas en Turso.");
+    } catch (error) {
+        console.error("Error al inicializar la base de datos:", error);
+    }
 }
 
-initDB().catch(console.error);
+initDB();
 
-// --- ENDPOINTS DE AUTENTICACIÓN Y USUARIOS ---
+// --- AUTENTICACIÓN Y GESTIÓN DE USUARIOS ---
+
 app.post('/api/login', async (req, res) => {
     try {
         const { usuario, clave } = req.body;
@@ -87,11 +94,15 @@ app.post('/api/login', async (req, res) => {
             sql: "SELECT * FROM usuarios WHERE usuario = ? AND clave = ?",
             args: [usuario, clave]
         });
+        
         const user = result.rows[0];
-        if (!user) return res.json({ exito: false, mensaje: "Credenciales incorrectas" });
+        if (!user) {
+            return res.json({ exito: false, mensaje: "Credenciales incorrectas" });
+        }
         res.json({ exito: true, usuario: user.usuario, tipo: user.tipo, id: user.id });
     } catch (err) {
-        res.json({ exito: false, mensaje: "Error en el servidor" });
+        console.error("Error en /api/login:", err);
+        res.status(500).json({ exito: false, mensaje: "Error interno del servidor" });
     }
 });
 
@@ -100,6 +111,7 @@ app.get('/api/super/usuarios', async (req, res) => {
         const result = await db.execute("SELECT id, usuario, identificacion, tipo FROM usuarios");
         res.json(result.rows);
     } catch (err) {
+        console.error("Error al obtener usuarios:", err);
         res.status(500).json([]);
     }
 });
@@ -113,6 +125,7 @@ app.post('/api/usuarios/crear', async (req, res) => {
         });
         res.json({ exito: true, mensaje: "Usuario registrado con éxito" });
     } catch (err) {
+        console.error("Error al crear usuario:", err);
         res.json({ exito: false, mensaje: "El usuario ya existe o hubo un error" });
     }
 });
@@ -125,16 +138,19 @@ app.delete('/api/super/usuarios/:id', async (req, res) => {
         });
         res.json({ exito: true, mensaje: "Usuario eliminado" });
     } catch (err) {
+        console.error("Error al eliminar usuario:", err);
         res.json({ exito: false, mensaje: "Error al eliminar usuario" });
     }
 });
 
-// --- ENDPOINTS DE EVENTOS Y ASIENTOS ---
+// --- GESTIÓN DE EVENTOS Y ASIENTOS ---
+
 app.get('/api/eventos', async (req, res) => {
     try {
         const result = await db.execute("SELECT * FROM eventos ORDER BY fecha DESC");
         res.json(result.rows);
     } catch (err) {
+        console.error("Error al obtener eventos:", err);
         res.status(500).json([]);
     }
 });
@@ -147,6 +163,7 @@ app.post('/api/eventos/crear', async (req, res) => {
             args: [id, nombre, fecha, hora, precioGeneral, precioGradas, dispGen, dispGrada]
         });
 
+        // Generar asientos iniciales
         const filas = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
         let contador = 0;
         for (const f of filas) {
@@ -162,6 +179,7 @@ app.post('/api/eventos/crear', async (req, res) => {
         }
         res.json({ exito: true, mensaje: "Evento guardado de forma permanente" });
     } catch (err) {
+        console.error("Error al crear evento:", err);
         res.json({ exito: false, mensaje: "Error al crear el evento" });
     }
 });
@@ -174,9 +192,12 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
         });
         res.json(result.rows);
     } catch (err) {
+        console.error("Error al obtener asientos:", err);
         res.status(500).json([]);
     }
 });
+
+// --- PROCESAMIENTO DE VENTAS ---
 
 app.post('/api/ventas/procesar', async (req, res) => {
     const { evento_id, asiento_id, nombre, apellido, contacto, email, metodo_pago, monto_total } = req.body;
@@ -188,9 +209,11 @@ app.post('/api/ventas/procesar', async (req, res) => {
         });
         res.json({ exito: true, mensaje: "Venta registrada exitosamente" });
     } catch (err) {
+        console.error("Error al procesar la venta:", err);
         res.json({ exito: false, mensaje: "Error al procesar la venta" });
     }
 });
 
+// Arrancar Servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Servidor activo con persistencia de datos en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor iniciado y conectado a Turso en puerto ${PORT}`));
