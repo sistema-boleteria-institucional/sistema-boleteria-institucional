@@ -1,11 +1,11 @@
 const express = require('express');
-const { createClient } = require('@libsql/client');
+const { createClient } = require('@libsql/client/http'); // <--- Usar cliente HTTP directo
 
 const app = express();
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Conexión única a la base de datos persistente en Turso
+// Conexión directa HTTPS a Turso
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN
