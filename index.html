@@ -675,52 +675,59 @@
         // LÓGICA AGREGADA PARA LISTAR COMPRAS Y ENVIAR QR
         // =======================================================
         async function cargarTablaDetalleVentas(eventoId) {
-            const tbody = document.getElementById('tablaDetalleVentas');
-            if(!tbody) return;
+    const tbody = document.getElementById('tablaDetalleVentas');
+    if (!tbody) return;
 
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/ventas`);
-                if (!res.ok) throw new Error('Error al obtener ventas');
-                const ventas = await res.json();
-
-                tbody.innerHTML = '';
-
-                if (!ventas || ventas.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 10px;">No hay entradas vendidas para este evento.</td></tr>';
-                    return;
-                }
-
-                ventas.forEach(v => {
-                    const nombreCompleto = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'Cliente';
-                    const tel = v.contacto || v.telefono || '';
-                    const mail = v.email || '';
-                    const asiento = v.codigoAsiento || v.asiento || 'General';
-                    const ventaId = v.id || v.idEntrada;
-
-                    tbody.innerHTML += `
-                        <tr>
-                            <td><strong>${nombreCompleto}</strong></td>
-                            <td>${mail || '<span style="color:#64748b;">N/A</span>'}</td>
-                            <td>${tel || '<span style="color:#64748b;">N/A</span>'}</td>
-                            <td><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em;">${asiento}</span></td>
-                            <td style="text-align: center;">
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
-                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}')">
-                                    💬 WA
-                                </button>
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em;" 
-                                    onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
-                                    ✉️ Email
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (err) {
-                console.error("Error al cargar listado de ventas:", err);
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 10px;">Error al cargar las ventas del servidor.</td></tr>';
-            }
+    try {
+        // Intentar endpoint primario y secundario si falla
+        let res = await fetch(`/api/ventas/detalle/${eventoId}`);
+        if (!res.ok) {
+            res = await fetch(`/api/eventos/${eventoId}/ventas`);
         }
+
+        if (!res.ok) throw new Error('No se pudo conectar con el endpoint de ventas.');
+        
+        const ventas = await res.json();
+        tbody.innerHTML = '';
+
+        if (!Array.isArray(ventas) || ventas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 12px;">No hay ventas registradas para este evento.</td></tr>';
+            return;
+        }
+
+        ventas.forEach(v => {
+            // Unificar propiedades por si la BD devuelve distintos nombres de columna
+            const nombreCompleto = `${v.nombre || v.cliente_nombre || ''} ${v.apellido || v.cliente_apellido || ''}`.trim() || 'Comprador';
+            const mail = v.email || v.correo || '';
+            const tel = v.contacto || v.telefono || v.celular || '';
+            const asiento = v.codigoAsiento || v.codigo_asiento || v.asiento || 'General';
+            const ventaId = v.id || v.venta_id || v.id_entrada;
+
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #334155;">
+                    <td style="padding: 8px;"><strong>${nombreCompleto}</strong></td>
+                    <td style="padding: 8px;">${mail || '<span style="color:#64748b;">N/A</span>'}</td>
+                    <td style="padding: 8px;">${tel || '<span style="color:#64748b;">N/A</span>'}</td>
+                    <td style="padding: 8px;"><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #fff;">${asiento}</span></td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
+                            onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}')">
+                            💬 WA
+                        </button>
+                        <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em;" 
+                            onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
+                            ✉️ Email
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (err) {
+        console.error("Error al obtener detalle de ventas:", err);
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
+    }
+}
+
 
         function actualizarListaVentas() {
             const eventoId = document.getElementById('selEventoInforme').value;
