@@ -325,7 +325,7 @@ app.get('/api/informe/:eventoId', async (req, res) => {
 });
 
 // ==========================================
-// NUEVOS ENDPOINTS: DETALLE DE VENTAS, QR Y EMAIL
+// NUEVOS ENDPOINTS: DETALLE DE VENTAS, EDITAR Y ASIENTOS
 // ==========================================
 
 // Obtener listado de entradas vendidas con datos completos
@@ -335,7 +335,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
         try {
             const result = await db.execute({
                 sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
-                             v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id
+                             v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id, v.asiento_id
                       FROM ventas v
                       WHERE v.evento_id = ?
                       ORDER BY v.id DESC`,
@@ -357,9 +357,81 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 telefono: v.contacto,
                 codigoAsiento: v.codigoAsiento,
                 monto_total: v.monto_total,
-                evento_id: v.evento_id
+                evento_id: v.evento_id,
+                asiento_id: v.asiento_id
             }));
         res.json(lista);
+    }
+});
+
+// EDITAR DATOS DE VENTA Y REASIGNAR ASIENTO
+app.put('/api/ventas/editar', async (req, res) => {
+    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
+
+    if (db) {
+        try {
+            // 1. Actualizar información del comprador
+            await db.execute({
+                sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
+                args: [nombre, apellido, contacto, email || '', ventaId]
+            });
+
+            // 2. Si solicitó cambio de asiento
+            if (nuevoAsientoId) {
+                const vRes = await db.execute({ sql: "SELECT asiento_id, evento_id FROM ventas WHERE id = ?", args: [ventaId] });
+                if (vRes.rows.length > 0) {
+                    const asientoViejoId = vRes.rows[0].asiento_id;
+
+                    // Obtener datos del nuevo asiento
+                    const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
+                    if (nAsientoRes.rows.length > 0) {
+                        const nuevoAsiento = nAsientoRes.rows[0];
+
+                        // Liberar asiento anterior
+                        if (asientoViejoId) {
+                            await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejoId] });
+                        }
+
+                        // Ocupar nuevo asiento
+                        await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
+                        // Actualizar en la venta
+                        await db.execute({
+                            sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
+                            args: [nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
+                        });
+                    }
+                }
+            }
+
+            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
+        }
+    } else {
+        const v = ventasMemoria.find(x => x.id == ventaId);
+        if (!v) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+
+        v.nombre = nombre;
+        v.apellido = apellido;
+        v.contacto = contacto;
+        v.email = email || '';
+
+        if (nuevoAsientoId) {
+            const lista = asientosMemoria[v.evento_id] || [];
+            const asientoViejo = lista.find(a => a.id === v.asiento_id);
+            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
+
+            if (asientoViejo) asientoViejo.vendido = 0;
+            if (asientoNuevo) {
+                asientoNuevo.vendido = 1;
+                v.asiento_id = asientoNuevo.id;
+                v.codigoAsiento = asientoNuevo.codigoAsiento;
+            }
+        }
+
+        res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
     }
 });
 
