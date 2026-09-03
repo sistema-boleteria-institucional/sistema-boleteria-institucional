@@ -542,7 +542,7 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
 });
 
 // ==========================================
-// ENDPOINT PARA ENVIAR ENTRADA POR EMAIL (NODEMAILER)
+// ENDPOINT PARA ENVIAR ENTRADA POR EMAIL (BREVO API)
 // ==========================================
 app.post('/api/entradas/enviar-email', async (req, res) => {
     const { ventaId, hostOrigin } = req.body;
@@ -570,48 +570,60 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
         const baseUrl = hostOrigin || 'https://sistema-boleteria-institucional.onrender.com';
         const ticketUrl = `${baseUrl}/entrada.html?id=${ventaId}&sig=${sig}`;
 
-        // Generar QR en base64 para incluir directamente en el correo
         const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
         const qrDataUrl = await QRCode.toDataURL(qrPayload);
 
-        const senderEmail = process.env.GMAIL_USER || 'gonzalog2019@gmail.com';
+        // Envío directo a través de la API HTTP de Brevo
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: 'Boletería Institucional', email: 'gonzalog2019@gmail.com' },
+                to: [{ email: ticketData.email, name: `${ticketData.nombre} ${ticketData.apellido}` }],
+                subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
+                htmlContent: `
+                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                        <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
+                        <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
+                        <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
+                        
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
+                            <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
+                            <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
+                        </div>
 
-        const mailOptions = {
-            from: `"Boletería Institucional" <${senderEmail}>`,
-            to: ticketData.email,
-            subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
-            html: `
-                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-                    <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
-                    <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
-                    <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
-                    
-                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
-                        <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
-                        <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
+                        <div style="text-align: center; margin: 20px 0;">
+                            <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
+                            <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
+                        </div>
+
+                        <div style="text-align: center; margin-top: 25px;">
+                            <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
+                        </div>
                     </div>
+                `
+            })
+        });
 
-                    <div style="text-align: center; margin: 20px 0;">
-                        <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
-                        <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
-                    </div>
+        const resData = await response.json();
 
-                    <div style="text-align: center; margin-top: 25px;">
-                        <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
-                    </div>
-                </div>
-            `
-        };
-
-        await transporter.sendMail(mailOptions);
+        if (!response.ok) {
+            console.error('Error Brevo API:', resData);
+            return res.status(500).json({ exito: false, mensaje: resData.message || 'Error al enviar por Brevo' });
+        }
 
         res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
     } catch (e) {
-        console.error('Error al enviar email con Nodemailer:', e);
+        console.error('Error general al enviar correo:', e);
         res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
     }
 });
+
 
 // Endpoints Superusuario
 app.post('/api/usuarios/crear', async (req, res) => {
