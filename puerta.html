@@ -38,10 +38,13 @@
                 const resultado = await res.json();
                 mostrarPantalla(resultado);
             } catch (e) {
-                mostrarPantalla({ valido: false, razon: 'QR Inválido', mensaje: 'Código QR no reconocido' });
+                mostrarPantalla({ valido: false, razon: 'QR Inválido', mensaje: 'Código QR no reconocido o corrupto' });
             }
 
-            setTimeout(() => { escaneando = false; }, 3000);
+            setTimeout(() => { 
+                escaneando = false; 
+                document.getElementById('cardResultado').style.display = 'none';
+            }, 3500);
         }
 
         function mostrarPantalla(res) {
@@ -59,7 +62,7 @@
                 card.innerHTML = `
                     <h2>ACCESO DENEGADO</h2>
                     <p><strong>Razón:</strong> ${res.razon || 'Ticket no válido'}</p>
-                    <p><small>${res.mensaje}</small></p>`;
+                    <p><small>${res.mensaje || ''}</small></p>`;
             }
         }
 
