@@ -24,7 +24,7 @@
             
             <div id="loginError" style="color: #ef4444; font-size: 0.85em; margin-top: 10px;"></div>
 
-            <!-- Botón de emergencia si falla la conexión -->
+            <!-- Botón de emergencia -->
             <button id="btnModoForzado" class="btn-primary" style="background: #475569; margin-top: 15px; display: none;" onclick="ingresoModoEmergencia()">
                 Ingresar en Modo Sin Servidor (Demo)
             </button>
@@ -685,7 +685,6 @@
                 document.getElementById('infAsistentes').innerText = data.asistentes || 0;
                 document.getElementById('infRecaudado').innerText = `$${(data.recaudado || 0).toFixed(2)}`;
 
-                // Cargar también la lista detallada de compradores
                 cargarTablaDetalleVentas(eventoId);
             } catch(e) {
                 console.error(e);
@@ -727,6 +726,7 @@
                     const tel = v.telefono || v.contacto || v.celular || '';
                     const asiento = v.codigoAsiento || v.codigo_asiento || v.asiento || 'General';
                     const ventaId = v.id || v.venta_id || v.id_entrada;
+                    const sig = v.sig || '';
 
                     const ventaJson = JSON.stringify({
                         id: ventaId,
@@ -749,7 +749,7 @@
                                     ✏️ Editar
                                 </button>
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
-                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}')">
+                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}', '${sig}')">
                                     💬 WA
                                 </button>
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em;" 
@@ -766,9 +766,6 @@
             }
         }
 
-        // =======================================================
-        // MODAL DE EDICIÓN Y CAMBIO DE ASIENTO
-        // =======================================================
         async function abrirModalEditar(ventaDataRaw) {
             const v = typeof ventaDataRaw === 'string' ? JSON.parse(ventaDataRaw) : ventaDataRaw;
 
@@ -857,7 +854,7 @@
             }
         }
 
-        function enviarWhatsApp(telefono, cliente, asiento, ventaId) {
+        function enviarWhatsApp(telefono, cliente, asiento, ventaId, sig) {
             if (!telefono) return alert('El cliente no tiene registrado número de teléfono.');
             
             let numLimpio = telefono.replace(/\D/g, '');
@@ -874,12 +871,12 @@
                 }
             }
 
-            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}`;
+            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}&sig=${sig}`;
             const mensaje = encodeURIComponent(
                 `Hola ${cliente}, ¡gracias por tu compra!\n\n` +
                 `🎫 *Tu Entrada Digital*\n` +
                 `📍 Asiento: *${asiento}*\n\n` +
-                `Accede a tu código QR con este enlace:\n${urlEntrada}`
+                `Accede a tu código QR con este enlace seguro:\n${urlEntrada}`
             );
 
             window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
@@ -888,11 +885,14 @@
         function enviarEmailTicket(email, cliente, ventaId) {
             if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
 
-            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}`;
-            const asunto = encodeURIComponent('Tu Entrada Digital para el Evento');
-            const cuerpo = encodeURIComponent(`Hola ${cliente},\n\nAquí tienes el acceso a tu entrada digital en formato QR:\n${urlEntrada}\n\n¡Te esperamos!`);
-
-            window.open(`mailto:${email}?subject=${asunto}&body=${cuerpo}`, '_blank');
+            fetch('/api/entradas/enviar-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+            })
+            .then(res => res.json())
+            .then(data => alert(data.mensaje || 'Email enviado'))
+            .catch(() => alert('Error enviando email desde el servidor'));
         }
     </script>
 </body>
