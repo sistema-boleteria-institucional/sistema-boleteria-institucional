@@ -7,20 +7,23 @@ const QRCode = require('qrcode');
 
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
-
 // ==========================================
 // CONFIGURACIÓN DE NODEMAILER (GMAIL)
 // ==========================================
 const transporter = nodemailer.createTransport({
-    service: 'smtp.gmail.com',
+    host: 'smtp.gmail.com', // <--- CAMBIADO 'service' POR 'host'
     port: 465,
     secure: true, // Forzar SSL en puerto 465
     auth: {
         user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
-        pass: process.env.GMAIL_PASS || 'wwop whvt bnox kahn'
+        pass: process.env.GMAIL_PASS || 'wwopwhvtbnoxkahn'
+    },
+    tls: {
+        rejectUnauthorized: false // Evita bloqueos de certificados en plataformas cloud
     },
     connectionTimeout: 10000 // Fija un tiempo máximo de espera de 10 segundos
 });
+
 
 // Middlewares
 app.use(express.json());
