@@ -297,6 +297,17 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     res.json(asientosMemoria[id]);
 });
 
+// Obtener la lista completa de cupones para los desplegables
+app.get('/api/cupones', async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute("SELECT * FROM cupones");
+            return res.json(result.rows);
+        } catch (e) { console.error(e); }
+    }
+    res.json(cuponesMemoria);
+});
+
 app.post('/api/cupones/validar', async (req, res) => {
     const { codigo } = req.body;
     if (db) {
@@ -357,10 +368,79 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
         asiento.vendido = 1;
         const nuevaVentaId = ventasMemoria.length + 1;
-        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date() });
+        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date().toISOString() });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
         res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
+    }
+});
+
+// CANCELAR VENTA (LÍMITE HASTA 15 MINUTOS)
+app.post('/api/ventas/cancelar', async (req, res) => {
+    const { ventaId } = req.body;
+
+    if (!ventaId) {
+        return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
+    }
+
+    if (db) {
+        try {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE id = ?", args: [ventaId] });
+            if (vRes.rows.length === 0) {
+                return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+            }
+
+            const venta = vRes.rows[0];
+            const fechaCompra = new Date(venta.fechaCompra);
+            const ahora = new Date();
+            const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
+
+            if (diferenciaMinutos > 15) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: `Tiempo límite excedido para cancelar. Han pasado ${Math.floor(diferenciaMinutos)} minutos (Máximo 15 min).` 
+                });
+            }
+
+            // Liberar asiento y eliminar venta de Turso
+            await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
+            await db.execute({ sql: "DELETE FROM ventas WHERE id = ?", args: [ventaId] });
+
+            return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado' });
+        } catch (e) {
+            console.error('Error al cancelar la venta:', e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al procesar la cancelación en la base de datos' });
+        }
+    } else {
+        const indexVenta = ventasMemoria.findIndex(v => v.id == ventaId);
+        if (indexVenta === -1) {
+            return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+        }
+
+        const venta = ventasMemoria[indexVenta];
+        const fechaCompra = new Date(venta.fechaCompra);
+        const ahora = new Date();
+        const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
+
+        if (diferenciaMinutos > 15) {
+            return res.status(403).json({ 
+                exito: false, 
+                mensaje: `Tiempo límite excedido para cancelar. Han pasado ${Math.floor(diferenciaMinutos)} minutos (Máximo 15 min).` 
+            });
+        }
+
+        // Liberar asiento en memoria
+        const lista = asientosMemoria[venta.evento_id] || [];
+        const asiento = lista.find(a => a.id === venta.asiento_id);
+        if (asiento) {
+            asiento.vendido = 0;
+            asiento.asistio = 0;
+        }
+
+        // Eliminar venta de la memoria
+        ventasMemoria.splice(indexVenta, 1);
+
+        return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado (Memoria)' });
     }
 });
 
@@ -422,6 +502,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 telefono: v.contacto,
                 codigoAsiento: v.codigoAsiento,
                 monto_total: v.monto_total,
+                fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
                 asiento_id: v.asiento_id,
                 sig: generarFirma(v.id, v.codigoAsiento)
