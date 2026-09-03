@@ -24,6 +24,11 @@
         .ticket-body { padding: 25px; }
         .qr-container { text-align: center; padding: 15px; background: #fafafa; border-radius: 10px; border: 1px dashed #ccc; }
         .qr-container img { width: 180px; height: 180px; }
+        @media print {
+            body { background: #fff; }
+            .no-print { display: none !important; }
+            .ticket-card { box-shadow: none; margin: 0 auto; }
+        }
     </style>
 </head>
 <body>
@@ -31,33 +36,43 @@
     <div class="ticket-card" id="ticketContent">
         <div class="ticket-header">
             <h4 class="mb-1" id="nombreEvento">Cargando...</h4>
-            <small class="text-white-50">ENTRADA OFICIAL</small>
+            <small class="text-white-50">ENTRADA OFICIAL SEGURO</small>
         </div>
         <div class="ticket-body">
-            <div class="mb-3">
-                <small class="text-muted d-block">Titular</small>
-                <strong id="nombreCliente" class="fs-5">-</strong>
-            </div>
+            <div id="contenedorError" class="alert alert-danger d-none text-center" role="alert"></div>
 
-            <div class="row mb-3">
-                <div class="col-6">
-                    <small class="text-muted d-block">Fecha</small>
-                    <strong id="fechaEvento">-</strong>
+            <div id="contenedorTicket">
+                <div class="mb-3">
+                    <small class="text-muted d-block">Titular</small>
+                    <strong id="nombreCliente" class="fs-5">-</strong>
                 </div>
-                <div class="col-6">
-                    <small class="text-muted d-block">Hora</small>
-                    <strong id="horaEvento">-</strong>
+
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <small class="text-muted d-block">Fecha</small>
+                        <strong id="fechaEvento">-</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted d-block">Hora</small>
+                        <strong id="horaEvento">-</strong>
+                    </div>
                 </div>
-            </div>
 
-            <div class="mb-4 text-center p-2 bg-light rounded">
-                <small class="text-muted d-block">Ubicación / Asiento</small>
-                <span id="asientoCliente" class="badge bg-primary fs-4 mt-1">-</span>
-            </div>
+                <div class="mb-4 text-center p-2 bg-light rounded">
+                    <small class="text-muted d-block">Ubicación / Asiento</small>
+                    <span id="asientoCliente" class="badge bg-primary fs-4 mt-1">-</span>
+                </div>
 
-            <div class="qr-container">
-                <img id="imgQR" src="" alt="Cargando QR...">
-                <small class="d-block text-muted mt-2">Muestra este QR en el ingreso</small>
+                <div class="qr-container">
+                    <img id="imgQR" src="" alt="Cargando QR...">
+                    <small class="d-block text-muted mt-2">Muestra este QR en el ingreso</small>
+                </div>
+
+                <div class="mt-4 text-center no-print">
+                    <button class="btn btn-outline-primary btn-sm w-100" onclick="window.print()">
+                        🖨️ Imprimir / Guardar como PDF
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -66,27 +81,41 @@
         async function cargarTicket() {
             const params = new URLSearchParams(window.location.search);
             const ventaId = params.get('id');
+            const sig = params.get('sig');
 
-            if (!ventaId) {
-                alert('Entrada no válida o ID faltante');
+            const divError = document.getElementById('contenedorError');
+            const divTicket = document.getElementById('contenedorTicket');
+
+            if (!ventaId || !sig) {
+                divTicket.classList.add('d-none');
+                divError.classList.remove('d-none');
+                divError.innerText = '⚠️ Acceso no autorizado: Parámetros de seguridad faltantes.';
                 return;
             }
 
-            const res = await fetch(`/api/entradas/${ventaId}`);
-            const data = await res.json();
+            try {
+                const res = await fetch(`/api/entradas/${ventaId}?sig=${encodeURIComponent(sig)}`);
+                const data = await res.json();
 
-            if (!data.exito) {
-                alert(data.mensaje);
-                return;
+                if (!res.ok || !data.exito) {
+                    divTicket.classList.add('d-none');
+                    divError.classList.remove('d-none');
+                    divError.innerText = `⛔ ${data.mensaje || 'Entrada inválida o alterada.'}`;
+                    return;
+                }
+
+                const t = data.ticket;
+                document.getElementById('nombreEvento').innerText = t.evento_nombre || 'Evento Institucional';
+                document.getElementById('nombreCliente').innerText = `${t.nombre} ${t.apellido}`;
+                document.getElementById('fechaEvento').innerText = t.evento_fecha || '-';
+                document.getElementById('horaEvento').innerText = t.evento_hora ? `${t.evento_hora} hs` : '-';
+                document.getElementById('asientoCliente').innerText = t.codigoAsiento;
+                document.getElementById('imgQR').src = t.qr;
+            } catch (err) {
+                divTicket.classList.add('d-none');
+                divError.classList.remove('d-none');
+                divError.innerText = '❌ Error de comunicación con el servidor.';
             }
-
-            const t = data.ticket;
-            document.getElementById('nombreEvento').innerText = t.evento_nombre;
-            document.getElementById('nombreCliente').innerText = `${t.nombre} ${t.apellido}`;
-            document.getElementById('fechaEvento').innerText = t.evento_fecha;
-            document.getElementById('horaEvento').innerText = `${t.evento_hora} hs`;
-            document.getElementById('asientoCliente').innerText = t.codigoAsiento;
-            document.getElementById('imgQR').src = t.qr;
         }
 
         cargarTicket();
