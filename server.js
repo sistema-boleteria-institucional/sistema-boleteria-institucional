@@ -4,11 +4,20 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 const QRCode = require('qrcode');
-const { Resend } = require('resend');
 
 const app = express();
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
+
+// ==========================================
+// CONFIGURACIÓN DE NODEMAILER (GMAIL)
+// ==========================================
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
+        pass: process.env.GMAIL_PASS || 'wwop whvt bnox kahn'
+    }
+});
 
 // Middlewares
 app.use(express.json());
@@ -526,9 +535,11 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     }
 });
 
+// ==========================================
+// ENDPOINT PARA ENVIAR ENTRADA POR EMAIL (NODEMAILER)
+// ==========================================
 app.post('/api/entradas/enviar-email', async (req, res) => {
     const { ventaId, hostOrigin } = req.body;
-    if (!resend) return res.status(500).json({ exito: false, mensaje: 'Servicio de email no configurado (RESEND_API_KEY faltante)' });
 
     try {
         let ticketData;
@@ -550,28 +561,49 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
         }
 
         const sig = generarFirma(ticketData.id, ticketData.codigoAsiento);
-        const ticketUrl = `${hostOrigin}/entrada.html?id=${ventaId}&sig=${sig}`;
+        const baseUrl = hostOrigin || 'https://sistema-boleteria-institucional.onrender.com';
+        const ticketUrl = `${baseUrl}/entrada.html?id=${ventaId}&sig=${sig}`;
 
-        await resend.emails.send({
-            from: 'Boleteria <onboarding@resend.dev>',
-            to: [ticketData.email],
-            subject: `🎫 Tu Entrada para ${ticketData.evento_nombre}`,
+        // Generar QR en base64 para incluir directamente en el correo
+        const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
+        const qrDataUrl = await QRCode.toDataURL(qrPayload);
+
+        const senderEmail = process.env.GMAIL_USER || 'gonzalog2019@gmail.com';
+
+        const mailOptions = {
+            from: `"Boletería Institucional" <${senderEmail}>`,
+            to: ticketData.email,
+            subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
             html: `
-                <h2>Hola ${ticketData.nombre} ${ticketData.apellido},</h2>
-                <p>¡Gracias por tu compra! Aquí tienes el detalle de tu entrada:</p>
-                <ul>
-                    <li><strong>Evento:</strong> ${ticketData.evento_nombre}</li>
-                    <li><strong>Fecha:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</li>
-                    <li><strong>Asiento:</strong> ${ticketData.codigoAsiento}</li>
-                </ul>
-                <p><a href="${ticketUrl}" style="background:#0d6efd;color:#fff;padding:10px 15px;text-decoration:none;border-radius:5px;">Ver mi Entrada Digital y Código QR</a></p>
+                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                    <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
+                    <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
+                    <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
+                        <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
+                        <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
+                    </div>
+
+                    <div style="text-align: center; margin: 20px 0;">
+                        <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
+                        <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 25px;">
+                        <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
+                    </div>
+                </div>
             `
-        });
+        };
+
+        await transporter.sendMail(mailOptions);
 
         res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo' });
+        console.error('Error al enviar email con Nodemailer:', e);
+        res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
     }
 });
 
