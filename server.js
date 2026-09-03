@@ -1,15 +1,58 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 const QRCode = require('qrcode');
 const { Resend } = require('resend');
 
 const app = express();
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
 
 // Middlewares
 app.use(express.json());
 app.use(express.static(__dirname));
+
+// ==========================================
+// FUNCIONES DE SEGURIDAD (HMAC Y VERIFICACIÓN)
+// ==========================================
+function generarFirma(ventaId, asientoCodigo) {
+    return crypto
+        .createHmac('sha256', HMAC_SECRET)
+        .update(`${ventaId}:${asientoCodigo}`)
+        .digest('hex');
+}
+
+function verificarFirmaMiddleware(req, res, next) {
+    const { id } = req.params;
+    const { sig } = req.query;
+
+    if (!sig) {
+        return res.status(403).json({ exito: false, mensaje: 'Firma de seguridad requerida' });
+    }
+
+    // Buscamos el código del asiento para recalcular el HMAC
+    const verificar = (codigoAsiento) => {
+        const firmaEsperada = generarFirma(id, codigoAsiento);
+        if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(firmaEsperada))) {
+            return next();
+        }
+        return res.status(401).json({ exito: false, mensaje: 'Entrada inválida o firma alterada' });
+    };
+
+    if (db) {
+        db.execute({ sql: "SELECT codigoAsiento FROM ventas WHERE id = ?", args: [id] })
+            .then(resV => {
+                if (resV.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+                verificar(resV.rows[0].codigoAsiento);
+            })
+            .catch(err => res.status(500).json({ exito: false, mensaje: 'Error al verificar firma' }));
+    } else {
+        const venta = ventasMemoria.find(v => v.id == id);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+        verificar(venta.codigoAsiento);
+    }
+}
 
 // ==========================================
 // CONEXIÓN A TURSO (PERSISTENCIA REAL)
@@ -89,7 +132,6 @@ async function inicializarTablasDB() {
             );
         `);
 
-        // Insertar usuarios base si la tabla está vacía
         const resUser = await db.execute("SELECT COUNT(*) as cant FROM usuarios");
         if (resUser.rows[0].cant === 0) {
             await db.execute({
@@ -279,12 +321,15 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
-            await db.execute({
-                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            const insRes = await db.execute({
+                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
                 args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString()]
             });
 
-            return res.json({ exito: true, mensaje: 'Venta registrada' });
+            const nuevaVentaId = insRes.rows[0].id;
+            const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
+
+            return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
         } catch (e) {
             console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
@@ -295,8 +340,11 @@ app.post('/api/ventas/procesar', async (req, res) => {
         if (!asiento || asiento.vendido === 1) return res.json({ exito: false, mensaje: 'Asiento no disponible' });
 
         asiento.vendido = 1;
-        ventasMemoria.push({ ...venta, id: ventasMemoria.length + 1, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date() });
-        res.json({ exito: true, mensaje: 'Venta registrada (Memoria)' });
+        const nuevaVentaId = ventasMemoria.length + 1;
+        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date() });
+
+        const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
+        res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
     }
 });
 
@@ -324,11 +372,6 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// ==========================================
-// NUEVOS ENDPOINTS: DETALLE DE VENTAS, EDITAR Y ASIENTOS
-// ==========================================
-
-// Obtener listado de entradas vendidas con datos completos
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -341,7 +384,13 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                       ORDER BY v.id DESC`,
                 args: [eventoId]
             });
-            return res.json(result.rows);
+
+            const ventasConFirma = result.rows.map(v => ({
+                ...v,
+                sig: generarFirma(v.id, v.codigoAsiento)
+            }));
+
+            return res.json(ventasConFirma);
         } catch (e) {
             console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' });
@@ -358,44 +407,38 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 codigoAsiento: v.codigoAsiento,
                 monto_total: v.monto_total,
                 evento_id: v.evento_id,
-                asiento_id: v.asiento_id
+                asiento_id: v.asiento_id,
+                sig: generarFirma(v.id, v.codigoAsiento)
             }));
         res.json(lista);
     }
 });
 
-// EDITAR DATOS DE VENTA Y REASIGNAR ASIENTO
 app.put('/api/ventas/editar', async (req, res) => {
     const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
 
     if (db) {
         try {
-            // 1. Actualizar información del comprador
             await db.execute({
                 sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
                 args: [nombre, apellido, contacto, email || '', ventaId]
             });
 
-            // 2. Si solicitó cambio de asiento
             if (nuevoAsientoId) {
                 const vRes = await db.execute({ sql: "SELECT asiento_id, evento_id FROM ventas WHERE id = ?", args: [ventaId] });
                 if (vRes.rows.length > 0) {
                     const asientoViejoId = vRes.rows[0].asiento_id;
 
-                    // Obtener datos del nuevo asiento
                     const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
                     if (nAsientoRes.rows.length > 0) {
                         const nuevoAsiento = nAsientoRes.rows[0];
 
-                        // Liberar asiento anterior
                         if (asientoViejoId) {
                             await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejoId] });
                         }
 
-                        // Ocupar nuevo asiento
                         await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
 
-                        // Actualizar en la venta
                         await db.execute({
                             sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
                             args: [nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
@@ -435,9 +478,11 @@ app.put('/api/ventas/editar', async (req, res) => {
     }
 });
 
-// Obtener detalle completo de una sola entrada (para la vista del Ticket Digital)
-app.get('/api/entradas/:ventaId', async (req, res) => {
-    const { ventaId } = req.params;
+// Detalle de Entrada protegido con Middleware HMAC
+app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
+    const { id } = req.params;
+    const { sig } = req.query;
+
     if (db) {
         try {
             const vRes = await db.execute({
@@ -445,24 +490,26 @@ app.get('/api/entradas/:ventaId', async (req, res) => {
                       FROM ventas v
                       JOIN eventos e ON v.evento_id = e.id
                       WHERE v.id = ?`,
-                args: [ventaId]
+                args: [id]
             });
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
 
             const venta = vRes.rows[0];
-            const qrCodeUrl = await QRCode.toDataURL(JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento }));
+            const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+            const qrCodeUrl = await QRCode.toDataURL(qrPayload);
 
-            return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl } });
+            return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl, sig } });
         } catch (e) {
             console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
         }
     } else {
-        const venta = ventasMemoria.find(v => v.id == ventaId);
+        const venta = ventasMemoria.find(v => v.id == id);
         if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
 
         const evento = eventosMemoria.find(e => e.id === venta.evento_id) || {};
-        const qrCodeUrl = await QRCode.toDataURL(JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento }));
+        const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+        const qrCodeUrl = await QRCode.toDataURL(qrPayload);
 
         res.json({
             exito: true,
@@ -471,13 +518,13 @@ app.get('/api/entradas/:ventaId', async (req, res) => {
                 evento_nombre: evento.nombre || 'Evento',
                 evento_fecha: evento.fecha || '',
                 evento_hora: evento.hora || '',
-                qr: qrCodeUrl
+                qr: qrCodeUrl,
+                sig
             }
         });
     }
 });
 
-// Enviar entrada por Email mediante Resend
 app.post('/api/entradas/enviar-email', async (req, res) => {
     const { ventaId, hostOrigin } = req.body;
     if (!resend) return res.status(500).json({ exito: false, mensaje: 'Servicio de email no configurado (RESEND_API_KEY faltante)' });
@@ -501,7 +548,8 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
             return res.json({ exito: false, mensaje: 'El cliente no posee una dirección de correo válida' });
         }
 
-        const ticketUrl = `${hostOrigin}/entrada.html?id=${ventaId}`;
+        const sig = generarFirma(ticketData.id, ticketData.codigoAsiento);
+        const ticketUrl = `${hostOrigin}/entrada.html?id=${ventaId}&sig=${sig}`;
 
         await resend.emails.send({
             from: 'Boleteria <onboarding@resend.dev>',
