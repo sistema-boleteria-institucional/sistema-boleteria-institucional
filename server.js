@@ -12,11 +12,14 @@ const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-se
 // CONFIGURACIÓN DE NODEMAILER (GMAIL)
 // ==========================================
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    service: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Forzar SSL en puerto 465
     auth: {
         user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
         pass: process.env.GMAIL_PASS || 'wwop whvt bnox kahn'
-    }
+    },
+    connectionTimeout: 10000 // Fija un tiempo máximo de espera de 10 segundos
 });
 
 // Middlewares
