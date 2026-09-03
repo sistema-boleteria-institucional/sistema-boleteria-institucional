@@ -882,18 +882,28 @@
             window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
         }
 
-        function enviarEmailTicket(email, cliente, ventaId) {
-            if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
+       async function enviarEmailTicket(email, cliente, ventaId) {
+    if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
 
-            fetch('/api/entradas/enviar-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
-            })
-            .then(res => res.json())
-            .then(data => alert(data.mensaje || 'Email enviado'))
-            .catch(() => alert('Error enviando email desde el servidor'));
+    try {
+        const respuesta = await fetch('/api/entradas/enviar-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+        });
+
+        const data = await respuesta.json();
+
+        if (respuesta.ok && data.exito) {
+            alert(`✅ ${data.mensaje}`);
+        } else {
+            alert(`⚠️ Error al enviar correo: ${data.mensaje || 'Respuesta no válida del servidor'}`);
         }
+    } catch (err) {
+        console.error('Error enviando email:', err);
+        alert('❌ Error de conexión al intentar enviar el correo.');
+    }
+}
     </script>
 </body>
 </html>
