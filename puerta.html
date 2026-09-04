@@ -7,20 +7,51 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #0f172a; color: white; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { margin-bottom: 20px; color: #38bdf8; }
+        .header { text-align: center; margin-bottom: 20px; }
+        h1 { margin: 0; color: #38bdf8; }
+        .user-info { font-size: 0.9rem; color: #94a3b8; margin-top: 5px; }
         #reader { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
-        .card-resultado { margin-top: 25px; max-width: 420px; width: 100%; padding: 20px; border-radius: 12px; text-align: center; font-size: 1.2rem; display: none; }
+        .card-resultado { margin-top: 25px; max-width: 420px; width: 100%; padding: 20px; border-radius: 12px; text-align: center; font-size: 1.2rem; display: none; box-sizing: border-box; }
         .permitido { background-color: #166534; border: 2px solid #22c55e; }
         .denegado { background-color: #991b1b; border: 2px solid #ef4444; }
+        .btn-logout { margin-top: 15px; background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <h1>Control de Acceso Puerta</h1>
+    <div class="header">
+        <h1>Control de Acceso Puerta</h1>
+        <div id="usuarioDisplay" class="user-info"></div>
+        <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
+
     <div id="reader"></div>
     <div id="cardResultado" class="card-resultado"></div>
 
     <script>
+        // ==========================================
+        // VERIFICACIÓN DE USUARIO AUTORIZADO
+        // ==========================================
+        const usuarioSesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+
+        // Permite acceso a super, admin, vendedor u operario de puerta
+        const tiposPermitidos = ['super', 'admin', 'vendedor', 'puerta'];
+
+        if (!usuarioSesion.usuario || !tiposPermitidos.includes(usuarioSesion.tipo)) {
+            alert('⛔ Acceso denegado. Debes iniciar sesión con una cuenta autorizada.');
+            window.location.href = 'index.html';
+        } else {
+            document.getElementById('usuarioDisplay').innerText = `Operador: ${usuarioSesion.usuario} (${usuarioSesion.tipo.toUpperCase()})`;
+        }
+
+        function cerrarSesion() {
+            sessionStorage.removeItem('usuarioLogueado');
+            window.location.href = 'index.html';
+        }
+
+        // ==========================================
+        // PROCESAMIENTO DEL ESCÁNER QR
+        // ==========================================
         const html5QrCode = new Html5Qrcode("reader");
         let escaneando = false;
 
@@ -29,16 +60,39 @@
             escaneando = true;
 
             try {
-                const dataObj = JSON.parse(qrDataText);
-                const res = await fetch('/api/validar-qr', {
+                let payload = {};
+
+                // Intentar parsear si viene como JSON
+                if (qrDataText.trim().startsWith('{')) {
+                    payload = JSON.parse(qrDataText);
+                } else if (qrDataText.includes('?')) {
+                    // Si viene como URL (ej: entrada.html?id=12&sig=abc...)
+                    const urlParams = new URLSearchParams(qrDataText.split('?')[1]);
+                    payload = {
+                        ticket_id: urlParams.get('id'),
+                        sig: urlParams.get('sig')
+                    };
+                } else {
+                    throw new Error('Formato no válido');
+                }
+
+                // Enviar petición agregando el usuario que escanea
+                const res = await fetch('/api/puerta/validar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataObj)
+                    body: JSON.stringify({
+                        ...payload,
+                        operador: usuarioSesion.usuario
+                    })
                 });
+
                 const resultado = await res.json();
                 mostrarPantalla(resultado);
             } catch (e) {
-                mostrarPantalla({ valido: false, razon: 'QR Inválido', mensaje: 'Código QR no reconocido o corrupto' });
+                mostrarPantalla({ 
+                    exito: false, 
+                    mensaje: '❌ Código QR no reconocido o ilegible' 
+                });
             }
 
             setTimeout(() => { 
@@ -51,18 +105,18 @@
             const card = document.getElementById('cardResultado');
             card.style.display = 'block';
 
-            if (res.valido) {
+            if (res.exito) {
                 card.className = 'card-resultado permitido';
                 card.innerHTML = `
-                    <h2>ACCESO PERMITIDO</h2>
+                    <h2>✅ ACCESO PERMITIDO</h2>
                     <p><strong>Cliente:</strong> ${res.cliente}</p>
                     <p><strong>Asiento:</strong> ${res.asiento}</p>`;
             } else {
                 card.className = 'card-resultado denegado';
                 card.innerHTML = `
-                    <h2>ACCESO DENEGADO</h2>
-                    <p><strong>Razón:</strong> ${res.razon || 'Ticket no válido'}</p>
-                    <p><small>${res.mensaje || ''}</small></p>`;
+                    <h2>⛔ ACCESO DENEGADO</h2>
+                    <p>${res.mensaje || 'Entrada no válida'}</p>
+                    ${res.cliente ? `<p><small>Titular: ${res.cliente} (${res.asiento})</small></p>` : ''}`;
             }
         }
 
