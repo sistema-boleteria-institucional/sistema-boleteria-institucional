@@ -125,10 +125,13 @@
                     <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
                     <p>Monto Final: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
 
-                    <div class="form-group" style="display:flex; gap:5px;">
-                        <input type="text" id="txtCupon" placeholder="Código Cupón">
-                        <button class="btn-primary" style="width: auto;" onclick="aplicarCupon()">Aplicar</button>
-                    </div>
+                    <!-- CÓDIGO NUEVO -->
+                <div class="form-group">
+                    <label style="font-size: 0.9em; color: #94a3b8;">Aplicar Cupón de Descuento:</label>
+                    <select id="selCuponVenta" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="aplicarCuponSeleccionado()">
+                        <option value="0">Sin cupón de descuento</option>
+                    </select>
+                </div>
                     
                     <hr style="border-color: #334155; margin: 15px 0;">
 
@@ -229,14 +232,20 @@
         </div>
 
         <!-- PESTAÑA CUPONES -->
-        <div id="tabCupones" class="tab-content">
-            <h3>Gestión de Cupones de Descuento</h3>
-            <div style="max-width: 400px;">
-                <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="DESCUENTO10"></div>
-                <div class="form-group"><label>Porcentaje (%):</label><input type="number" id="cupPorcentaje" placeholder="10"></div>
-                <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
+           <div id="tabCupones" class="tab-content">
+        <h3>Gestión de Cupones de Descuento</h3>
+        <div style="max-width: 400px;">
+            <div class="form-group">
+                <label>Seleccionar Evento:</label>
+                <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;">
+                    <option value="">-- Seleccionar Evento --</option>
+                </select>
             </div>
+            <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO2026"></div>
+            <div class="form-group"><label>Porcentaje de Descuento (%):</label><input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100"></div>
+            <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
         </div>
+    </div>
 
         <!-- PESTAÑA USUARIOS -->
         <div id="tabCrearUsuario" class="tab-content">
@@ -352,35 +361,38 @@
         }
 
         async function cargarEventosEnSelect() {
-            try {
-                const res = await fetch('/api/eventos');
-                if(!res.ok) return;
-                const eventos = await res.json();
-                
-                const selVenta = document.getElementById('selEventoVenta');
-                const selInf = document.getElementById('selEventoInforme');
-                
-                selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-                selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+    try {
+        const res = await fetch('/api/eventos');
+        if(!res.ok) return;
+        const eventos = await res.json();
+        
+        const selVenta = document.getElementById('selEventoVenta');
+        const selInf = document.getElementById('selEventoInforme');
+        const selCup = document.getElementById('cupEventoId'); // <--- NUEVO
+        
+        selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+        selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+        if (selCup) selCup.innerHTML = '<option value="">-- Seleccionar Evento --</option>'; // <--- NUEVO
 
-                if(Array.isArray(eventos)){
-                    eventos.forEach(ev => {
-                        const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
-                        selVenta.innerHTML += opt;
-                        selInf.innerHTML += opt;
-                    });
-                }
-            } catch (err) {
-                console.error("Error al obtener eventos:", err);
-            }
+        if(Array.isArray(eventos)){
+            eventos.forEach(ev => {
+                const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
+                selVenta.innerHTML += opt;
+                selInf.innerHTML += opt;
+                if (selCup) selCup.innerHTML += opt; // <--- NUEVO
+            });
         }
-
+    } catch (err) {
+        console.error("Error al obtener eventos:", err);
+    }
+}
         async function cargarMapaAsientos() {
             const eventoId = document.getElementById('selEventoVenta').value;
             const gridIzq = document.getElementById('gridPlateaIzq');
             const gridDer = document.getElementById('gridPlateaDer');
             const gridG1 = document.getElementById('gridGrada1');
             const gridG2 = document.getElementById('gridGrada2');
+            const eventoId = document.getElementById('selEventoVenta').value;
 
             gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
             asientoSeleccionado = null;
@@ -446,27 +458,7 @@
             document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
         }
 
-        async function aplicarCupon() {
-            const codigo = document.getElementById('txtCupon').value.trim();
-            if(!codigo) return;
-            try {
-                const res = await fetch('/api/cupones/validar', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ codigo })
-                });
-                const data = await res.json();
-                if(data.valido) {
-                    descuentoAplicado = data.porcentaje;
-                    alert(`Cupón aplicado: ${data.porcentaje}% de descuento`);
-                    if(asientoSeleccionado) seleccionarAsiento(document.querySelector('.asiento.seleccionado'), asientoSeleccionado);
-                } else {
-                    alert(data.mensaje || 'Cupón no válido');
-                }
-            } catch(e) {
-                alert('No se pudo validar el cupón.');
-            }
-        }
+       
 
         async function procesarVenta() {
             if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
@@ -504,7 +496,69 @@
                 alert('Error al registrar la venta.');
             }
         }
+// Obtiene los cupones del evento y llena el <select> del vendedor
+async function cargarCuponesEnSelectVenta(eventoId) {
+    const select = document.getElementById('selCuponVenta');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="0">Sin cupón de descuento</option>';
+    descuentoAplicado = 0;
 
+    if (!eventoId) return;
+
+    try {
+        const res = await fetch(`/api/cupones/evento/${eventoId}`);
+        const cupones = await res.json();
+
+        if (Array.isArray(cupones)) {
+            cupones.forEach(c => {
+                select.innerHTML += `<option value="${c.porcentaje}">${c.codigo} (${c.porcentaje}% OFF)</option>`;
+            });
+        }
+    } catch (e) {
+        console.error("Error al cargar cupones:", e);
+    }
+}
+
+// Recalcula el precio total al cambiar de opción en el <select> de cupones
+function aplicarCuponSeleccionado() {
+    const porcentaje = parseFloat(document.getElementById('selCuponVenta').value) || 0;
+    descuentoAplicado = porcentaje;
+
+    if (asientoSeleccionado) {
+        const precioCalculado = asientoSeleccionado.precio * (1 - descuentoAplicado / 100);
+        document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
+    }
+}
+
+// Guarda un nuevo cupón asociándolo al evento elegido por el Admin
+async function crearCupon() {
+    const body = {
+        evento_id: document.getElementById('cupEventoId').value,
+        codigo: document.getElementById('cupCodigo').value.trim(),
+        porcentaje: parseFloat(document.getElementById('cupPorcentaje').value)
+    };
+
+    if (!body.evento_id || !body.codigo || isNaN(body.porcentaje)) {
+        return alert('Selecciona un evento e ingresa un código y porcentaje válido.');
+    }
+
+    try {
+        const res = await fetch('/api/cupones/crear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        alert(data.mensaje);
+        if (data.exito) {
+            document.getElementById('cupCodigo').value = '';
+            document.getElementById('cupPorcentaje').value = '';
+        }
+    } catch (e) {
+        alert('Error al guardar cupón.');
+    }
+}
         async function crearEvento() {
             const dispGenVal = parseInt(document.getElementById('evDispGen').value) || 0;
             const dispGradaVal = parseInt(document.getElementById('evDispGrada').value) || 0;
@@ -547,26 +601,7 @@
             }
         }
 
-        async function crearCupon() {
-            const body = {
-                codigo: document.getElementById('cupCodigo').value.trim(),
-                porcentaje: parseFloat(document.getElementById('cupPorcentaje').value)
-            };
-            if(!body.codigo || isNaN(body.porcentaje)) return alert('Ingresa un código y porcentaje válido.');
-
-            try {
-                const res = await fetch('/api/cupones/crear', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-            } catch(e) {
-                alert('Error al guardar cupón.');
-            }
-        }
-
+        
         async function guardarNuevoUsuario() {
             const body = {
                 usuario: document.getElementById('usrNombre').value.trim(),
