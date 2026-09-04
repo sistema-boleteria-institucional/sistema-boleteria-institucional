@@ -775,6 +775,116 @@ app.delete('/api/super/usuarios/:id', async (req, res) => {
     res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
 });
 
+// ==========================================
+// ENDPOINT PARA CONTROL DE ACCESO (PUERTA)
+// ==========================================
+app.post('/api/puerta/validar', async (req, res) => {
+    try {
+        const { id, sig } = req.body;
+
+        if (!id) {
+            return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
+        }
+
+        let ventaId = id;
+        let sigRecibida = sig || null;
+
+        // Si el QR contiene un objeto JSON stringificado
+        if (typeof id === 'string' && id.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(id);
+                ventaId = parsed.ticket_id || parsed.id || id;
+                sigRecibida = parsed.sig || sigRecibida;
+            } catch (e) {
+                // Si no es JSON se procesa tal cual
+            }
+        }
+
+        if (db) {
+            // 1. Buscar la entrada en la base de datos por ID o Código de Asiento
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre 
+                      FROM ventas v 
+                      LEFT JOIN eventos e ON v.evento_id = e.id 
+                      WHERE v.id = ? OR v.codigoAsiento = ?`,
+                args: [ventaId, ventaId]
+            });
+
+            if (vRes.rows.length === 0) {
+                return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+            }
+
+            const venta = vRes.rows[0];
+
+            // 2. Validar firma de seguridad (HMAC) si se incluye en el QR
+            if (sigRecibida && typeof generarFirma === 'function') {
+                const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
+                if (sigRecibida !== firmaEsperada) {
+                    return res.json({ exito: false, mensaje: '¡ALERTA! Entrada falsificada o firma inválida.' });
+                }
+            }
+
+            // 3. Verificar si el cliente ya ingresó
+            const asientoRes = await db.execute({
+                sql: "SELECT asistio FROM asientos WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            if (asientoRes.rows.length > 0 && asientoRes.rows[0].asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                });
+            }
+
+            // 4. Marcar como ingresado en la base de datos
+            await db.execute({
+                sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+
+        } else {
+            // Manejo en Memoria (Fallback)
+            const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
+
+            if (!venta) {
+                return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+            }
+
+            const lista = asientosMemoria[venta.evento_id] || [];
+            const asiento = lista.find(a => a.id === venta.asiento_id);
+
+            if (asiento && asiento.asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                });
+            }
+
+            if (asiento) asiento.asistio = 1;
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+        }
+
+    } catch (error) {
+        console.error('Error procesando escaneo en puerta:', error);
+        return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
+    }
+});
+
+
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
