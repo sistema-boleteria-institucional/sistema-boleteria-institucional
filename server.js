@@ -262,28 +262,44 @@ app.get('/api/eventos', async (req, res) => {
     res.json(eventosMemoria);
 });
 
-app.post('/api/eventos/crear', async (req, res) => {
-    const nuevoEvento = req.body;
-    if (db) {
-        try {
-            const check = await db.execute({ sql: "SELECT id FROM eventos WHERE id = ?", args: [nuevoEvento.id] });
-            if (check.rows.length > 0) return res.json({ exito: false, mensaje: 'El ID del evento ya existe' });
+// Ruta en tu archivo principal del servidor (ej: server.js)
+app.post('/api/cupones/crear', async (req, res) => {
+    try {
+        const { evento_id, codigo, porcentaje, monto_fijo } = req.body;
 
-            await db.execute({
-                sql: "INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                args: [nuevoEvento.id, nuevoEvento.nombre, nuevoEvento.fecha, nuevoEvento.hora, nuevoEvento.precioGeneral, nuevoEvento.dispGen, nuevoEvento.precioGradas, nuevoEvento.dispGrada]
+        const pct = parseFloat(porcentaje) || 0;
+        const monto = parseFloat(monto_fijo) || 0;
+
+        // 1. Validar que no se envíen ambos tipos de descuento a la vez
+        if (pct > 0 && monto > 0) {
+            return res.status(400).json({ 
+                exito: false, 
+                mensaje: 'No puedes aplicar Porcentaje y Monto Fijo simultáneamente.' 
             });
-            await generarAsientosParaEvento(nuevoEvento);
-            return res.json({ exito: true, mensaje: 'Evento guardado en Turso' });
-        } catch (e) {
-            console.error(e);
-            return res.status(500).json({ exito: false, mensaje: 'Error al crear evento' });
         }
-    } else {
-        if (eventosMemoria.some(e => e.id === nuevoEvento.id)) return res.json({ exito: false, mensaje: 'El ID ya existe' });
-        eventosMemoria.push(nuevoEvento);
-        await generarAsientosParaEvento(nuevoEvento);
-        res.json({ exito: true, mensaje: 'Evento creado (Memoria)' });
+
+        // 2. Validar que al crear un cupón nuevo sí lleve un valor válido
+        if (pct === 0 && monto === 0) {
+            return res.status(400).json({ 
+                exito: false, 
+                mensaje: 'El cupón debe tener un Porcentaje o un Monto Fijo mayor a 0.' 
+            });
+        }
+
+        // 3. Inserción en Turso
+        await tursoClient.execute({
+            sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo) VALUES (?, ?, ?, ?)',
+            args: [evento_id, codigo.toUpperCase(), pct, monto]
+        });
+
+        res.json({ exito: true, mensaje: 'Cupón creado con éxito' });
+
+    } catch (error) {
+        console.error("Error en Turso:", error);
+        res.status(500).json({ 
+            exito: false, 
+            mensaje: 'Error al guardar el cupón en Turso: ' + error.message 
+        });
     }
 });
 
