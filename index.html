@@ -1027,6 +1027,30 @@
                 alert('❌ Error de conexión al intentar enviar el correo.');
             }
         }
+        // Función para verificar y mostrar opciones según el tipo de usuario
+function gestionarVisibilidadModulos() {
+    const usuarioSesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+    const btnPuerta = document.getElementById('btnIrPuerta');
+
+    if (usuarioSesion && usuarioSesion.usuario) {
+        // Roles habilitados para escanear
+        const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta'];
+
+        if (rolesPuerta.includes(usuarioSesion.tipo)) {
+            btnPuerta.style.display = 'inline-block';
+        }
+    } else {
+        btnPuerta.style.display = 'none';
+    }
+}
+
+// Redirección a la pantalla de puerta
+function irAPuerta() {
+    window.location.href = 'puerta.html';
+}
+
+// Ejecutar al cargar la página o al completar el login exitoso
+document.addEventListener('DOMContentLoaded', gestionarVisibilidadModulos);
     </script>
 </body>
 </html>
