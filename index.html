@@ -5,6 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Boletería Institucional</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Estilos para el Menú Desplegable */
+        .navbar-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #1e293b;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #334155;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropbtn {
+            background-color: #0284c7;
+            color: white;
+            padding: 10px 18px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .dropbtn:hover {
+            background-color: #0369a1;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background-color: #0f172a;
+            min-width: 220px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.6);
+            border: 1px solid #334155;
+            border-radius: 6px;
+            z-index: 50;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .dropdown-content button, .dropdown-content a {
+            color: #f8fafc;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #1e293b;
+            box-sizing: border-box;
+        }
+
+        .dropdown-content button:hover, .dropdown-content a:hover {
+            background-color: #334155;
+            color: #38bdf8;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .item-puerta-btn {
+            background-color: #0d9488 !important;
+            font-weight: bold;
+        }
+
+        .item-puerta-btn:hover {
+            background-color: #0f766e !important;
+            color: #fff !important;
+        }
+    </style>
 </head>
 <body>
 
@@ -66,13 +152,22 @@
             <div class="operario-info">Usuario: <span id="lblOperario">-</span> (<span id="lblTipo"></span>)</div>
         </header>
 
-        <div class="tabs">
-            <button class="tab-btn active" id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">Venta</button>
-            <button class="tab-btn" id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">Informes</button>
-            <button class="tab-btn" id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">Configurar Eventos</button>
-            <button class="tab-btn" id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">Cupones</button>
-            <button class="tab-btn" id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">Usuarios</button>
-            <button class="tab-btn" id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">Superusuario</button>
+        <!-- MENÚ NAVEGACIÓN DESPLEGABLE -->
+        <div class="navbar-container">
+            <div class="dropdown">
+                <button class="dropbtn">☰ Menú Módulos ▾</button>
+                <div class="dropdown-content">
+                    <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
+                    <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
+                    <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
+                    <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
+                    <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
+                    <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
+                    <button id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">👑 Superusuario</button>
+                </div>
+            </div>
+            
+            <button class="btn-primary" style="width: auto; background: #dc2626; padding: 8px 15px;" onclick="cerrarSesion()">Cerrar Sesión</button>
         </div>
 
         <!-- PESTAÑA VENTA -->
@@ -276,6 +371,7 @@
                     <select id="usrTipo">
                         <option value="vendedor">Vendedor</option>
                         <option value="adm">Administrador</option>
+                        <option value="puerta">Puerta / Escáner</option>
                     </select>
                 </div>
                 <button class="btn-primary" onclick="guardarNuevoUsuario()">Registrar Usuario</button>
@@ -335,7 +431,16 @@
                 const data = await res.json();
 
                 if (res.ok && (data.exito || data.usuario)) {
-                    establecerSesion(data.usuario || usuario, data.tipo || 'vendedor');
+                    const tipoUsr = data.tipo || 'vendedor';
+                    const nombreUsr = data.usuario || usuario;
+                    
+                    // Guardar en sessionStorage
+                    sessionStorage.setItem('usuarioLogueado', JSON.stringify({
+                        usuario: nombreUsr,
+                        tipo: tipoUsr
+                    }));
+
+                    establecerSesion(nombreUsr, tipoUsr);
                 } else {
                     errDiv.innerText = data.mensaje || 'Credenciales incorrectas.';
                 }
@@ -348,6 +453,7 @@
 
         function ingresoModoEmergencia() {
             const usr = document.getElementById('loginUsuario').value.trim() || 'admin';
+            sessionStorage.setItem('usuarioLogueado', JSON.stringify({ usuario: usr, tipo: 'super' }));
             establecerSesion(usr, 'super');
         }
 
@@ -360,22 +466,45 @@
 
             const rol = tipo.toLowerCase();
             if (rol === 'adm' || rol === 'super' || rol === 'admin') {
-                document.getElementById('btnTabCrear').style.display = 'inline-block';
-                document.getElementById('btnTabUsuarios').style.display = 'inline-block';
-                document.getElementById('btnTabCupones').style.display = 'inline-block';
+                document.getElementById('btnTabCrear').style.display = 'block';
+                document.getElementById('btnTabUsuarios').style.display = 'block';
+                document.getElementById('btnTabCupones').style.display = 'block';
             }
             if (rol === 'super' || rol === 'admin') {
-                document.getElementById('btnTabSuper').style.display = 'inline-block';
+                document.getElementById('btnTabSuper').style.display = 'block';
                 cargarUsuariosSuper();
             }
+
+            gestionarVisibilidadModulos();
             cargarEventosEnSelect();
+        }
+
+        function cerrarSesion() {
+            sessionStorage.removeItem('usuarioLogueado');
+            window.location.reload();
+        }
+
+        function gestionarVisibilidadModulos() {
+            const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+            const btnPuerta = document.getElementById('btnIrPuerta');
+
+            if (sesion && sesion.usuario) {
+                const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta', 'adm'];
+                if (rolesPuerta.includes(sesion.tipo.toLowerCase())) {
+                    btnPuerta.style.display = 'block';
+                }
+            } else {
+                btnPuerta.style.display = 'none';
+            }
+        }
+
+        function irAPuerta() {
+            window.location.href = 'puerta.html';
         }
 
         function mostrarTab(tabId, btn) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            if(btn) btn.classList.add('active');
         }
 
         async function cargarEventosEnSelect() {
@@ -412,7 +541,6 @@
             const gridG1 = document.getElementById('gridGrada1');
             const gridG2 = document.getElementById('gridGrada2');
 
-            // Carga los cupones del evento elegido en el select de Venta
             cargarCuponesEnSelectVenta(eventoId);
 
             gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
@@ -872,10 +1000,7 @@
             if (!confirm('¿Estás seguro de que deseas cancelar esta compra? El asiento volverá a estar disponible.')) return;
 
             try {
-                const res = await fetch(`/api/ventas/cancelar/${ventaId}`, {
-                    method: 'DELETE'
-                });
-                
+                const res = await fetch(`/api/ventas/cancelar/${ventaId}`, { method: 'DELETE' });
                 const data = await res.json();
                 alert(data.mensaje || 'Venta cancelada correctamente.');
 
@@ -894,14 +1019,12 @@
 
             document.getElementById('editVentaId').value = v.id;
             document.getElementById('editEventoId').value = v.eventoId;
-
             document.getElementById('editNombre').value = v.nombre;
             document.getElementById('editApellido').value = v.apellido;
             document.getElementById('editContacto').value = v.contacto;
             document.getElementById('editEmail').value = v.email;
 
             await cargarAsientosDisponiblesSelect(v.eventoId);
-
             document.getElementById('modalEditarVenta').style.display = 'block';
         }
 
@@ -1027,30 +1150,14 @@
                 alert('❌ Error de conexión al intentar enviar el correo.');
             }
         }
-        // Función para verificar y mostrar opciones según el tipo de usuario
-function gestionarVisibilidadModulos() {
-    const usuarioSesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-    const btnPuerta = document.getElementById('btnIrPuerta');
 
-    if (usuarioSesion && usuarioSesion.usuario) {
-        // Roles habilitados para escanear
-        const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta'];
-
-        if (rolesPuerta.includes(usuarioSesion.tipo)) {
-            btnPuerta.style.display = 'inline-block';
-        }
-    } else {
-        btnPuerta.style.display = 'none';
-    }
-}
-
-// Redirección a la pantalla de puerta
-function irAPuerta() {
-    window.location.href = 'puerta.html';
-}
-
-// Ejecutar al cargar la página o al completar el login exitoso
-document.addEventListener('DOMContentLoaded', gestionarVisibilidadModulos);
+        // Auto-verificación de sesión al refrescar
+        document.addEventListener('DOMContentLoaded', () => {
+            const sesionExistente = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+            if (sesionExistente && sesionExistente.usuario) {
+                establecerSesion(sesionExistente.usuario, sesionExistente.tipo);
+            }
+        });
     </script>
 </body>
 </html>
