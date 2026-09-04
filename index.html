@@ -128,7 +128,7 @@
                     <div class="form-group">
                         <label style="font-size: 0.9em; color: #94a3b8;">Aplicar Cupón de Descuento:</label>
                         <select id="selCuponVenta" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="aplicarCuponSeleccionado()">
-                            <option value="0">Sin cupón de descuento</option>
+                            <option value="-1">Sin cupón de descuento</option>
                         </select>
                     </div>
                     
@@ -241,7 +241,25 @@
                     </select>
                 </div>
                 <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO2026"></div>
-                <div class="form-group"><label>Porcentaje de Descuento (%):</label><input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100"></div>
+                
+                <div class="form-group">
+                    <label>Tipo de Descuento:</label>
+                    <select id="cupTipo" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cambiarTipoCupon()">
+                        <option value="porcentaje">Porcentaje (%)</option>
+                        <option value="monto">Monto Fijo ($)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="grpPorcentaje">
+                    <label>Porcentaje de Descuento (%):</label>
+                    <input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100">
+                </div>
+
+                <div class="form-group" id="grpMonto" style="display:none;">
+                    <label>Monto de Descuento ($):</label>
+                    <input type="number" id="cupMontoFijo" placeholder="2000" min="1">
+                </div>
+
                 <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
             </div>
         </div>
@@ -293,7 +311,8 @@
     <script>
         let usuarioSesion = null;
         let asientoSeleccionado = null;
-        let descuentoAplicado = 0;
+        let descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
+        let cuponesEventoActual = [];
 
         async function iniciarSesionBackend() {
             const usuario = document.getElementById('loginUsuario').value.trim();
@@ -445,6 +464,16 @@
             }
         }
 
+        function calcularMontoFinal(precioBase) {
+            let precioFinal = precioBase;
+            if (descuentoAplicado.porcentaje > 0) {
+                precioFinal -= precioBase * (descuentoAplicado.porcentaje / 100);
+            } else if (descuentoAplicado.monto_fijo > 0) {
+                precioFinal = Math.max(0, precioBase - descuentoAplicado.monto_fijo);
+            }
+            return precioFinal;
+        }
+
         function seleccionarAsiento(elem, asientoData) {
             document.querySelectorAll('.asiento.seleccionado').forEach(e => {
                 e.classList.remove('seleccionado');
@@ -456,12 +485,14 @@
 
             asientoSeleccionado = asientoData;
             document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
-            const precioCalculado = asientoData.precio * (1 - descuentoAplicado / 100);
+            const precioCalculado = calcularMontoFinal(asientoData.precio);
             document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
         }
 
         async function procesarVenta() {
             if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
+            const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
+
             const body = {
                 evento_id: document.getElementById('selEventoVenta').value,
                 asiento_id: asientoSeleccionado.id,
@@ -470,7 +501,7 @@
                 contacto: document.getElementById('txtContacto').value.trim(),
                 email: document.getElementById('txtEmail').value.trim(),
                 metodo_pago: document.getElementById('selMetodoPago').value,
-                monto_total: asientoSeleccionado.precio * (1 - descuentoAplicado / 100)
+                monto_total: montoCalculado
             };
 
             if(!body.nombre || !body.apellido || !body.contacto) return alert('Por favor completa todos los campos obligatorios (*)');
@@ -484,8 +515,8 @@
                 const data = await res.json();
                 alert(data.mensaje || 'Venta procesada');
                 if(data.exito) {
-                    descuentoAplicado = 0;
-                    document.getElementById('selCuponVenta').value = "0";
+                    descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
+                    document.getElementById('selCuponVenta').value = "-1";
                     document.getElementById('txtNombre').value = '';
                     document.getElementById('txtApellido').value = '';
                     document.getElementById('txtContacto').value = '';
@@ -497,48 +528,69 @@
             }
         }
 
+        function cambiarTipoCupon() {
+            const tipo = document.getElementById('cupTipo').value;
+            if (tipo === 'porcentaje') {
+                document.getElementById('grpPorcentaje').style.display = 'block';
+                document.getElementById('grpMonto').style.display = 'none';
+                document.getElementById('cupMontoFijo').value = '';
+            } else {
+                document.getElementById('grpPorcentaje').style.display = 'none';
+                document.getElementById('grpMonto').style.display = 'block';
+                document.getElementById('cupPorcentaje').value = '';
+            }
+        }
+
         async function cargarCuponesEnSelectVenta(eventoId) {
             const select = document.getElementById('selCuponVenta');
             if (!select) return;
             
-            select.innerHTML = '<option value="0">Sin cupón de descuento</option>';
-            descuentoAplicado = 0;
+            select.innerHTML = '<option value="-1">Sin cupón de descuento</option>';
+            descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
 
             if (!eventoId) return;
 
             try {
                 const res = await fetch(`/api/cupones/evento/${eventoId}`);
                 const cupones = await res.json();
+                cuponesEventoActual = Array.isArray(cupones) ? cupones : [];
 
-                if (Array.isArray(cupones)) {
-                    cupones.forEach(c => {
-                        select.innerHTML += `<option value="${c.porcentaje}">${c.codigo} (${c.porcentaje}% OFF)</option>`;
-                    });
-                }
+                cuponesEventoActual.forEach((c, index) => {
+                    const labelDesc = c.porcentaje > 0 ? `${c.porcentaje}% OFF` : `$${c.monto_fijo} OFF`;
+                    select.innerHTML += `<option value="${index}">${c.codigo} (${labelDesc})</option>`;
+                });
             } catch (e) {
                 console.error("Error al cargar cupones:", e);
             }
         }
 
         function aplicarCuponSeleccionado() {
-            const porcentaje = parseFloat(document.getElementById('selCuponVenta').value) || 0;
-            descuentoAplicado = porcentaje;
+            const index = parseInt(document.getElementById('selCuponVenta').value);
+
+            if (index >= 0 && cuponesEventoActual[index]) {
+                const cup = cuponesEventoActual[index];
+                descuentoAplicado = { porcentaje: cup.porcentaje || 0, monto_fijo: cup.monto_fijo || 0 };
+            } else {
+                descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
+            }
 
             if (asientoSeleccionado) {
-                const precioCalculado = asientoSeleccionado.precio * (1 - descuentoAplicado / 100);
+                const precioCalculado = calcularMontoFinal(asientoSeleccionado.precio);
                 document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
             }
         }
 
         async function crearCupon() {
+            const tipo = document.getElementById('cupTipo').value;
             const body = {
                 evento_id: document.getElementById('cupEventoId').value,
                 codigo: document.getElementById('cupCodigo').value.trim(),
-                porcentaje: parseFloat(document.getElementById('cupPorcentaje').value)
+                porcentaje: tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0,
+                monto_fijo: tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0
             };
 
-            if (!body.evento_id || !body.codigo || isNaN(body.porcentaje)) {
-                return alert('Selecciona un evento e ingresa un código y porcentaje válido.');
+            if (!body.evento_id || !body.codigo) {
+                return alert('Selecciona un evento e ingresa un código.');
             }
 
             try {
@@ -552,6 +604,7 @@
                 if (data.exito) {
                     document.getElementById('cupCodigo').value = '';
                     document.getElementById('cupPorcentaje').value = '';
+                    document.getElementById('cupMontoFijo').value = '';
                 }
             } catch (e) {
                 alert('Error al guardar cupón.');
