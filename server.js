@@ -883,6 +883,19 @@ app.post('/api/puerta/validar', async (req, res) => {
         return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
     }
 });
+// ==========================================
+// RUTA PROTEGIDA / CONTROL DE ACCESO
+// ==========================================
+app.get('/puerta.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'puerta.html'));
+});
+
+// ==========================================
+// ESTA LÍNEA SIEMPRE DEBE IR AL FINAL DE TODO
+// ==========================================
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 
 app.get('*', (req, res) => {
@@ -895,3 +908,4 @@ app.listen(PORT, () => {
     console.log(`Servidor iniciado en http://localhost:${PORT}`);
     console.log(`===========================================`);
 });
+
