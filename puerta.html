@@ -119,162 +119,157 @@
     </div>
 
     <script>
-        let html5QrcodeScanner = null;
-        let escaneando = false;
+    let html5QrCode = null;
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-            if (sesion.usuario) {
-                document.getElementById('lblOperario').innerText = sesion.usuario;
-            }
-
-            iniciarEscanerCamara();
-
-            // Listener optimizado para cámara nativa / galería
-const fileInput = document.getElementById('qr-file-input');
-fileInput.addEventListener('change', async e => {
-    if (e.target.files.length === 0) return;
-    const imageFile = e.target.files[0];
-
-    // 1. Pausar la cámara en vivo
-    if (html5QrCodeScanner) {
-        try { await html5QrCodeScanner.clear(); } catch(err) {}
-    }
-
-    try {
-        // 2. Normalizar la imagen mediante un Canvas para evitar la deformación vertical
-        const blobProcesado = await redimensionarImagen(imageFile, 800);
-        const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
-
-        // 3. Procesar el QR con la imagen ya corregida
-        const html5QrCode = new Html5Qrcode("qr-reader");
-        const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
-        
-        await html5QrCode.clear();
-        procesarCodigoQR(qrCodeMessage);
-
-    } catch (err) {
-        console.error("Error en lectura de foto:", err);
-        mostrarResultado(false, "No se pudo detectar un código QR claro. Intenta enfocar más cerca.");
-    } finally {
-        // 4. Reactivar siempre la cámara en vivo
-        iniciarEscanerCamara();
-    }
-});
-
-// Función para corregir proporciones y resolución de la foto tomada
-function redimensionarImagen(file, maxDimension) {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-
-            if (width > height) {
-                if (width > maxDimension) {
-                    height *= maxDimension / width;
-                    width = maxDimension;
-                }
-            } else {
-                if (height > maxDimension) {
-                    width *= maxDimension / height;
-                    height = maxDimension;
-                }
-            }
-
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('canvas') || canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-
-            canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.92);
-        };
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
-    });
-}
- 
-        });
-
-        function iniciarEscanerCamara() {
-            html5QrcodeScanner = new Html5QrcodeScanner(
-                "qr-reader", 
-                { 
-                    fps: 15, 
-                    qrbox: { width: 280, height: 280 },
-                    aspectRatio: 1.0
-                },
-                /* verbose= */ false
-            );
-            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    document.addEventListener('DOMContentLoaded', () => {
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+        if (sesion.usuario) {
+            document.getElementById('lblOperario').innerText = sesion.usuario;
         }
 
-        function onScanSuccess(decodedText, decodedResult) {
-            if (escaneando) return;
-            escaneando = true;
+        // Inicializar el lector sobre el div
+        html5QrCode = new Html5Qrcode("qr-reader");
+        iniciarCamaraEnVivo();
 
-            procesarCodigoQR(decodedText);
-
-            // Reanudar la lectura tras 3 segundos
-            setTimeout(() => { escaneando = false; }, 3000);
-        }
-
-        function onScanFailure(error) {
-            // Ignorar errores continuos de búsqueda de frame
-        }
-
-        async function procesarCodigoQR(textoQr) {
-            console.log("QR Detectado:", textoQr);
+        // Listener para la cámara nativa / foto
+        const fileInput = document.getElementById('qr-file-input');
+        fileInput.addEventListener('change', async e => {
+            if (e.target.files.length === 0) return;
+            const imageFile = e.target.files[0];
 
             try {
-                // Si el QR es una URL completa (ej: .../entrada.html?id=123&sig=abc)
-                let url;
-                if (textoQr.startsWith('http://') || textoQr.startsWith('https://')) {
-                    url = new URL(textoQr);
-                } else {
-                    // Si el QR solo trae el ID o JSON
-                    url = new URL(`/api/puerta/validar?id=${encodeURIComponent(textoQr)}`, window.location.origin);
+                // Parar la cámara en vivo antes de procesar el archivo
+                if (html5QrCode.isScanning) {
+                    await html5QrCode.stop();
                 }
 
-                // Redirigir la petición al endpoint de validación del backend
-                const idEntrada = url.searchParams.get('id') || textoQr;
-                const sig = url.searchParams.get('sig') || '';
+                // Redimensionar para evitar distorsiones
+                const blobProcesado = await redimensionarImagen(imageFile, 800);
+                const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
 
-                const res = await fetch('/api/puerta/validar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: idEntrada, sig: sig })
-                });
+                // Escanear la foto directamente
+                const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
+                procesarCodigoQR(qrCodeMessage);
 
-                const data = await res.json();
-
-                if (res.ok && data.exito) {
-                    mostrarResultado(true, `✅ ACCESO PERMITIDO<br>Asiento: <strong>${data.asiento || ''}</strong><br>Cliente: ${data.cliente || ''}`);
-                } else {
-                    mostrarResultado(false, `❌ ACCESO DENEGADO<br>${data.mensaje || 'Código inválido o ya utilizado'}`);
-                }
             } catch (err) {
-                mostrarResultado(false, "Error de comunicación con el servidor.");
+                console.error("Error al leer la foto:", err);
+                mostrarResultado(false, "No se pudo detectar un código QR claro en la imagen.");
+            } finally {
+                // Reanudar cámara en vivo tras 3 segundos
+                setTimeout(() => { iniciarCamaraEnVivo(); }, 3000);
             }
-        }
+        });
+    });
 
-        function validarManual() {
-            const codigo = document.getElementById('txtCodigoManual').value.trim();
-            if (codigo) procesarCodigoQR(codigo);
+    async function iniciarCamaraEnVivo() {
+        try {
+            if (html5QrCode && html5QrCode.isScanning) return;
+            
+            await html5QrCode.start(
+                { facingMode: "environment" }, 
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                (decodedText) => {
+                    // Al detectar con éxito en vivo
+                    html5QrCode.pause();
+                    procesarCodigoQR(decodedText);
+                    setTimeout(() => { 
+                        try { html5QrCode.resume(); } catch(e){} 
+                    }, 3000);
+                },
+                (errorMessage) => {
+                    // Búsqueda silenciosa frame a frame
+                }
+            );
+        } catch (err) {
+            console.log("Cámara en vivo no disponible o sin permisos.");
         }
+    }
 
-        function mostrarResultado(exito, mensaje) {
-            const box = document.getElementById('resBox');
-            box.style.display = 'block';
-            box.className = 'resultado-box ' + (exito ? 'exito' : 'error');
-            box.innerHTML = mensaje;
-        }
+    async function procesarCodigoQR(textoQr) {
+        console.log("QR Detectado:", textoQr);
 
-        function volverAlSistema() {
-            window.location.href = 'index.html';
+        let idEntrada = textoQr;
+        let sig = '';
+
+        try {
+            if (textoQr.startsWith('http://') || textoQr.startsWith('https://')) {
+                const urlParsed = new URL(textoQr);
+                idEntrada = urlParsed.searchParams.get('id') || textoQr;
+                sig = urlParsed.searchParams.get('sig') || '';
+            } else if (textoQr.trim().startsWith('{')) {
+                const jsonParsed = JSON.parse(textoQr);
+                idEntrada = jsonParsed.ticket_id || jsonParsed.id || textoQr;
+                sig = jsonParsed.sig || '';
+            }
+
+            const res = await fetch('/api/puerta/validar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: idEntrada, sig: sig })
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.exito) {
+                mostrarResultado(true, `✅ ACCESO PERMITIDO<br>Asiento: <strong>${data.asiento || ''}</strong><br>Cliente: ${data.cliente || ''}`);
+            } else {
+                mostrarResultado(false, `❌ ACCESO DENEGADO<br>${data.mensaje || 'Código inválido o ya utilizado'}`);
+            }
+        } catch (err) {
+            mostrarResultado(false, "Error de comunicación o formato de QR no válido.");
         }
-    </script>
+    }
+
+    function redimensionarImagen(file, maxDimension) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxDimension) {
+                        height *= maxDimension / width;
+                        width = maxDimension;
+                    }
+                } else {
+                    if (height > maxDimension) {
+                        width *= maxDimension / height;
+                        height = maxDimension;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.92);
+            };
+            img.onerror = reject;
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    function validarManual() {
+        const codigo = document.getElementById('txtCodigoManual').value.trim();
+        if (codigo) procesarCodigoQR(codigo);
+    }
+
+    function mostrarResultado(exito, mensaje) {
+        const box = document.getElementById('resBox');
+        box.style.display = 'block';
+        box.className = 'resultado-box ' + (exito ? 'exito' : 'error');
+        box.innerHTML = mensaje;
+    }
+
+    function volverAlSistema() {
+        window.location.href = 'index.html';
+    }
+</script>
+
+                
 </body>
 </html>
 
