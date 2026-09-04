@@ -120,46 +120,48 @@
 
     <script>
     let html5QrCode = null;
-
     document.addEventListener('DOMContentLoaded', () => {
-        const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-        if (sesion.usuario) {
-            document.getElementById('lblOperario').innerText = sesion.usuario;
-        }
+    // 1. Validar que exista un usuario logueado en la sesión
+    const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+    
+    if (!sesion.usuario) {
+        alert('⚠️ Acceso no autorizado. Por favor inicia sesión primero.');
+        window.location.href = 'index.html';
+        return;
+    }
 
-        // Inicializar el lector sobre el div
-        html5QrCode = new Html5Qrcode("qr-reader");
-        iniciarCamaraEnVivo();
+    // 2. Mostrar el nombre del operador logueado
+    document.getElementById('lblOperario').innerText = sesion.usuario;
 
-        // Listener para la cámara nativa / foto
-        const fileInput = document.getElementById('qr-file-input');
-        fileInput.addEventListener('change', async e => {
-            if (e.target.files.length === 0) return;
-            const imageFile = e.target.files[0];
+    // 3. Inicializar lector de cámara y listeners
+    html5QrCode = new Html5Qrcode("qr-reader");
+    iniciarCamaraEnVivo();
 
-            try {
-                // Parar la cámara en vivo antes de procesar el archivo
-                if (html5QrCode.isScanning) {
-                    await html5QrCode.stop();
-                }
+    const fileInput = document.getElementById('qr-file-input');
+    fileInput.addEventListener('change', async e => {
+        if (e.target.files.length === 0) return;
+        const imageFile = e.target.files[0];
 
-                // Redimensionar para evitar distorsiones
-                const blobProcesado = await redimensionarImagen(imageFile, 800);
-                const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
-
-                // Escanear la foto directamente
-                const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
-                procesarCodigoQR(qrCodeMessage);
-
-            } catch (err) {
-                console.error("Error al leer la foto:", err);
-                mostrarResultado(false, "No se pudo detectar un código QR claro en la imagen.");
-            } finally {
-                // Reanudar cámara en vivo tras 3 segundos
-                setTimeout(() => { iniciarCamaraEnVivo(); }, 3000);
+        try {
+            if (html5QrCode.isScanning) {
+                await html5QrCode.stop();
             }
-        });
+
+            const blobProcesado = await redimensionarImagen(imageFile, 800);
+            const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
+
+            const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
+            procesarCodigoQR(qrCodeMessage);
+
+        } catch (err) {
+            console.error("Error al leer la foto:", err);
+            mostrarResultado(false, "No se pudo detectar un código QR claro en la imagen.");
+        } finally {
+            setTimeout(() => { iniciarCamaraEnVivo(); }, 3000);
+        }
     });
+});
+
 
     async function iniciarCamaraEnVivo() {
         try {
@@ -272,4 +274,5 @@
                 
 </body>
 </html>
+
 
