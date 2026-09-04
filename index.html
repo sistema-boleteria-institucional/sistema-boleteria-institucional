@@ -699,7 +699,7 @@
         }
 
         // =======================================================
-        // LÓGICA DE DETALLE DE VENTAS, EDICIÓN Y ENVÍO DE QR
+        // LÓGICA DE DETALLE DE VENTAS, EDICIÓN, ENVÍO Y CANCELACIÓN
         // =======================================================
         async function cargarTablaDetalleVentas(eventoId) {
             const tbody = document.getElementById('tablaDetalleVentas');
@@ -752,9 +752,13 @@
                                     onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}', '${sig}')">
                                     💬 WA
                                 </button>
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em;" 
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; margin-right: 4px;" 
                                     onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
                                     ✉️ Email
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;" 
+                                    onclick="cancelarVenta('${ventaId}', '${eventoId}')">
+                                    ❌ Cancelar
                                 </button>
                             </td>
                         </tr>
@@ -763,6 +767,27 @@
             } catch (err) {
                 console.error("Error al obtener detalle de ventas:", err);
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
+            }
+        }
+
+        async function cancelarVenta(ventaId, eventoId) {
+            if (!confirm('¿Estás seguro de que deseas cancelar esta compra? El asiento volverá a estar disponible.')) return;
+
+            try {
+                const res = await fetch(`/api/ventas/cancelar/${ventaId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await res.json();
+                alert(data.mensaje || 'Venta cancelada correctamente.');
+
+                if (res.ok || data.exito) {
+                    cargarDetalleInforme();
+                    if (typeof cargarMapaAsientos === 'function') cargarMapaAsientos();
+                }
+            } catch (err) {
+                console.error("Error al cancelar la venta:", err);
+                alert('Error de conexión al intentar cancelar la venta.');
             }
         }
 
@@ -882,28 +907,28 @@
             window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
         }
 
-       async function enviarEmailTicket(email, cliente, ventaId) {
-    if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
+        async function enviarEmailTicket(email, cliente, ventaId) {
+            if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
 
-    try {
-        const respuesta = await fetch('/api/entradas/enviar-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
-        });
+            try {
+                const respuesta = await fetch('/api/entradas/enviar-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+                });
 
-        const data = await respuesta.json();
+                const data = await respuesta.json();
 
-        if (respuesta.ok && data.exito) {
-            alert(`✅ ${data.mensaje}`);
-        } else {
-            alert(`⚠️ Error al enviar correo: ${data.mensaje || 'Respuesta no válida del servidor'}`);
+                if (respuesta.ok && data.exito) {
+                    alert(`✅ ${data.mensaje}`);
+                } else {
+                    alert(`⚠️ Error al enviar correo: ${data.mensaje || 'Respuesta no válida del servidor'}`);
+                }
+            } catch (err) {
+                console.error('Error enviando email:', err);
+                alert('❌ Error de conexión al intentar enviar el correo.');
+            }
         }
-    } catch (err) {
-        console.error('Error enviando email:', err);
-        alert('❌ Error de conexión al intentar enviar el correo.');
-    }
-}
     </script>
 </body>
 </html>
