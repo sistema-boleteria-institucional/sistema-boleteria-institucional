@@ -113,11 +113,13 @@ async function inicializarTablasDB() {
         `);
 
         await db.execute(`
-            CREATE TABLE IF NOT EXISTS cupones (
-                codigo TEXT PRIMARY KEY,
-                porcentaje REAL
-            );
-        `);
+    CREATE TABLE IF NOT EXISTS cupones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        evento_id TEXT,
+        codigo TEXT,
+        porcentaje REAL
+    );
+`);
 
         await db.execute(`
             CREATE TABLE IF NOT EXISTS asientos (
@@ -297,7 +299,27 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     res.json(asientosMemoria[id]);
 });
 
-// Obtener la lista completa de cupones para los desplegables
+// 1. Obtener cupones filtrados por un evento específico (Para la vista del Vendedor)
+app.get('/api/cupones/evento/:eventoId', async (req, res) => {
+    const { eventoId } = req.params;
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: "SELECT * FROM cupones WHERE evento_id = ?",
+                args: [eventoId]
+            });
+            return res.json(result.rows);
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al obtener cupones' });
+        }
+    } else {
+        const lista = cuponesMemoria.filter(c => c.evento_id === eventoId);
+        res.json(lista);
+    }
+});
+
+// 2. Obtener todos los cupones (Para listar en panel Admin si lo necesitas)
 app.get('/api/cupones', async (req, res) => {
     if (db) {
         try {
@@ -308,31 +330,28 @@ app.get('/api/cupones', async (req, res) => {
     res.json(cuponesMemoria);
 });
 
-app.post('/api/cupones/validar', async (req, res) => {
-    const { codigo } = req.body;
-    if (db) {
-        try {
-            const result = await db.execute({ sql: "SELECT * FROM cupones WHERE UPPER(codigo) = UPPER(?)", args: [codigo || ''] });
-            if (result.rows.length > 0) return res.json({ valido: true, porcentaje: result.rows[0].porcentaje });
-        } catch (e) { console.error(e); }
-    } else {
-        const cup = cuponesMemoria.find(c => c.codigo.toUpperCase() === (codigo || '').toUpperCase());
-        if (cup) return res.json({ valido: true, porcentaje: cup.porcentaje });
-    }
-    res.json({ valido: false, mensaje: 'Cupón no válido' });
-});
-
+// 3. Crear cupón asociado a un evento (Para Admin / Superusuario)
 app.post('/api/cupones/crear', async (req, res) => {
-    const { codigo, porcentaje } = req.body;
+    const { evento_id, codigo, porcentaje } = req.body;
+
+    if (!evento_id || !codigo || !porcentaje) {
+        return res.status(400).json({ exito: false, mensaje: 'El evento, código y porcentaje son obligatorios' });
+    }
+
     if (db) {
         try {
-            await db.execute({ sql: "INSERT INTO cupones (codigo, porcentaje) VALUES (?, ?)", args: [codigo, porcentaje] });
-            return res.json({ exito: true, mensaje: 'Cupón guardado' });
-        } catch (e) { return res.json({ exito: false, mensaje: 'Cupón existente o inválido' }); }
+            await db.execute({
+                sql: "INSERT INTO cupones (evento_id, codigo, porcentaje) VALUES (?, ?, ?)",
+                args: [evento_id, codigo.toUpperCase(), parseFloat(porcentaje)]
+            });
+            return res.json({ exito: true, mensaje: 'Cupón guardado exitosamente' });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al guardar el cupón en Turso' });
+        }
     } else {
-        if (cuponesMemoria.some(c => c.codigo.toUpperCase() === codigo.toUpperCase())) return res.json({ exito: false, mensaje: 'Cupón ya existe' });
-        cuponesMemoria.push({ codigo, porcentaje });
-        res.json({ exito: true, mensaje: 'Cupón creado (Memoria)' });
+        cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: parseFloat(porcentaje) });
+        res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
     }
 });
 
