@@ -7,23 +7,23 @@ const QRCode = require('qrcode');
 
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
+
 // ==========================================
 // CONFIGURACIÓN DE NODEMAILER (GMAIL)
 // ==========================================
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // <--- CAMBIADO 'service' POR 'host'
+    host: 'smtp.gmail.com',
     port: 465,
-    secure: true, // Forzar SSL en puerto 465
+    secure: true,
     auth: {
         user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
         pass: process.env.GMAIL_PASS || 'wwopwhvtbnoxkahn'
     },
     tls: {
-        rejectUnauthorized: false // Evita bloqueos de certificados en plataformas cloud
+        rejectUnauthorized: false
     },
-    connectionTimeout: 10000 // Fija un tiempo máximo de espera de 10 segundos
+    connectionTimeout: 10000
 });
-
 
 // Middlewares
 app.use(express.json());
@@ -47,7 +47,6 @@ function verificarFirmaMiddleware(req, res, next) {
         return res.status(403).json({ exito: false, mensaje: 'Firma de seguridad requerida' });
     }
 
-    // Buscamos el código del asiento para recalcular el HMAC
     const verificar = (codigoAsiento) => {
         const firmaEsperada = generarFirma(id, codigoAsiento);
         if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(firmaEsperada))) {
@@ -113,13 +112,14 @@ async function inicializarTablasDB() {
         `);
 
         await db.execute(`
-    CREATE TABLE IF NOT EXISTS cupones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        evento_id TEXT,
-        codigo TEXT,
-        porcentaje REAL
-    );
-`);
+            CREATE TABLE IF NOT EXISTS cupones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evento_id TEXT,
+                codigo TEXT,
+                porcentaje REAL DEFAULT 0,
+                monto_fijo REAL DEFAULT 0
+            );
+        `);
 
         await db.execute(`
             CREATE TABLE IF NOT EXISTS asientos (
@@ -176,7 +176,7 @@ let usuariosMemoria = [
     { id: 2, usuario: 'operario1', clave: '1234', tipo: 'vendedor', identificacion: 'VEN-01' }
 ];
 let eventosMemoria = [];
-let cuponesMemoria = [{ codigo: 'DESCUENTO10', porcentaje: 10 }];
+let cuponesMemoria = [{ codigo: 'DESCUENTO10', porcentaje: 10, monto_fijo: 0 }];
 let asientosMemoria = {};
 let ventasMemoria = [];
 
@@ -262,15 +262,18 @@ app.get('/api/eventos', async (req, res) => {
     res.json(eventosMemoria);
 });
 
-// Ruta en tu archivo principal del servidor (ej: server.js)
+// Endpoint Único para Crear Cupones
 app.post('/api/cupones/crear', async (req, res) => {
     try {
         const { evento_id, codigo, porcentaje, monto_fijo } = req.body;
 
+        if (!evento_id || !codigo) {
+            return res.status(400).json({ exito: false, mensaje: 'El evento y el código son obligatorios.' });
+        }
+
         const pct = parseFloat(porcentaje) || 0;
         const monto = parseFloat(monto_fijo) || 0;
 
-        // 1. Validar que no se envíen ambos tipos de descuento a la vez
         if (pct > 0 && monto > 0) {
             return res.status(400).json({ 
                 exito: false, 
@@ -278,7 +281,6 @@ app.post('/api/cupones/crear', async (req, res) => {
             });
         }
 
-        // 2. Validar que al crear un cupón nuevo sí lleve un valor válido
         if (pct === 0 && monto === 0) {
             return res.status(400).json({ 
                 exito: false, 
@@ -286,13 +288,16 @@ app.post('/api/cupones/crear', async (req, res) => {
             });
         }
 
-        // 3. Inserción en Turso
-        await tursoClient.execute({
-            sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo) VALUES (?, ?, ?, ?)',
-            args: [evento_id, codigo.toUpperCase(), pct, monto]
-        });
-
-        res.json({ exito: true, mensaje: 'Cupón creado con éxito' });
+        if (db) {
+            await db.execute({
+                sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo) VALUES (?, ?, ?, ?)',
+                args: [evento_id, codigo.toUpperCase(), pct, monto]
+            });
+            return res.json({ exito: true, mensaje: 'Cupón creado con éxito' });
+        } else {
+            cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: pct, monto_fijo: monto });
+            return res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
+        }
 
     } catch (error) {
         console.error("Error en Turso:", error);
@@ -315,7 +320,7 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     res.json(asientosMemoria[id]);
 });
 
-// 1. Obtener cupones filtrados por un evento específico (Para la vista del Vendedor)
+// Obtener cupones filtrados por evento
 app.get('/api/cupones/evento/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -335,7 +340,7 @@ app.get('/api/cupones/evento/:eventoId', async (req, res) => {
     }
 });
 
-// 2. Obtener todos los cupones (Para listar en panel Admin si lo necesitas)
+// Obtener todos los cupones
 app.get('/api/cupones', async (req, res) => {
     if (db) {
         try {
@@ -344,31 +349,6 @@ app.get('/api/cupones', async (req, res) => {
         } catch (e) { console.error(e); }
     }
     res.json(cuponesMemoria);
-});
-
-// 3. Crear cupón asociado a un evento (Para Admin / Superusuario)
-app.post('/api/cupones/crear', async (req, res) => {
-    const { evento_id, codigo, porcentaje } = req.body;
-
-    if (!evento_id || !codigo || !porcentaje) {
-        return res.status(400).json({ exito: false, mensaje: 'El evento, código y porcentaje son obligatorios' });
-    }
-
-    if (db) {
-        try {
-            await db.execute({
-                sql: "INSERT INTO cupones (evento_id, codigo, porcentaje) VALUES (?, ?, ?)",
-                args: [evento_id, codigo.toUpperCase(), parseFloat(porcentaje)]
-            });
-            return res.json({ exito: true, mensaje: 'Cupón guardado exitosamente' });
-        } catch (e) {
-            console.error(e);
-            return res.status(500).json({ exito: false, mensaje: 'Error al guardar el cupón en Turso' });
-        }
-    } else {
-        cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: parseFloat(porcentaje) });
-        res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
-    }
 });
 
 app.post('/api/ventas/procesar', async (req, res) => {
@@ -410,7 +390,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// CANCELAR VENTA (Soporta DELETE con parámetro ID en la URL)
+// CANCELAR VENTA
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
 
@@ -430,7 +410,6 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
             const ahora = new Date();
             const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
 
-            // Verificación del límite de 15 minutos
             if (diferenciaMinutos > 15) {
                 return res.status(403).json({ 
                     exito: false, 
@@ -438,7 +417,6 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
                 });
             }
 
-            // Liberar asiento y eliminar la venta en Turso
             await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
             await db.execute({ sql: "DELETE FROM ventas WHERE id = ?", args: [ventaId] });
 
@@ -465,7 +443,6 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
             });
         }
 
-        // Liberar asiento en memoria
         const lista = asientosMemoria[venta.evento_id] || [];
         const asiento = lista.find(a => a.id === venta.asiento_id);
         if (asiento) {
@@ -473,13 +450,11 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
             asiento.asistio = 0;
         }
 
-        // Eliminar venta de memoria
         ventasMemoria.splice(indexVenta, 1);
 
         return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado (Memoria)' });
     }
 });
-
 
 app.get('/api/informe/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
@@ -659,9 +634,7 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     }
 });
 
-// ==========================================
-// ENDPOINT PARA ENVIAR ENTRADA POR EMAIL (BREVO API)
-// ==========================================
+// Endpoint para enviar entrada por Email (Brevo API)
 app.post('/api/entradas/enviar-email', async (req, res) => {
     const { ventaId, hostOrigin } = req.body;
 
@@ -691,7 +664,6 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
         const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
         const qrDataUrl = await QRCode.toDataURL(qrPayload);
 
-        // Envío directo a través de la API HTTP de Brevo
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
             method: 'POST',
             headers: {
@@ -741,7 +713,6 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
         res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
     }
 });
-
 
 // Endpoints Superusuario
 app.post('/api/usuarios/crear', async (req, res) => {
