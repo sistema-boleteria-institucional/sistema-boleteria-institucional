@@ -375,9 +375,9 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// CANCELAR VENTA (LÍMITE HASTA 15 MINUTOS)
-app.post('/api/ventas/cancelar', async (req, res) => {
-    const { ventaId } = req.body;
+// CANCELAR VENTA (Soporta DELETE con parámetro ID en la URL)
+app.delete('/api/ventas/cancelar/:id', async (req, res) => {
+    const ventaId = req.params.id;
 
     if (!ventaId) {
         return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
@@ -395,6 +395,7 @@ app.post('/api/ventas/cancelar', async (req, res) => {
             const ahora = new Date();
             const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
 
+            // Verificación del límite de 15 minutos
             if (diferenciaMinutos > 15) {
                 return res.status(403).json({ 
                     exito: false, 
@@ -402,13 +403,13 @@ app.post('/api/ventas/cancelar', async (req, res) => {
                 });
             }
 
-            // Liberar asiento y eliminar venta de Turso
+            // Liberar asiento y eliminar la venta en Turso
             await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
             await db.execute({ sql: "DELETE FROM ventas WHERE id = ?", args: [ventaId] });
 
             return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado' });
         } catch (e) {
-            console.error('Error al cancelar la venta:', e);
+            console.error('Error al cancelar la venta en Turso:', e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la cancelación en la base de datos' });
         }
     } else {
@@ -437,12 +438,13 @@ app.post('/api/ventas/cancelar', async (req, res) => {
             asiento.asistio = 0;
         }
 
-        // Eliminar venta de la memoria
+        // Eliminar venta de memoria
         ventasMemoria.splice(indexVenta, 1);
 
         return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado (Memoria)' });
     }
 });
+
 
 app.get('/api/informe/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
