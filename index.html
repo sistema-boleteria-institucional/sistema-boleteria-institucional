@@ -6,7 +6,6 @@
     <title>Sistema de Boletería Institucional</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Estilos para el Menú Desplegable */
         .navbar-container {
             display: flex;
             align-items: center;
@@ -434,7 +433,6 @@
                     const tipoUsr = data.tipo || 'vendedor';
                     const nombreUsr = data.usuario || usuario;
                     
-                    // Guardar en sessionStorage
                     sessionStorage.setItem('usuarioLogueado', JSON.stringify({
                         usuario: nombreUsr,
                         tipo: tipoUsr
@@ -458,13 +456,20 @@
         }
 
         function establecerSesion(nombre, tipo) {
+            const rol = (tipo || '').toLowerCase();
+
+            // REDIRECCIÓN AUTOMÁTICA SI ES USUARIO PUERTA
+            if (rol === 'puerta') {
+                window.location.href = 'puerta.html';
+                return;
+            }
+
             usuarioSesion = { usuario: nombre, tipo: tipo };
             document.getElementById('lblOperario').innerText = nombre;
             document.getElementById('lblTipo').innerText = tipo.toUpperCase();
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('appContainer').style.display = 'block';
 
-            const rol = tipo.toLowerCase();
             if (rol === 'adm' || rol === 'super' || rol === 'admin') {
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
@@ -1151,7 +1156,6 @@
             }
         }
 
-        // Auto-verificación de sesión al refrescar
         document.addEventListener('DOMContentLoaded', () => {
             const sesionExistente = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
             if (sesionExistente && sesionExistente.usuario) {
@@ -1161,3 +1165,4 @@
     </script>
 </body>
 </html>
+
