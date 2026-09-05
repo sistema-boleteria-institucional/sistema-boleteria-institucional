@@ -8,9 +8,11 @@ const QRCode = require('qrcode');
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
 
-// ==========================================
-// CONFIGURACIÓN DE NODEMAILER (GMAIL)
-// ==========================================
+// Middlewares
+app.use(express.json());
+app.use(express.static(__dirname));
+
+// Configuración de Nodemailer
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
@@ -19,19 +21,11 @@ const transporter = nodemailer.createTransport({
         user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
         pass: process.env.GMAIL_PASS || 'wwopwhvtbnoxkahn'
     },
-    tls: {
-        rejectUnauthorized: false
-    },
+    tls: { rejectUnauthorized: false },
     connectionTimeout: 10000
 });
 
-// Middlewares
-app.use(express.json());
-app.use(express.static(__dirname));
-
-// ==========================================
-// FUNCIONES DE SEGURIDAD (HMAC Y VERIFICACIÓN)
-// ==========================================
+// Seguridad HMAC
 function generarFirma(ventaId, asientoCodigo) {
     return crypto
         .createHmac('sha256', HMAC_SECRET)
@@ -43,15 +37,11 @@ function verificarFirmaMiddleware(req, res, next) {
     const { id } = req.params;
     const { sig } = req.query;
 
-    if (!sig) {
-        return res.status(403).json({ exito: false, mensaje: 'Firma de seguridad requerida' });
-    }
+    if (!sig) return res.status(403).json({ exito: false, mensaje: 'Firma de seguridad requerida' });
 
     const verificar = (codigoAsiento) => {
         const firmaEsperada = generarFirma(id, codigoAsiento);
-        if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(firmaEsperada))) {
-            return next();
-        }
+        if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(firmaEsperada))) return next();
         return res.status(401).json({ exito: false, mensaje: 'Entrada inválida o firma alterada' });
     };
 
@@ -69,11 +59,8 @@ function verificarFirmaMiddleware(req, res, next) {
     }
 }
 
-// ==========================================
-// CONEXIÓN A TURSO (PERSISTENCIA REAL)
-// ==========================================
+// Conexión a DB Turso
 let db = null;
-
 if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
     db = createClient({
         url: process.env.TURSO_DATABASE_URL,
@@ -84,7 +71,6 @@ if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
     console.warn('⚠️ No se encontraron las credenciales de Turso. Usando almacenamiento temporal en memoria.');
 }
 
-// Inicializar Tablas en Turso
 async function inicializarTablasDB() {
     if (!db) return;
     try {
@@ -161,7 +147,6 @@ async function inicializarTablasDB() {
                 args: ['operario1', '1234', 'vendedor', 'VEN-01']
             });
         }
-
         console.log(' Tablas creadas/verificadas en Turso.');
     } catch (e) {
         console.error('Error al inicializar las tablas de Turso:', e);
@@ -170,7 +155,7 @@ async function inicializarTablasDB() {
 
 inicializarTablasDB();
 
-// Respaldos en memoria
+// Memoria Temporal
 let usuariosMemoria = [
     { id: 1, usuario: 'admin', clave: '1234', tipo: 'super', identificacion: 'SUP-01' },
     { id: 2, usuario: 'operario1', clave: '1234', tipo: 'vendedor', identificacion: 'VEN-01' }
@@ -179,8 +164,8 @@ let eventosMemoria = [];
 let cuponesMemoria = [{ codigo: 'DESCUENTO10', porcentaje: 10, monto_fijo: 0 }];
 let asientosMemoria = {};
 let ventasMemoria = [];
+let configMemoria = {};
 
-// Generar asientos al crear evento
 async function generarAsientosParaEvento(eventoObj) {
     const pGen = Number(eventoObj.precioGeneral) || 1500;
     const pGrada = Number(eventoObj.precioGradas) || 3000;
@@ -228,10 +213,7 @@ async function generarAsientosParaEvento(eventoObj) {
     }
 }
 
-// ==========================================
-// ENDPOINTS DE AUTENTICACIÓN Y EVENTOS
-// ==========================================
-
+// Endpoints Auth & Eventos
 app.post('/api/login', async (req, res) => {
     const { usuario, clave } = req.body;
     if (db) {
@@ -262,31 +244,43 @@ app.get('/api/eventos', async (req, res) => {
     res.json(eventosMemoria);
 });
 
-// Endpoint Único para Crear Cupones
+app.post('/api/eventos/crear', async (req, res) => {
+    const evento = req.body;
+    if (db) {
+        try {
+            await db.execute({
+                sql: "INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                args: [evento.id, evento.nombre, evento.fecha, evento.hora, evento.precioGeneral, evento.dispGen, evento.precioGradas, evento.dispGrada]
+            });
+            await generarAsientosParaEvento(evento);
+            return res.json({ exito: true, mensaje: 'Evento creado con éxito' });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al crear evento' });
+        }
+    } else {
+        eventosMemoria.push(evento);
+        await generarAsientosParaEvento(evento);
+        return res.json({ exito: true, mensaje: 'Evento creado (Memoria)' });
+    }
+});
+
+app.post('/api/config/email-informe', (req, res) => {
+    const { email } = req.body;
+    configMemoria.emailInforme = email;
+    res.json({ exito: true, mensaje: 'Email de informes guardado correctamente' });
+});
+
 app.post('/api/cupones/crear', async (req, res) => {
     try {
         const { evento_id, codigo, porcentaje, monto_fijo } = req.body;
-
-        if (!evento_id || !codigo) {
-            return res.status(400).json({ exito: false, mensaje: 'El evento y el código son obligatorios.' });
-        }
+        if (!evento_id || !codigo) return res.status(400).json({ exito: false, mensaje: 'El evento y el código son obligatorios.' });
 
         const pct = parseFloat(porcentaje) || 0;
         const monto = parseFloat(monto_fijo) || 0;
 
-        if (pct > 0 && monto > 0) {
-            return res.status(400).json({ 
-                exito: false, 
-                mensaje: 'No puedes aplicar Porcentaje y Monto Fijo simultáneamente.' 
-            });
-        }
-
-        if (pct === 0 && monto === 0) {
-            return res.status(400).json({ 
-                exito: false, 
-                mensaje: 'El cupón debe tener un Porcentaje o un Monto Fijo mayor a 0.' 
-            });
-        }
+        if (pct > 0 && monto > 0) return res.status(400).json({ exito: false, mensaje: 'No puedes aplicar Porcentaje y Monto Fijo simultáneamente.' });
+        if (pct === 0 && monto === 0) return res.status(400).json({ exito: false, mensaje: 'El cupón debe tener un valor mayor a 0.' });
 
         if (db) {
             await db.execute({
@@ -298,13 +292,8 @@ app.post('/api/cupones/crear', async (req, res) => {
             cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: pct, monto_fijo: monto });
             return res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
         }
-
     } catch (error) {
-        console.error("Error en Turso:", error);
-        res.status(500).json({ 
-            exito: false, 
-            mensaje: 'Error al guardar el cupón en Turso: ' + error.message 
-        });
+        res.status(500).json({ exito: false, mensaje: 'Error al guardar cupón: ' + error.message });
     }
 });
 
@@ -320,27 +309,18 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     res.json(asientosMemoria[id]);
 });
 
-// Obtener cupones filtrados por evento
 app.get('/api/cupones/evento/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
         try {
-            const result = await db.execute({
-                sql: "SELECT * FROM cupones WHERE evento_id = ?",
-                args: [eventoId]
-            });
+            const result = await db.execute({ sql: "SELECT * FROM cupones WHERE evento_id = ?", args: [eventoId] });
             return res.json(result.rows);
-        } catch (e) {
-            console.error(e);
-            return res.status(500).json({ exito: false, mensaje: 'Error al obtener cupones' });
-        }
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al obtener cupones' }); }
     } else {
-        const lista = cuponesMemoria.filter(c => c.evento_id === eventoId);
-        res.json(lista);
+        res.json(cuponesMemoria.filter(c => c.evento_id === eventoId));
     }
 });
 
-// Obtener todos los cupones
 app.get('/api/cupones', async (req, res) => {
     if (db) {
         try {
@@ -373,7 +353,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
         } catch (e) {
-            console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
         }
     } else {
@@ -390,69 +369,46 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// CANCELAR VENTA
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
-
-    if (!ventaId) {
-        return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
-    }
+    if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
 
     if (db) {
         try {
             const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE id = ?", args: [ventaId] });
-            if (vRes.rows.length === 0) {
-                return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
-            }
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
             const venta = vRes.rows[0];
-            const fechaCompra = new Date(venta.fechaCompra);
-            const ahora = new Date();
-            const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
+            const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
 
             if (diferenciaMinutos > 15) {
-                return res.status(403).json({ 
-                    exito: false, 
-                    mensaje: `Tiempo límite excedido para cancelar. Han pasado ${Math.floor(diferenciaMinutos)} minutos (Máximo 15 min).` 
-                });
+                return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido para cancelar (${Math.floor(diferenciaMinutos)} min).` });
             }
 
             await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
             await db.execute({ sql: "DELETE FROM ventas WHERE id = ?", args: [ventaId] });
 
-            return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado' });
+            return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente' });
         } catch (e) {
-            console.error('Error al cancelar la venta en Turso:', e);
-            return res.status(500).json({ exito: false, mensaje: 'Error al procesar la cancelación en la base de datos' });
+            return res.status(500).json({ exito: false, mensaje: 'Error al cancelar la venta' });
         }
     } else {
         const indexVenta = ventasMemoria.findIndex(v => v.id == ventaId);
-        if (indexVenta === -1) {
-            return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
-        }
+        if (indexVenta === -1) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
         const venta = ventasMemoria[indexVenta];
-        const fechaCompra = new Date(venta.fechaCompra);
-        const ahora = new Date();
-        const diferenciaMinutos = (ahora - fechaCompra) / (1000 * 60);
+        const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
 
         if (diferenciaMinutos > 15) {
-            return res.status(403).json({ 
-                exito: false, 
-                mensaje: `Tiempo límite excedido para cancelar. Han pasado ${Math.floor(diferenciaMinutos)} minutos (Máximo 15 min).` 
-            });
+            return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido (${Math.floor(diferenciaMinutos)} min).` });
         }
 
         const lista = asientosMemoria[venta.evento_id] || [];
         const asiento = lista.find(a => a.id === venta.asiento_id);
-        if (asiento) {
-            asiento.vendido = 0;
-            asiento.asistio = 0;
-        }
+        if (asiento) { asiento.vendido = 0; asiento.asistio = 0; }
 
         ventasMemoria.splice(indexVenta, 1);
-
-        return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente y asiento liberado (Memoria)' });
+        return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente (Memoria)' });
     }
 });
 
@@ -500,7 +456,6 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
 
             return res.json(ventasConFirma);
         } catch (e) {
-            console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' });
         }
     } else {
@@ -558,7 +513,6 @@ app.put('/api/ventas/editar', async (req, res) => {
 
             return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
         } catch (e) {
-            console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
         }
     } else {
@@ -587,7 +541,6 @@ app.put('/api/ventas/editar', async (req, res) => {
     }
 });
 
-// Detalle de Entrada protegido con Middleware HMAC
 app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     const { id } = req.params;
     const { sig } = req.query;
@@ -609,7 +562,6 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
 
             return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl, sig } });
         } catch (e) {
-            console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
         }
     } else {
@@ -634,7 +586,6 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     }
 });
 
-// Endpoint para enviar entrada por Email (Brevo API)
 app.post('/api/entradas/enviar-email', async (req, res) => {
     const { ventaId, hostOrigin } = req.body;
 
@@ -701,15 +652,12 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
         });
 
         const resData = await response.json();
-
         if (!response.ok) {
-            console.error('Error Brevo API:', resData);
             return res.status(500).json({ exito: false, mensaje: resData.message || 'Error al enviar por Brevo' });
         }
 
         res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
     } catch (e) {
-        console.error('Error general al enviar correo:', e);
         res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
     }
 });
@@ -775,16 +723,11 @@ app.delete('/api/super/usuarios/:id', async (req, res) => {
     res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
 });
 
-// ==========================================
-// ENDPOINT PARA CONTROL DE ACCESO (PUERTA)
-// ==========================================
+// Puerta Escaneo
 app.post('/api/puerta/validar', async (req, res) => {
     try {
         const { id, sig } = req.body;
-
-        if (!id) {
-            return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
-        }
+        if (!id) return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
 
         let ventaId = id;
         let sigRecibida = sig || null;
@@ -798,7 +741,6 @@ app.post('/api/puerta/validar', async (req, res) => {
         }
 
         if (db) {
-            // 1. Buscar entrada y datos del evento
             const vRes = await db.execute({
                 sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora 
                       FROM ventas v 
@@ -807,13 +749,10 @@ app.post('/api/puerta/validar', async (req, res) => {
                 args: [ventaId, ventaId]
             });
 
-            if (vRes.rows.length === 0) {
-                return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
-            }
+            if (vRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
 
             const venta = vRes.rows[0];
 
-            // 2. VALIDACIÓN AUTOMÁTICA DE FECHA Y HORA (2 hs antes)
             if (venta.evento_fecha && venta.evento_hora) {
                 const fechaHoraEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
                 const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
@@ -836,7 +775,6 @@ app.post('/api/puerta/validar', async (req, res) => {
                 }
             }
 
-            // 3. Validar firma HMAC
             if (sigRecibida && typeof generarFirma === 'function') {
                 const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
                 if (sigRecibida !== firmaEsperada) {
@@ -844,7 +782,6 @@ app.post('/api/puerta/validar', async (req, res) => {
                 }
             }
 
-            // 4. Verificar asistencia previa
             const asientoRes = await db.execute({
                 sql: "SELECT asistio FROM asientos WHERE id = ?",
                 args: [venta.asiento_id]
@@ -857,7 +794,6 @@ app.post('/api/puerta/validar', async (req, res) => {
                 });
             }
 
-            // 5. Registrar acceso
             await db.execute({
                 sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
                 args: [venta.asiento_id]
@@ -871,12 +807,8 @@ app.post('/api/puerta/validar', async (req, res) => {
             });
 
         } else {
-            // Manejo en Memoria
             const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
-
-            if (!venta) {
-                return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
-            }
+            if (!venta) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
 
             const evento = eventosMemoria.find(e => e.id === venta.evento_id);
             if (evento && evento.fecha && evento.hora) {
@@ -920,21 +852,15 @@ app.post('/api/puerta/validar', async (req, res) => {
                 mensaje: 'INGRESO PERMITIDO'
             });
         }
-
     } catch (error) {
-        console.error('Error procesando escaneo en puerta:', error);
         return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
     }
 });
 
-// ==========================================
-// RUTAS DE PÁGINAS PROTEGIDAS / CLIENTE
-// ==========================================
 app.get('/puerta.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'puerta.html'));
 });
 
-// Servir la aplicación principal
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
