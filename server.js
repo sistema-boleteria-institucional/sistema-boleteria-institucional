@@ -789,21 +789,18 @@ app.post('/api/puerta/validar', async (req, res) => {
         let ventaId = id;
         let sigRecibida = sig || null;
 
-        // Si el QR contiene un objeto JSON stringificado
         if (typeof id === 'string' && id.trim().startsWith('{')) {
             try {
                 const parsed = JSON.parse(id);
                 ventaId = parsed.ticket_id || parsed.id || id;
                 sigRecibida = parsed.sig || sigRecibida;
-            } catch (e) {
-                // Si no es JSON se procesa tal cual
-            }
+            } catch (e) {}
         }
 
         if (db) {
-            // 1. Buscar la entrada en la base de datos por ID o Código de Asiento
+            // 1. Buscar entrada y datos del evento
             const vRes = await db.execute({
-                sql: `SELECT v.*, e.nombre as evento_nombre 
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora 
                       FROM ventas v 
                       LEFT JOIN eventos e ON v.evento_id = e.id 
                       WHERE v.id = ? OR v.codigoAsiento = ?`,
@@ -816,7 +813,30 @@ app.post('/api/puerta/validar', async (req, res) => {
 
             const venta = vRes.rows[0];
 
-            // 2. Validar firma de seguridad (HMAC) si se incluye en el QR
+            // 2. VALIDACIÓN AUTOMÁTICA DE FECHA Y HORA (2 hs antes)
+            if (venta.evento_fecha && venta.evento_hora) {
+                const fechaHoraEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${venta.evento_fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${venta.evento_nombre}</strong><br>El ingreso habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Esta entrada correspondía al evento del <strong>${venta.evento_fecha}</strong>.` 
+                    });
+                }
+            }
+
+            // 3. Validar firma HMAC
             if (sigRecibida && typeof generarFirma === 'function') {
                 const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
                 if (sigRecibida !== firmaEsperada) {
@@ -824,7 +844,7 @@ app.post('/api/puerta/validar', async (req, res) => {
                 }
             }
 
-            // 3. Verificar si el cliente ya ingresó
+            // 4. Verificar asistencia previa
             const asientoRes = await db.execute({
                 sql: "SELECT asistio FROM asientos WHERE id = ?",
                 args: [venta.asiento_id]
@@ -833,11 +853,11 @@ app.post('/api/puerta/validar', async (req, res) => {
             if (asientoRes.rows.length > 0 && asientoRes.rows[0].asistio === 1) {
                 return res.json({ 
                     exito: false, 
-                    mensaje: `ENTRADA YA INGRESA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
                 });
             }
 
-            // 4. Marcar como ingresado en la base de datos
+            // 5. Registrar acceso
             await db.execute({
                 sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
                 args: [venta.asiento_id]
@@ -851,11 +871,34 @@ app.post('/api/puerta/validar', async (req, res) => {
             });
 
         } else {
-            // Manejo en Memoria (Fallback)
+            // Manejo en Memoria
             const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
 
             if (!venta) {
                 return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+            }
+
+            const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+            if (evento && evento.fecha && evento.hora) {
+                const fechaHoraEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${evento.fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${evento.nombre}</strong><br>Habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Pertenecía al evento del <strong>${evento.fecha}</strong>.` 
+                    });
+                }
             }
 
             const lista = asientosMemoria[venta.evento_id] || [];
@@ -864,7 +907,7 @@ app.post('/api/puerta/validar', async (req, res) => {
             if (asiento && asiento.asistio === 1) {
                 return res.json({ 
                     exito: false, 
-                    mensaje: `ENTRADA YA INGRESA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido}` 
                 });
             }
 
@@ -883,21 +926,15 @@ app.post('/api/puerta/validar', async (req, res) => {
         return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
     }
 });
+
 // ==========================================
-// RUTA PROTEGIDA / CONTROL DE ACCESO
+// RUTAS DE PÁGINAS PROTEGIDAS / CLIENTE
 // ==========================================
 app.get('/puerta.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'puerta.html'));
+    res.sendFile(path.join(__dirname, 'puerta.html'));
 });
 
-// ==========================================
-// ESTA LÍNEA SIEMPRE DEBE IR AL FINAL DE TODO
-// ==========================================
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-
+// Servir la aplicación principal
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
