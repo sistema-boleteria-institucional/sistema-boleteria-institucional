@@ -3,1166 +3,766 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Boletería Institucional</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Sistema de Boletería e Informes</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .navbar-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: #1e293b;
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #334155;
-        }
-
-        .dropdown {
-            position: relative;
-            display: inline-block;
-        }
-
-        .dropbtn {
-            background-color: #0284c7;
-            color: white;
-            padding: 10px 18px;
-            font-size: 0.95rem;
-            font-weight: bold;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.2s;
-        }
-
-        .dropbtn:hover {
-            background-color: #0369a1;
-        }
-
-        .dropdown-content {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background-color: #0f172a;
-            min-width: 220px;
-            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.6);
-            border: 1px solid #334155;
-            border-radius: 6px;
-            z-index: 50;
-            overflow: hidden;
-            margin-top: 5px;
-        }
-
-        .dropdown-content button, .dropdown-content a {
-            color: #f8fafc;
-            padding: 12px 16px;
-            text-decoration: none;
-            display: block;
-            width: 100%;
-            text-align: left;
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            font-size: 0.9rem;
-            border-bottom: 1px solid #1e293b;
-            box-sizing: border-box;
-        }
-
-        .dropdown-content button:hover, .dropdown-content a:hover {
-            background-color: #334155;
-            color: #38bdf8;
-        }
-
-        .dropdown:hover .dropdown-content {
-            display: block;
-        }
-
-        .item-puerta-btn {
-            background-color: #0d9488 !important;
-            font-weight: bold;
-        }
-
-        .item-puerta-btn:hover {
-            background-color: #0f766e !important;
-            color: #fff !important;
-        }
+        .hidden { display: none !important; }
+        .asiento { width: 40px; height: 40px; margin: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; border-radius: 4px; }
+        .asiento.disponible { background-color: #198754; color: white; }
+        .asiento.ocupado { background-color: #dc3545; color: white; cursor: not-allowed; }
+        .asiento.seleccionado { background-color: #ffc107; color: black; font-weight: bold; }
     </style>
 </head>
-<body>
+<body class="bg-light">
 
-    <!-- MODAL DE SESIÓN -->
-    <div id="modalLogin" class="modal">
-        <div class="modal-content">
-            <h2>Iniciar Sesión</h2>
-            <div class="form-group">
-                <label>Usuario:</label>
-                <input type="text" id="loginUsuario" placeholder="Ej: admin">
-            </div>
-            <div class="form-group">
-                <label>Contraseña:</label>
-                <input type="password" id="loginClave" placeholder="******">
-            </div>
-            <button class="btn-primary" onclick="iniciarSesionBackend()">Ingresar</button>
-            
-            <div id="loginError" style="color: #ef4444; font-size: 0.85em; margin-top: 10px;"></div>
+<div class="container py-4">
 
-            <!-- Botón de emergencia -->
-            <button id="btnModoForzado" class="btn-primary" style="background: #475569; margin-top: 15px; display: none;" onclick="ingresoModoEmergencia()">
-                Ingresar en Modo Sin Servidor (Demo)
-            </button>
+    <!-- BARRA DE NAVEGACIÓN Y LOGIN -->
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <h2>🎟️ Sistema de Boletería</h2>
+        <div id="sesionInfo">
+            <span id="userBadge" class="badge bg-secondary me-2 hidden"></span>
+            <button id="btnLoginModal" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalLogin">Iniciar Sesión</button>
+            <button id="btnLogout" class="btn btn-outline-danger hidden" onclick="cerrarSesion()">Cerrar Sesión</button>
         </div>
     </div>
 
-    <!-- MODAL PARA EDITAR VENTA Y CAMBIAR ASIENTO -->
-    <div id="modalEditarVenta" class="modal" style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); overflow: auto;">
-        <div class="modal-content" style="background: #0f172a; border: 1px solid #334155; margin: 5% auto; padding: 20px; width: 90%; max-width: 500px; border-radius: 8px; color: #fff;">
-            <h3 style="margin-top:0;">✏️ Editar Venta</h3>
-            <input type="hidden" id="editVentaId">
-            <input type="hidden" id="editEventoId">
-
-            <div class="form-group"><label>Nombre:</label><input type="text" id="editNombre"></div>
-            <div class="form-group"><label>Apellido:</label><input type="text" id="editApellido"></div>
-            <div class="form-group"><label>Teléfono (WhatsApp):</label><input type="text" id="editContacto"></div>
-            <div class="form-group"><label>Email:</label><input type="email" id="editEmail"></div>
-
-            <hr style="border-color: #334155; margin: 15px 0;">
-
-            <div class="form-group">
-                <label>Cambiar Asiento (Opcional):</label>
-                <select id="selNuevoAsiento">
-                    <option value="">-- Mantener Asiento Actual --</option>
-                </select>
-            </div>
-
-            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                <button class="btn-primary" onclick="guardarCambiosVenta()">Guardar Cambios</button>
-                <button class="btn-primary" style="background: #475569;" onclick="cerrarModalEditar()">Cancelar</button>
-            </div>
+    <!-- PANELES POR ROL -->
+    
+    <!-- PANEL SUPERUSUARIO -->
+    <div id="panelSuperusuario" class="card mb-4 border-danger hidden">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">⚙️ Panel de Superusuario</h5>
         </div>
-    </div>
-
-    <!-- PANEL PRINCIPAL -->
-    <div id="appContainer" class="container">
-        <header>
-            <h2>Boletería Institucional</h2>
-            <div class="operario-info">Usuario: <span id="lblOperario">-</span> (<span id="lblTipo"></span>)</div>
-        </header>
-
-        <!-- MENÚ NAVEGACIÓN DESPLEGABLE -->
-        <div class="navbar-container">
-            <div class="dropdown">
-                <button class="dropbtn">☰ Menú Módulos ▾</button>
-                <div class="dropdown-content">
-                    <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
-                    <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
-                    <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
-                    <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
-                    <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
-                    <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
-                    <button id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">👑 Superusuario</button>
+        <div class="card-body">
+            <!-- Configuración de Correo General -->
+            <h6>Correo Predeterminado para Informes Automáticos</h6>
+            <div class="row g-2 mb-4">
+                <div class="col-md-6">
+                    <input type="email" id="superEmailInforme" class="form-control" placeholder="ejemplo@correo.com">
                 </div>
-            </div>
-            
-            <button class="btn-primary" style="width: auto; background: #dc2626; padding: 8px 15px;" onclick="cerrarSesion()">Cerrar Sesión</button>
-        </div>
-
-        <!-- PESTAÑA VENTA -->
-        <div id="tabVenta" class="tab-content active">
-            <div class="form-group" style="max-width: 350px;">
-                <label>Seleccionar Evento:</label>
-                <select id="selEventoVenta" onchange="cargarMapaAsientos()"></select>
-            </div>
-
-            <div class="leyenda">
-                <div class="item-leyenda"><div class="box-color" style="background: var(--disponible)"></div> Disponible</div>
-                <div class="item-leyenda"><div class="box-color" style="background: var(--ocupado)"></div> Vendido</div>
-                <div class="item-leyenda"><div class="box-color" style="background: var(--bloqueado)"></div> No Disponible</div>
-                <div class="item-leyenda"><div class="box-color" style="background: var(--seleccionado)"></div> Seleccionado</div>
-            </div>
-
-            <div class="layout-venta">
-                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
-                    <div class="escenario">ESCENARIO</div>
-
-                    <div class="platea-container">
-                        <div>
-                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">General (Bloque Izq)</h4>
-                            <div id="gridPlateaIzq" class="bloque-platea"></div>
-                        </div>
-                        <div class="pasillo-central">PASILLO</div>
-                        <div>
-                            <h4 style="text-align: center; font-size: 0.8em; color: #94a3b8;">General (Bloque Der)</h4>
-                            <div id="gridPlateaDer" class="bloque-platea"></div>
-                        </div>
-                    </div>
-
-                    <div class="gradas-container">
-                        <div>
-                            <h4 style="text-align:center; margin-bottom:5px;">Grada Izq</h4>
-                            <div id="gridGrada1" class="grada-subgrid"></div>
-                        </div>
-
-                        <div class="cabina-tecnica">CABINA TÉCNICA</div>
-
-                        <div>
-                            <h4 style="text-align:center; margin-bottom:5px;">Grada Der</h4>
-                            <div id="gridGrada2" class="grada-subgrid"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
-                    <h3>Detalle de Reserva</h3>
-                    <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
-                    <p>Monto Final: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
-
-                    <div class="form-group">
-                        <label style="font-size: 0.9em; color: #94a3b8;">Aplicar Cupón de Descuento:</label>
-                        <select id="selCuponVenta" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="aplicarCuponSeleccionado()">
-                            <option value="-1">Sin cupón de descuento</option>
-                        </select>
-                    </div>
-                    
-                    <hr style="border-color: #334155; margin: 15px 0;">
-
-                    <div class="form-group"><label>Nombre *</label><input type="text" id="txtNombre"></div>
-                    <div class="form-group"><label>Apellido *</label><input type="text" id="txtApellido"></div>
-                    <div class="form-group"><label>Teléfono (WhatsApp) *</label><input type="text" id="txtContacto"></div>
-                    <div class="form-group"><label>Email (Opcional)</label><input type="email" id="txtEmail"></div>
-                    <div class="form-group">
-                        <label>Método de Pago *</label>
-                        <select id="selMetodoPago">
-                            <option value="efectivo">Efectivo</option>
-                            <option value="mercadopago">Mercado Pago</option>
-                        </select>
-                    </div>
-
-                    <button class="btn-primary" onclick="procesarVenta()">Registrar y Generar Entrada</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- PESTAÑA INFORMES -->
-        <div id="tabInformes" class="tab-content">
-            <h3>Informes de Ventas</h3>
-            <div class="form-group" style="max-width: 350px;">
-                <label>Seleccionar Evento:</label>
-                <select id="selEventoInforme" onchange="cargarDetalleInforme()"></select>
-            </div>
-            <div id="resumenInformeContainer">
-                <div class="tarjetas-resumen">
-                    <div>Entradas Vendidas: <strong id="infVendidas" style="color:#38bdf8;">0</strong></div>
-                    <div>Asistentes Reales: <strong id="infAsistentes" style="color:#22c55e;">0</strong></div>
-                    <div>Total Recaudado: <strong id="infRecaudado" style="color:#eab308;">$0</strong></div>
-                </div>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <button class="btn-primary" onclick="window.print()">Descargar PDF / Imprimir</button>
-                    <button class="btn-primary" style="background:#25D366;" onclick="compartirWhatsApp()">Enviar por WhatsApp</button>
+                <div class="col-md-3">
+                    <button class="btn btn-danger w-100" onclick="guardarEmailInforme()">Guardar Correo</button>
                 </div>
             </div>
 
-            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS -->
-            <div id="seccionEntradasVendidas" class="card mt-4 d-none" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h4 style="margin: 0;">📋 Listado de Entradas Vendidas</h4>
-                    <button class="btn-primary" style="width: auto; padding: 5px 12px;" onclick="actualizarListaVentas()">🔄 Actualizar</button>
-                </div>
-                <div style="overflow-x: auto;">
-                    <table class="tabla-admin" style="width: 100%;">
-                        <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Email</th>
-                                <th>Teléfono</th>
-                                <th>Asiento</th>
-                                <th style="text-align: center;">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaDetalleVentas">
-                            <tr><td colspan="5" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+            <hr>
+
+            <!-- Gestión de Usuarios -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6>Gestión de Usuarios del Sistema</h6>
+                <button class="btn btn-sm btn-success" onclick="abrirModalUsuario()">+ Nuevo Usuario</button>
             </div>
-        </div>
-
-        <!-- PESTAÑA EVENTOS -->
-        <div id="tabCrearEvento" class="tab-content">
-            <h3>Crear / Configurar Evento</h3>
-            <div style="max-width: 500px;">
-                <div class="form-group"><label>ID Evento (Único):</label><input type="text" id="evId" placeholder="EV-2026"></div>
-                <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre" placeholder="Festival de Música"></div>
-                <div class="form-group"><label>Fecha:</label><input type="date" id="evFecha"></div>
-                <div class="form-group"><label>Hora:</label><input type="time" id="evHora"></div>
-                
-                <hr style="border-color: #334155; margin: 15px 0;">
-
-                <div class="form-group">
-                    <label>Precio General ($):</label>
-                    <input type="number" id="evPrecioGen" value="1500" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Cantidad Asientos General (Máximo 112):</label>
-                    <input type="number" id="evDispGen" value="112" min="1" max="112">
-                </div>
-
-                <hr style="border-color: #334155; margin: 15px 0;">
-
-                <div class="form-group">
-                    <label>Precio Gradas ($):</label>
-                    <input type="number" id="evPrecioGrada" value="3000" min="0">
-                </div>
-                <div class="form-group">
-                    <label>Cantidad Asientos Gradas (Máximo 24):</label>
-                    <input type="number" id="evDispGrada" value="24" min="1" max="24">
-                </div>
-
-                <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
-            </div>
-        </div>
-
-        <!-- PESTAÑA CUPONES -->
-        <div id="tabCupones" class="tab-content">
-            <h3>Gestión de Cupones de Descuento</h3>
-            <div style="max-width: 400px;">
-                <div class="form-group">
-                    <label>Seleccionar Evento:</label>
-                    <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;">
-                        <option value="">-- Seleccionar Evento --</option>
-                    </select>
-                </div>
-                <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO2026"></div>
-                
-                <div class="form-group">
-                    <label>Tipo de Descuento:</label>
-                    <select id="cupTipo" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cambiarTipoCupon()">
-                        <option value="porcentaje">Porcentaje (%)</option>
-                        <option value="monto">Monto Fijo ($)</option>
-                    </select>
-                </div>
-
-                <div class="form-group" id="grpPorcentaje">
-                    <label>Porcentaje de Descuento (%):</label>
-                    <input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100">
-                </div>
-
-                <div class="form-group" id="grpMonto" style="display:none;">
-                    <label>Monto de Descuento ($):</label>
-                    <input type="number" id="cupMontoFijo" placeholder="2000" min="1">
-                </div>
-
-                <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
-            </div>
-        </div>
-
-        <!-- PESTAÑA USUARIOS -->
-        <div id="tabCrearUsuario" class="tab-content">
-            <h3>Gestión de Usuarios</h3>
-            <div style="max-width: 500px;">
-                <div class="form-group"><label>Usuario:</label><input type="text" id="usrNombre"></div>
-                <div class="form-group"><label>ID Operario:</label><input type="text" id="usrIdentificacion"></div>
-                <div class="form-group"><label>Contraseña:</label><input type="password" id="usrClave"></div>
-                <div class="form-group">
-                    <label>Tipo:</label>
-                    <select id="usrTipo">
-                        <option value="vendedor">Vendedor</option>
-                        <option value="adm">Administrador</option>
-                        <option value="puerta">Puerta / Escáner</option>
-                    </select>
-                </div>
-                <button class="btn-primary" onclick="guardarNuevoUsuario()">Registrar Usuario</button>
-            </div>
-        </div>
-
-        <!-- PESTAÑA SUPERUSUARIO -->
-        <div id="tabSuperAdmin" class="tab-content">
-            <h3>Panel de Superusuario</h3>
-            <div class="form-group" style="max-width: 500px;">
-                <label>Email Predeterminado para Informes Automáticos (12hs):</label>
-                <div style="display:flex; gap: 10px;">
-                    <input type="email" id="txtEmailInforme" placeholder="correo@institucion.com">
-                    <button class="btn-primary" style="width: auto;" onclick="guardarEmailInforme()">Guardar</button>
-                </div>
-            </div>
-            <h4>Usuarios Registrados</h4>
-            <table class="tabla-admin">
-                <thead>
-                    <tr>
-                        <th>Usuario</th>
-                        <th>ID Operario</th>
-                        <th>Tipo</th>
-                        <th>Clave</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyUsuarios"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <script>
-        let usuarioSesion = null;
-        let asientoSeleccionado = null;
-        let descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
-        let cuponesEventoActual = [];
-
-        async function iniciarSesionBackend() {
-            const usuario = document.getElementById('loginUsuario').value.trim();
-            const clave = document.getElementById('loginClave').value;
-            const errDiv = document.getElementById('loginError');
-            errDiv.innerText = '';
-
-            if (!usuario || !clave) {
-                errDiv.innerText = 'Ingresa usuario y contraseña.';
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario, clave })
-                });
-
-                const data = await res.json();
-
-                if (res.ok && (data.exito || data.usuario)) {
-                    const tipoUsr = data.tipo || 'vendedor';
-                    const nombreUsr = data.usuario || usuario;
-                    
-                    sessionStorage.setItem('usuarioLogueado', JSON.stringify({
-                        usuario: nombreUsr,
-                        tipo: tipoUsr
-                    }));
-
-                    establecerSesion(nombreUsr, tipoUsr);
-                } else {
-                    errDiv.innerText = data.mensaje || 'Credenciales incorrectas.';
-                }
-            } catch (err) {
-                console.error(err);
-                errDiv.innerText = 'Sin conexión con el servidor.';
-                document.getElementById('btnModoForzado').style.display = 'block';
-            }
-        }
-
-        function ingresoModoEmergencia() {
-            const usr = document.getElementById('loginUsuario').value.trim() || 'admin';
-            sessionStorage.setItem('usuarioLogueado', JSON.stringify({ usuario: usr, tipo: 'super' }));
-            establecerSesion(usr, 'super');
-        }
-
-        function establecerSesion(nombre, tipo) {
-            const rol = (tipo || '').toLowerCase();
-
-            // REDIRECCIÓN AUTOMÁTICA SI ES USUARIO PUERTA
-            if (rol === 'puerta') {
-                window.location.href = 'puerta.html';
-                return;
-            }
-
-            usuarioSesion = { usuario: nombre, tipo: tipo };
-            document.getElementById('lblOperario').innerText = nombre;
-            document.getElementById('lblTipo').innerText = tipo.toUpperCase();
-            document.getElementById('modalLogin').style.display = 'none';
-            document.getElementById('appContainer').style.display = 'block';
-
-            if (rol === 'adm' || rol === 'super' || rol === 'admin') {
-                document.getElementById('btnTabCrear').style.display = 'block';
-                document.getElementById('btnTabUsuarios').style.display = 'block';
-                document.getElementById('btnTabCupones').style.display = 'block';
-            }
-            if (rol === 'super' || rol === 'admin') {
-                document.getElementById('btnTabSuper').style.display = 'block';
-                cargarUsuariosSuper();
-            }
-
-            gestionarVisibilidadModulos();
-            cargarEventosEnSelect();
-        }
-
-        function cerrarSesion() {
-            sessionStorage.removeItem('usuarioLogueado');
-            window.location.reload();
-        }
-
-        function gestionarVisibilidadModulos() {
-            const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-            const btnPuerta = document.getElementById('btnIrPuerta');
-
-            if (sesion && sesion.usuario) {
-                const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta', 'adm'];
-                if (rolesPuerta.includes(sesion.tipo.toLowerCase())) {
-                    btnPuerta.style.display = 'block';
-                }
-            } else {
-                btnPuerta.style.display = 'none';
-            }
-        }
-
-        function irAPuerta() {
-            window.location.href = 'puerta.html';
-        }
-
-        function mostrarTab(tabId, btn) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-        }
-
-        async function cargarEventosEnSelect() {
-            try {
-                const res = await fetch('/api/eventos');
-                if(!res.ok) return;
-                const eventos = await res.json();
-                
-                const selVenta = document.getElementById('selEventoVenta');
-                const selInf = document.getElementById('selEventoInforme');
-                const selCup = document.getElementById('cupEventoId');
-                
-                selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-                selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-                if (selCup) selCup.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
-
-                if(Array.isArray(eventos)){
-                    eventos.forEach(ev => {
-                        const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
-                        selVenta.innerHTML += opt;
-                        selInf.innerHTML += opt;
-                        if (selCup) selCup.innerHTML += opt;
-                    });
-                }
-            } catch (err) {
-                console.error("Error al obtener eventos:", err);
-            }
-        }
-
-        async function cargarMapaAsientos() {
-            const eventoId = document.getElementById('selEventoVenta').value;
-            const gridIzq = document.getElementById('gridPlateaIzq');
-            const gridDer = document.getElementById('gridPlateaDer');
-            const gridG1 = document.getElementById('gridGrada1');
-            const gridG2 = document.getElementById('gridGrada2');
-
-            cargarCuponesEnSelectVenta(eventoId);
-
-            gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
-            asientoSeleccionado = null;
-            document.getElementById('lblAsiento').innerText = 'Ninguno';
-            document.getElementById('lblPrecio').innerText = '$0';
-
-            if(!eventoId) return;
-
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                if(!res.ok) return;
-                const asientos = await res.json();
-
-                if(Array.isArray(asientos)){
-                    asientos.forEach(a => {
-                        const div = document.createElement('div');
-                        div.classList.add('asiento');
-
-                        if (a.vendido === 1) div.classList.add('vendido');
-                        else if (a.habilitado === 0) div.classList.add('bloqueado');
-                        else {
-                            div.classList.add('disponible');
-                            div.onclick = () => seleccionarAsiento(div, a);
-                        }
-
-                        const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
-                        div.innerText = codigoLimpio;
-
-                        if(a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) {
-                            const matchNum = codigoLimpio.match(/\d+$/);
-                            const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
-                            
-                            const posEnFila = ((numAsiento - 1) % 16) + 1;
-                            if (posEnFila >= 1 && posEnFila <= 8) {
-                                gridIzq.appendChild(div);
-                            } else {
-                                gridDer.appendChild(div);
-                            }
-                        } else if(a.codigoAsiento.startsWith('G1')) {
-                            gridG1.appendChild(div);
-                        } else if(a.codigoAsiento.startsWith('G2')) {
-                            gridG2.appendChild(div);
-                        }
-                    });
-                }
-            } catch(e) {
-                console.error("Error al cargar asientos:", e);
-            }
-        }
-
-        function calcularMontoFinal(precioBase) {
-            let precioFinal = precioBase;
-            if (descuentoAplicado.porcentaje > 0) {
-                precioFinal -= precioBase * (descuentoAplicado.porcentaje / 100);
-            } else if (descuentoAplicado.monto_fijo > 0) {
-                precioFinal = Math.max(0, precioBase - descuentoAplicado.monto_fijo);
-            }
-            return precioFinal;
-        }
-
-        function seleccionarAsiento(elem, asientoData) {
-            document.querySelectorAll('.asiento.seleccionado').forEach(e => {
-                e.classList.remove('seleccionado');
-                e.classList.add('disponible');
-            });
-
-            elem.classList.remove('disponible');
-            elem.classList.add('seleccionado');
-
-            asientoSeleccionado = asientoData;
-            document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
-            const precioCalculado = calcularMontoFinal(asientoData.precio);
-            document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
-        }
-
-        async function procesarVenta() {
-            if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
-            const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
-
-            const body = {
-                evento_id: document.getElementById('selEventoVenta').value,
-                asiento_id: asientoSeleccionado.id,
-                nombre: document.getElementById('txtNombre').value.trim(),
-                apellido: document.getElementById('txtApellido').value.trim(),
-                contacto: document.getElementById('txtContacto').value.trim(),
-                email: document.getElementById('txtEmail').value.trim(),
-                metodo_pago: document.getElementById('selMetodoPago').value,
-                monto_total: montoCalculado
-            };
-
-            if(!body.nombre || !body.apellido || !body.contacto) return alert('Por favor completa todos los campos obligatorios (*)');
-
-            try {
-                const res = await fetch('/api/ventas/procesar', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje || 'Venta procesada');
-                if(data.exito) {
-                    descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
-                    document.getElementById('selCuponVenta').value = "-1";
-                    document.getElementById('txtNombre').value = '';
-                    document.getElementById('txtApellido').value = '';
-                    document.getElementById('txtContacto').value = '';
-                    document.getElementById('txtEmail').value = '';
-                    cargarMapaAsientos();
-                }
-            } catch(e) {
-                alert('Error al registrar la venta.');
-            }
-        }
-
-        function cambiarTipoCupon() {
-            const tipo = document.getElementById('cupTipo').value;
-            if (tipo === 'porcentaje') {
-                document.getElementById('grpPorcentaje').style.display = 'block';
-                document.getElementById('grpMonto').style.display = 'none';
-                document.getElementById('cupMontoFijo').value = '';
-            } else {
-                document.getElementById('grpPorcentaje').style.display = 'none';
-                document.getElementById('grpMonto').style.display = 'block';
-                document.getElementById('cupPorcentaje').value = '';
-            }
-        }
-
-        async function cargarCuponesEnSelectVenta(eventoId) {
-            const select = document.getElementById('selCuponVenta');
-            if (!select) return;
-            
-            select.innerHTML = '<option value="-1">Sin cupón de descuento</option>';
-            descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
-
-            if (!eventoId) return;
-
-            try {
-                const res = await fetch(`/api/cupones/evento/${eventoId}`);
-                const cupones = await res.json();
-                cuponesEventoActual = Array.isArray(cupones) ? cupones : [];
-
-                cuponesEventoActual.forEach((c, index) => {
-                    const labelDesc = c.porcentaje > 0 ? `${c.porcentaje}% OFF` : `$${c.monto_fijo} OFF`;
-                    select.innerHTML += `<option value="${index}">${c.codigo} (${labelDesc})</option>`;
-                });
-            } catch (e) {
-                console.error("Error al cargar cupones:", e);
-            }
-        }
-
-        function aplicarCuponSeleccionado() {
-            const index = parseInt(document.getElementById('selCuponVenta').value);
-
-            if (index >= 0 && cuponesEventoActual[index]) {
-                const cup = cuponesEventoActual[index];
-                descuentoAplicado = { porcentaje: cup.porcentaje || 0, monto_fijo: cup.monto_fijo || 0 };
-            } else {
-                descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
-            }
-
-            if (asientoSeleccionado) {
-                const precioCalculado = calcularMontoFinal(asientoSeleccionado.precio);
-                document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
-            }
-        }
-
-        async function crearCupon() {
-            const tipo = document.getElementById('cupTipo').value;
-            const body = {
-                evento_id: document.getElementById('cupEventoId').value,
-                codigo: document.getElementById('cupCodigo').value.trim(),
-                porcentaje: tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0,
-                monto_fijo: tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0
-            };
-
-            if (!body.evento_id || !body.codigo) {
-                return alert('Selecciona un evento e ingresa un código.');
-            }
-
-            try {
-                const res = await fetch('/api/cupones/crear', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-                if (data.exito) {
-                    document.getElementById('cupCodigo').value = '';
-                    document.getElementById('cupPorcentaje').value = '';
-                    document.getElementById('cupMontoFijo').value = '';
-                }
-            } catch (e) {
-                alert('Error al guardar cupón.');
-            }
-        }
-
-        async function crearEvento() {
-            const dispGenVal = parseInt(document.getElementById('evDispGen').value) || 0;
-            const dispGradaVal = parseInt(document.getElementById('evDispGrada').value) || 0;
-
-            if (dispGenVal > 112) {
-                return alert('La cantidad máxima de asientos en General es 112.');
-            }
-            if (dispGradaVal > 24) {
-                return alert('La cantidad máxima de asientos en Gradas es 24.');
-            }
-
-            const body = {
-                id: document.getElementById('evId').value.trim(),
-                nombre: document.getElementById('evNombre').value.trim(),
-                fecha: document.getElementById('evFecha').value,
-                hora: document.getElementById('evHora').value,
-                precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
-                dispGen: dispGenVal,
-                precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0,
-                dispGrada: dispGradaVal
-            };
-
-            if(!body.id || !body.nombre || !body.fecha || !body.hora) {
-                return alert('Completa todos los campos obligatorios del evento');
-            }
-
-            try {
-                const res = await fetch('/api/eventos/crear', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-                if(data.exito) {
-                    cargarEventosEnSelect();
-                }
-            } catch(e) {
-                alert('Error al guardar evento.');
-            }
-        }
-
-        async function guardarNuevoUsuario() {
-            const body = {
-                usuario: document.getElementById('usrNombre').value.trim(),
-                identificacion: document.getElementById('usrIdentificacion').value.trim(),
-                clave: document.getElementById('usrClave').value,
-                tipo: document.getElementById('usrTipo').value
-            };
-
-            if(!body.usuario || !body.identificacion || !body.clave) return alert('Por favor completa todos los campos del usuario.');
-
-            try {
-                const res = await fetch('/api/usuarios/crear', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-                if(data.exito) {
-                    document.getElementById('usrNombre').value = '';
-                    document.getElementById('usrIdentificacion').value = '';
-                    document.getElementById('usrClave').value = '';
-                    if(usuarioSesion && (usuarioSesion.tipo === 'super' || usuarioSesion.tipo === 'admin')) cargarUsuariosSuper();
-                }
-            } catch(e) {
-                alert('Error al crear usuario.');
-            }
-        }
-
-        async function cargarUsuariosSuper() {
-            try {
-                const res = await fetch('/api/super/usuarios');
-                if(!res.ok) return;
-                const usuarios = await res.json();
-                const tbody = document.getElementById('tbodyUsuarios');
-                tbody.innerHTML = '';
-
-                if(Array.isArray(usuarios)){
-                    usuarios.forEach(u => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${u.usuario}</td>
-                                <td>${u.identificacion}</td>
-                                <td>${u.tipo}</td>
-                                <td id="pass-${u.id}">••••••••</td>
-                                <td>
-                                    <button class="btn-primary" style="padding:5px; width:auto;" onclick="revelarClave(${u.id})">Ver Clave</button>
-                                    <button class="btn-primary" style="padding:5px; width:auto; background:var(--ocupado);" onclick="eliminarUsuario(${u.id})">Eliminar</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                }
-            } catch(e) {
-                console.error(e);
-            }
-        }
-
-        async function revelarClave(userId) {
-            const claveSuper = prompt("Ingresa tu clave de Superusuario para revelar la contraseña:");
-            if(!claveSuper) return;
-
-            try {
-                const res = await fetch('/api/super/revelar-clave', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ claveSuper, usuarioIdTarget: userId })
-                });
-                const data = await res.json();
-                if(data.exito) {
-                    document.getElementById(`pass-${userId}`).innerText = data.clave;
-                } else {
-                    alert(data.mensaje);
-                }
-            } catch(e) {
-                alert('Error al revelar clave.');
-            }
-        }
-
-        async function eliminarUsuario(userId) {
-            if(!confirm("¿Seguro que deseas eliminar este usuario?")) return;
-            try {
-                await fetch(`/api/super/usuarios/${userId}`, { method: 'DELETE' });
-                cargarUsuariosSuper();
-            } catch(e) {
-                alert('Error al eliminar usuario.');
-            }
-        }
-
-        async function guardarEmailInforme() {
-            const email = document.getElementById('txtEmailInforme').value.trim();
-            if(!email) return alert('Ingresa un correo electrónico válido');
-
-            try {
-                const res = await fetch('/api/config/email-informe', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email })
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-            } catch(e) {
-                alert('Error al guardar configuración.');
-            }
-        }
-
-        async function cargarDetalleInforme() {
-            const eventoId = document.getElementById('selEventoInforme').value;
-            if(!eventoId) return;
-
-            try {
-                const res = await fetch(`/api/informe/${eventoId}`);
-                if(!res.ok) return;
-                const data = await res.json();
-                document.getElementById('infVendidas').innerText = data.vendidas || 0;
-                document.getElementById('infAsistentes').innerText = data.asistentes || 0;
-                document.getElementById('infRecaudado').innerText = `$${(data.recaudado || 0).toFixed(2)}`;
-
-                cargarTablaDetalleVentas(eventoId);
-            } catch(e) {
-                console.error(e);
-            }
-        }
-
-        function compartirWhatsApp() {
-            const vendidas = document.getElementById('infVendidas').innerText;
-            const recaudado = document.getElementById('infRecaudado').innerText;
-            const texto = encodeURIComponent(`*Informe de Evento*\nEntradas Vendidas: ${vendidas}\nTotal Recaudado: ${recaudado}`);
-            window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
-        }
-
-        async function cargarTablaDetalleVentas(eventoId) {
-            const tbody = document.getElementById('tablaDetalleVentas');
-            if (!tbody) return;
-
-            try {
-                let res = await fetch(`/api/ventas/detalle/${eventoId}`);
-                if (!res.ok) res = await fetch(`/api/eventos/${eventoId}/ventas`);
-                if (!res.ok) throw new Error('No se pudo conectar con el endpoint de ventas.');
-                
-                const ventas = await res.json();
-                tbody.innerHTML = '';
-
-                if (!Array.isArray(ventas) || ventas.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 12px;">No hay ventas registradas para este evento.</td></tr>';
-                    return;
-                }
-
-                ventas.forEach(v => {
-                    const nombre = v.nombre || v.cliente_nombre || '';
-                    const apellido = v.apellido || v.cliente_apellido || '';
-                    const nombreCompleto = `${nombre} ${apellido}`.trim() || 'Comprador';
-                    const mail = v.email || v.correo || '';
-                    const tel = v.telefono || v.contacto || v.celular || '';
-                    const asiento = v.codigoAsiento || v.codigo_asiento || v.asiento || 'General';
-                    const ventaId = v.id || v.venta_id || v.id_entrada;
-                    const sig = v.sig || '';
-
-                    const rol = (usuarioSesion?.tipo || '').toLowerCase();
-                    const esAdminOSuper = (rol === 'adm' || rol === 'super' || rol === 'admin');
-                    
-                    const fechaVenta = v.fecha_creacion || v.created_at || v.fecha ? new Date(v.fecha_creacion || v.created_at || v.fecha) : new Date();
-                    const minutosTranscurridos = (new Date() - fechaVenta) / (1000 * 60);
-                    
-                    const puedeCancelar = esAdminOSuper || (minutosTranscurridos <= 15);
-
-                    const ventaJson = JSON.stringify({
-                        id: ventaId,
-                        eventoId: eventoId,
-                        nombre: nombre,
-                        apellido: apellido,
-                        contacto: tel,
-                        email: mail
-                    }).replace(/"/g, '&quot;');
-
-                    const botonCancelar = puedeCancelar 
-                        ? `<button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;" 
-                                onclick="cancelarVenta('${ventaId}', '${eventoId}')">
-                                ❌ Cancelar
-                            </button>`
-                        : `<button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #64748b; cursor: not-allowed;" 
-                                disabled title="Límite de 15 min expirado">
-                                ⏳ Expirado
-                            </button>`;
-
-                    tbody.innerHTML += `
-                        <tr style="border-bottom: 1px solid #334155;">
-                            <td style="padding: 8px;"><strong>${nombreCompleto}</strong></td>
-                            <td style="padding: 8px;">${mail || '<span style="color:#64748b;">N/A</span>'}</td>
-                            <td style="padding: 8px;">${tel || '<span style="color:#64748b;">N/A</span>'}</td>
-                            <td style="padding: 8px;"><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #fff;">${asiento}</span></td>
-                            <td style="padding: 8px; text-align: center;">
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;" 
-                                    onclick="abrirModalEditar('${ventaJson}')">
-                                    ✏️ Editar
-                                </button>
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
-                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}', '${sig}')">
-                                    💬 WA
-                                </button>
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; margin-right: 4px;" 
-                                    onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
-                                    ✉️ Email
-                                </button>
-                                ${botonCancelar}
-                            </td>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Usuario</th>
+                            <th>Tipo</th>
+                            <th>Identificación</th>
+                            <th>Acciones</th>
                         </tr>
-                    `;
-                });
-            } catch (err) {
-                console.error("Error al obtener detalle de ventas:", err);
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
-            }
+                    </thead>
+                    <tbody id="tablaUsuariosBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANEL ADMINISTRADOR -->
+    <div id="panelAdmin" class="card mb-4 border-primary hidden">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">🛠️ Panel de Administración</h5>
+        </div>
+        <div class="card-body">
+            <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabEventos">Eventos</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCupones">Cupones</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabInformes">Informes y Detalle</button></li>
+            </ul>
+
+            <div class="tab-content pt-3">
+                <!-- Tab Eventos -->
+                <div class="tab-pane fade show active" id="tabEventos">
+                    <button class="btn btn-primary mb-3" onclick="abrirModalEvento()">+ Crear Nuevo Evento</button>
+                    <div id="listaEventosAdmin" class="row g-3"></div>
+                </div>
+
+                <!-- Tab Cupones -->
+                <div class="tab-pane fade" id="tabCupones">
+                    <form id="formCupon" onsubmit="crearCupon(event)" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Evento</label>
+                            <select id="cuponEventoId" class="form-select" required></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Código Cupón</label>
+                            <input type="text" id="cuponCodigo" class="form-control" placeholder="EJ: PROMO10" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">% Descuento</label>
+                            <input type="number" id="cuponPorcentaje" class="form-control" min="0" max="100" value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Monto Fijo ($)</label>
+                            <input type="number" id="cuponMonto" class="form-control" min="0" value="0">
+                        </div>
+                        <div class="col-md-2 align-self-end">
+                            <button type="submit" class="btn btn-success w-100">Crear Cupón</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Tab Informes -->
+                <div class="tab-pane fade" id="tabInformes">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Seleccionar Evento para Ver Informe</label>
+                            <select id="informeEventoSelect" class="form-select" onchange="cargarInformesDetallados()"></select>
+                        </div>
+                        <div class="col-md-6 align-self-end">
+                            <button class="btn btn-outline-primary" onclick="enviarInformeEmailManual()">📧 Enviar Informe por Email</button>
+                        </div>
+                    </div>
+
+                    <!-- Consolidado -->
+                    <div id="resumenInforme" class="alert alert-info hidden"></div>
+
+                    <!-- Detalle de Ventas -->
+                    <h6 class="mt-4">Detalle de Ventas (Vendedor, Pago y Cancelaciones)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Cliente</th>
+                                    <th>Asiento</th>
+                                    <th>Monto Total</th>
+                                    <th>Descuento</th>
+                                    <th>Método Pago</th>
+                                    <th>Vendedor</th>
+                                    <th>Fecha</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaDetalleVentas"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Detalle de Asistencias -->
+                    <h6 class="mt-4">Detalle de Escaneos / Asistencia en Puerta</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Asiento</th>
+                                    <th>Zona</th>
+                                    <th>Cliente</th>
+                                    <th>Operario Escaneo</th>
+                                    <th>Fecha / Hora Escaneo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaDetalleEscaneos"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN PÚBLICA / VENDEDOR: PROCESO DE VENTA -->
+    <div id="seccionVenta" class="card">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">🎟️ Venta de Entradas</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">Seleccionar Evento</label>
+                    <select id="ventaEventoSelect" class="form-select" onchange="cargarMapaAsientos()"></select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Cupón de Descuento (Opcional)</label>
+                    <select id="ventaCuponSelect" class="form-select" onchange="calcularPrecioFinal()"></select>
+                </div>
+            </div>
+
+            <!-- Mapa de Asientos -->
+            <div id="mapaAsientos" class="p-3 bg-light border rounded mb-3 text-center"></div>
+
+            <!-- Formulario Compra -->
+            <form id="formProcesarVenta" onsubmit="procesarVenta(event)">
+                <input type="hidden" id="asientoSeleccionadoId">
+                <div class="row g-3">
+                    <div class="col-md-3"><input type="text" id="vNombre" class="form-control" placeholder="Nombre" required></div>
+                    <div class="col-md-3"><input type="text" id="vApellido" class="form-control" placeholder="Apellido" required></div>
+                    <div class="col-md-3"><input type="text" id="vContacto" class="form-control" placeholder="Teléfono" required></div>
+                    <div class="col-md-3"><input type="email" id="vEmail" class="form-control" placeholder="Email"></div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label">Método de Pago</label>
+                        <select id="vMetodoPago" class="form-select" required>
+                            <option value="Efectivo">Efectivo</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Tarjeta">Tarjeta</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Vendedor / Operario</label>
+                        <input type="text" id="vVendedor" class="form-control" placeholder="Nombre vendedor" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Total a Pagar</label>
+                        <h4 id="lblTotalPagar" class="text-success">$0.00</h4>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success mt-3 w-100">Confirmar y Emitir Entrada</button>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<!-- MODALES -->
+
+<!-- Modal Login -->
+<div class="modal fade" id="modalLogin" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5>Iniciar Sesión</h5></div>
+            <div class="modal-body">
+                <form id="formLogin" onsubmit="ejecutarLogin(event)">
+                    <div class="mb-3"><label>Usuario</label><input type="text" id="loginUsuario" class="form-control" required></div>
+                    <div class="mb-3"><label>Contraseña</label><input type="password" id="loginClave" class="form-control" required></div>
+                    <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear/Editar Usuario -->
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 id="modalUsuarioTitulo">Usuario</h5></div>
+            <div class="modal-body">
+                <form id="formUsuario" onsubmit="guardarUsuario(event)">
+                    <input type="hidden" id="usrId">
+                    <div class="mb-3"><label>Usuario</label><input type="text" id="usrUsuario" class="form-control" required></div>
+                    <div class="mb-3"><label>Contraseña</label><input type="password" id="usrClave" class="form-control" required></div>
+                    <div class="mb-3">
+                        <label>Tipo / Rol</label>
+                        <select id="usrTipo" class="form-select" required>
+                            <option value="vendedor">Vendedor / Operario</option>
+                            <option value="admin">Administrador</option>
+                            <option value="super">Superusuario</option>
+                        </select>
+                    </div>
+                    <div class="mb-3"><label>Identificación</label><input type="text" id="usrIdentificacion" class="form-control" required></div>
+                    <button type="submit" class="btn btn-danger w-100">Guardar Usuario</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Revelar Contraseña -->
+<div class="modal fade" id="modalRevelarClave" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5>Confirmar Identidad de Superusuario</h5></div>
+            <div class="modal-body">
+                <p>Ingrese su clave de Superusuario para revelar la contraseña requerida:</p>
+                <input type="password" id="claveSuperConfirmar" class="form-control mb-3" placeholder="Su clave">
+                <button class="btn btn-danger w-100" onclick="confirmarRevelarClave()">Revelar Contraseña</button>
+                <div id="resultadoClaveRevelada" class="alert alert-success mt-3 hidden"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Crear/Editar Evento -->
+<div class="modal fade" id="modalEvento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 id="modalEventoTitulo">Evento</h5></div>
+            <div class="modal-body">
+                <form id="formEvento" onsubmit="guardarEvento(event)">
+                    <input type="hidden" id="evId">
+                    <div class="mb-2"><label>Nombre</label><input type="text" id="evNombre" class="form-control" required></div>
+                    <div class="mb-2"><label>Fecha</label><input type="date" id="evFecha" class="form-control" required></div>
+                    <div class="mb-2"><label>Hora</label><input type="time" id="evHora" class="form-control" required></div>
+                    <div class="mb-2"><label>Precio General</label><input type="number" id="evPrecioGen" class="form-control" required></div>
+                    <div class="mb-2"><label>Disp. General</label><input type="number" id="evDispGen" class="form-control" value="112" required></div>
+                    <div class="mb-2"><label>Precio Gradas</label><input type="number" id="evPrecioGrada" class="form-control" required></div>
+                    <div class="mb-2"><label>Disp. Gradas</label><input type="number" id="evDispGrada" class="form-control" value="24" required></div>
+                    <button type="submit" class="btn btn-primary w-100 mt-2">Guardar Evento</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let usuarioActual = null;
+    let usuarioTargetClave = null;
+    let listaEventosGlobal = [];
+    let asientosEventoActual = [];
+    let cuponesEventoActual = [];
+
+    document.addEventListener('DOMContentLoaded', () => {
+        cargarEventos();
+    });
+
+    // --- AUTENTICACIÓN Y ROLES ---
+    async function ejecutarLogin(e) {
+        e.preventDefault();
+        const usuario = document.getElementById('loginUsuario').value;
+        const clave = document.getElementById('loginClave').value;
+
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuario, clave })
+        });
+        const data = await res.json();
+
+        if (data.exito) {
+            usuarioActual = data;
+            document.getElementById('vVendedor').value = data.usuario;
+            actualizarInterfazRol();
+            bootstrap.Modal.getInstance(document.getElementById('modalLogin')).hide();
+        } else {
+            alert(data.mensaje);
+        }
+    }
+
+    function cerrarSesion() {
+        usuarioActual = null;
+        actualizarInterfazRol();
+    }
+
+    function actualizarInterfazRol() {
+        const badge = document.getElementById('userBadge');
+        const btnLogin = document.getElementById('btnLoginModal');
+        const btnLogout = document.getElementById('btnLogout');
+        const panelSuper = document.getElementById('panelSuperusuario');
+        const panelAdmin = document.getElementById('panelAdmin');
+
+        panelSuper.classList.add('hidden');
+        panelAdmin.classList.add('hidden');
+
+        if (!usuarioActual) {
+            badge.classList.add('hidden');
+            btnLogin.classList.remove('hidden');
+            btnLogout.classList.add('hidden');
+            return;
         }
 
-        async function cancelarVenta(ventaId, eventoId) {
-            if (!confirm('¿Estás seguro de que deseas cancelar esta compra? El asiento volverá a estar disponible.')) return;
+        badge.textContent = `${usuarioActual.usuario} (${usuarioActual.tipo.toUpperCase()})`;
+        badge.classList.remove('hidden');
+        btnLogin.classList.add('hidden');
+        btnLogout.classList.remove('hidden');
 
-            try {
-                const res = await fetch(`/api/ventas/cancelar/${ventaId}`, { method: 'DELETE' });
-                const data = await res.json();
-                alert(data.mensaje || 'Venta cancelada correctamente.');
+        if (usuarioActual.tipo === 'super') {
+            panelSuper.classList.remove('hidden');
+            panelAdmin.classList.remove('hidden');
+            cargarUsuariosSuper();
+        } else if (usuarioActual.tipo === 'admin') {
+            panelAdmin.classList.remove('hidden');
+        }
+    }
 
-                if (res.ok || data.exito) {
-                    cargarDetalleInforme();
-                    if (typeof cargarMapaAsientos === 'function') cargarMapaAsientos();
-                }
-            } catch (err) {
-                console.error("Error al cancelar la venta:", err);
-                alert('Error de conexión al intentar cancelar la venta.');
+    // --- SUPERUSUARIO ---
+    async function cargarUsuariosSuper() {
+        const res = await fetch('/api/super/usuarios');
+        const usuarios = await res.json();
+        const tbody = document.getElementById('tablaUsuariosBody');
+        tbody.innerHTML = '';
+
+        usuarios.forEach(u => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${u.usuario}</td>
+                    <td><span class="badge bg-info">${u.tipo}</span></td>
+                    <td>${u.identificacion}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-dark" onclick="solicitarRevelarClave(${u.id})">🔑 Ver Clave</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editarUsuario(${JSON.stringify(u).replace(/"/g, '&quot;')})">✏️</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="eliminarUsuario(${u.id})">🗑️</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    async function guardarEmailInforme() {
+        const email = document.getElementById('superEmailInforme').value;
+        const res = await fetch('/api/config/email-informe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        alert(data.mensaje);
+    }
+
+    function abrirModalUsuario() {
+        document.getElementById('usrId').value = '';
+        document.getElementById('formUsuario').reset();
+        document.getElementById('modalUsuarioTitulo').textContent = 'Crear Usuario';
+        new bootstrap.Modal(document.getElementById('modalUsuario')).show();
+    }
+
+    function editarUsuario(u) {
+        document.getElementById('usrId').value = u.id;
+        document.getElementById('usrUsuario').value = u.usuario;
+        document.getElementById('usrClave').value = '';
+        document.getElementById('usrTipo').value = u.tipo;
+        document.getElementById('usrIdentificacion').value = u.identificacion;
+        document.getElementById('modalUsuarioTitulo').textContent = 'Editar Usuario';
+        new bootstrap.Modal(document.getElementById('modalUsuario')).show();
+    }
+
+    async function guardarUsuario(e) {
+        e.preventDefault();
+        const id = document.getElementById('usrId').value;
+        const body = {
+            usuario: document.getElementById('usrUsuario').value,
+            clave: document.getElementById('usrClave').value,
+            tipo: document.getElementById('usrTipo').value,
+            identificacion: document.getElementById('usrIdentificacion').value
+        };
+
+        const url = id ? `/api/usuarios/modificar/${id}` : '/api/usuarios/crear';
+        const method = id ? 'PUT' : 'POST';
+
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.exito) {
+            bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+            cargarUsuariosSuper();
+        } else {
+            alert(data.mensaje);
+        }
+    }
+
+    function solicitarRevelarClave(usuarioId) {
+        usuarioTargetClave = usuarioId;
+        document.getElementById('claveSuperConfirmar').value = '';
+        document.getElementById('resultadoClaveRevelada').classList.add('hidden');
+        new bootstrap.Modal(document.getElementById('modalRevelarClave')).show();
+    }
+
+    async function confirmarRevelarClave() {
+        const claveSuper = document.getElementById('claveSuperConfirmar').value;
+        const res = await fetch('/api/super/revelar-clave', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ claveSuper, usuarioIdTarget: usuarioTargetClave })
+        });
+        const data = await res.json();
+        const resDiv = document.getElementById('resultadoClaveRevelada');
+        if (data.exito) {
+            resDiv.textContent = `Contraseña: ${data.clave}`;
+            resDiv.classList.remove('hidden');
+        } else {
+            alert(data.mensaje);
+        }
+    }
+
+    async function eliminarUsuario(id) {
+        if (!confirm('¿Seguro que desea eliminar este usuario?')) return;
+        const res = await fetch(`/api/super/usuarios/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.exito) cargarUsuariosSuper();
+    }
+
+    // --- EVENTOS Y CUPONES ---
+    async function cargarEventos() {
+        const res = await fetch('/api/eventos');
+        listaEventosGlobal = await res.json();
+
+        const selects = [document.getElementById('informeEventoSelect'), document.getElementById('cuponEventoId'), document.getElementById('ventaEventoSelect')];
+        selects.forEach(s => s.innerHTML = '<option value="">Seleccione un evento</option>');
+
+        const divAdmin = document.getElementById('listaEventosAdmin');
+        divAdmin.innerHTML = '';
+
+        listaEventosGlobal.forEach(ev => {
+            selects.forEach(s => s.innerHTML += `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`);
+
+            divAdmin.innerHTML += `
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5>${ev.nombre}</h5>
+                            <p class="mb-1">📅 ${ev.fecha} - ⏰ ${ev.hora} hs</p>
+                            <p class="mb-1"><strong>Gen:</strong> $${ev.precioGeneral} | <strong>Grada:</strong> $${ev.precioGradas}</p>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="editarEvento(${JSON.stringify(ev).replace(/"/g, '&quot;')})">Editar Evento</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function abrirModalEvento() {
+        document.getElementById('evId').value = `EVT-${Date.now()}`;
+        document.getElementById('formEvento').reset();
+        document.getElementById('modalEventoTitulo').textContent = 'Crear Evento';
+        new bootstrap.Modal(document.getElementById('modalEvento')).show();
+    }
+
+    function editarEvento(ev) {
+        document.getElementById('evId').value = ev.id;
+        document.getElementById('evNombre').value = ev.nombre;
+        document.getElementById('evFecha').value = ev.fecha;
+        document.getElementById('evHora').value = ev.hora;
+        document.getElementById('evPrecioGen').value = ev.precioGeneral;
+        document.getElementById('evDispGen').value = ev.dispGen;
+        document.getElementById('evPrecioGrada').value = ev.precioGradas;
+        document.getElementById('evDispGrada').value = ev.dispGrada;
+        document.getElementById('modalEventoTitulo').textContent = 'Editar Evento';
+        new bootstrap.Modal(document.getElementById('modalEvento')).show();
+    }
+
+    async function guardarEvento(e) {
+        e.preventDefault();
+        const evId = document.getElementById('evId').value;
+        const body = {
+            id: evId,
+            nombre: document.getElementById('evNombre').value,
+            fecha: document.getElementById('evFecha').value,
+            hora: document.getElementById('evHora').value,
+            precioGeneral: Number(document.getElementById('evPrecioGen').value),
+            dispGen: Number(document.getElementById('evDispGen').value),
+            precioGradas: Number(document.getElementById('evPrecioGrada').value),
+            dispGrada: Number(document.getElementById('evDispGrada').value)
+        };
+
+        const existe = listaEventosGlobal.some(x => x.id === evId);
+        const url = existe ? `/api/eventos/modificar/${evId}` : '/api/eventos/crear';
+        const method = existe ? 'PUT' : 'POST';
+
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.exito) {
+            bootstrap.Modal.getInstance(document.getElementById('modalEvento')).hide();
+            cargarEventos();
+        } else {
+            alert(data.mensaje);
+        }
+    }
+
+    async function crearCupon(e) {
+        e.preventDefault();
+        const body = {
+            evento_id: document.getElementById('cuponEventoId').value,
+            codigo: document.getElementById('cuponCodigo').value,
+            porcentaje: Number(document.getElementById('cuponPorcentaje').value),
+            monto_fijo: Number(document.getElementById('cuponMonto').value)
+        };
+
+        const res = await fetch('/api/cupones/crear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        alert(data.mensaje);
+        if (data.exito) document.getElementById('formCupon').reset();
+    }
+
+    // --- INFORMES Y DETALLE ---
+    async function cargarInformesDetallados() {
+        const eventoId = document.getElementById('informeEventoSelect').value;
+        if (!eventoId) return;
+
+        // Consolidado
+        const resInf = await fetch(`/api/informe/${eventoId}`);
+        const inf = await resInf.json();
+        const resDiv = document.getElementById('resumenInforme');
+        resDiv.innerHTML = `
+            <strong>Resumen Consolidado:</strong> Entradas Vendidas: ${inf.vendidas} | Asistentes Reales: ${inf.asistentes} | 
+            Recaudación Total: $${inf.recaudado.toFixed(2)} | Total Descuentos: $${inf.montoDescuento.toFixed(2)}
+        `;
+        resDiv.classList.remove('hidden');
+
+        // Detalle de Ventas
+        const resV = await fetch(`/api/informe/ventas-detalle/${eventoId}`);
+        const ventas = await resV.json();
+        const tVentas = document.getElementById('tablaDetalleVentas');
+        tVentas.innerHTML = '';
+        ventas.forEach(v => {
+            tVentas.innerHTML += `
+                <tr>
+                    <td>${v.id}</td>
+                    <td>${v.nombre} ${v.apellido}</td>
+                    <td>${v.codigoAsiento}</td>
+                    <td>$${Number(v.monto_total).toFixed(2)}</td>
+                    <td>$${Number(v.monto_descuento || 0).toFixed(2)}</td>
+                    <td>${v.metodo_pago || 'N/A'}</td>
+                    <td>${v.vendedor || 'Sistema'}</td>
+                    <td>${new Date(v.fechaCompra).toLocaleString()}</td>
+                    <td><button class="btn btn-sm btn-danger" onclick="cancelarVenta(${v.id})">Cancelar (48hs)</button></td>
+                </tr>
+            `;
+        });
+
+        // Detalle Escaneos
+        const resE = await fetch(`/api/informe/escaneos-detalle/${eventoId}`);
+        const escaneos = await resE.json();
+        const tEsc = document.getElementById('tablaDetalleEscaneos');
+        tEsc.innerHTML = '';
+        escaneos.forEach(e => {
+            tEsc.innerHTML += `
+                <tr>
+                    <td>${e.codigoAsiento}</td>
+                    <td>${e.tipoZona}</td>
+                    <td>${e.nombre || ''} ${e.apellido || ''}</td>
+                    <td>${e.operario_escaneo || 'Sin Registro'}</td>
+                    <td>${e.fecha_escaneo ? new Date(e.fecha_escaneo).toLocaleString() : 'N/A'}</td>
+                </tr>
+            `;
+        });
+    }
+
+    async function enviarInformeEmailManual() {
+        const eventoId = document.getElementById('informeEventoSelect').value;
+        if (!eventoId) return alert('Seleccione un evento primero');
+        const res = await fetch('/api/informe/enviar-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ eventoId })
+        });
+        const data = await res.json();
+        alert(data.mensaje);
+    }
+
+    async function cancelarVenta(ventaId) {
+        if (!confirm('¿Desea cancelar esta venta? (Permitido hasta 48hs desúes de la compra)')) return;
+        const res = await fetch(`/api/ventas/cancelar/${ventaId}`, { method: 'DELETE' });
+        const data = await res.json();
+        alert(data.mensaje);
+        if (data.exito) cargarInformesDetallados();
+    }
+
+    // --- PROCESO DE VENTA ---
+    async function cargarMapaAsientos() {
+        const eventoId = document.getElementById('ventaEventoSelect').value;
+        if (!eventoId) return;
+
+        // Cargar asientos
+        const resA = await fetch(`/api/eventos/${eventoId}/asientos`);
+        asientosEventoActual = await resA.json();
+
+        // Cargar cupones
+        const resC = await fetch(`/api/cupones/evento/${eventoId}`);
+        cuponesEventoActual = await resC.json();
+
+        const selectC = document.getElementById('ventaCuponSelect');
+        selectC.innerHTML = '<option value="">Sin cupón</option>';
+        cuponesEventoActual.forEach(c => {
+            const descTxt = c.porcentaje > 0 ? `${c.porcentaje}% OFF` : `$${c.monto_fijo} OFF`;
+            selectC.innerHTML += `<option value="${c.codigo}">${c.codigo} (${descTxt})</option>`;
+        });
+
+        const container = document.getElementById('mapaAsientos');
+        container.innerHTML = '';
+
+        asientosEventoActual.forEach(a => {
+            const div = document.createElement('div');
+            div.className = `asiento ${a.vendido ? 'ocupado' : 'disponible'}`;
+            div.textContent = a.codigoAsiento;
+            if (!a.vendido) {
+                div.onclick = () => seleccionarAsiento(div, a);
             }
+            container.appendChild(div);
+        });
+    }
+
+    let asientoSeleccionado = null;
+
+    function seleccionarAsiento(elemento, asiento) {
+        document.querySelectorAll('.asiento.seleccionado').forEach(el => el.classList.remove('seleccionado'));
+        elemento.classList.add('seleccionado');
+        asientoSeleccionado = asiento;
+        document.getElementById('asientoSeleccionadoId').value = asiento.id;
+        calcularPrecioFinal();
+    }
+
+    function calcularPrecioFinal() {
+        if (!asientoSeleccionado) return;
+        let total = asientoSeleccionado.precio;
+        let descuentoAplicado = 0;
+
+        const codCupon = document.getElementById('ventaCuponSelect').value;
+        const cupon = cuponesEventoActual.find(c => c.codigo === codCupon);
+
+        if (cupon) {
+            if (cupon.porcentaje > 0) descuentoAplicado = total * (cupon.porcentaje / 100);
+            else if (cupon.monto_fijo > 0) descuentoAplicado = cupon.monto_fijo;
         }
 
-        async function abrirModalEditar(ventaDataRaw) {
-            const v = typeof ventaDataRaw === 'string' ? JSON.parse(ventaDataRaw) : ventaDataRaw;
+        total = Math.max(0, total - descuentoAplicado);
+        document.getElementById('lblTotalPagar').textContent = `$${total.toFixed(2)}`;
+    }
 
-            document.getElementById('editVentaId').value = v.id;
-            document.getElementById('editEventoId').value = v.eventoId;
-            document.getElementById('editNombre').value = v.nombre;
-            document.getElementById('editApellido').value = v.apellido;
-            document.getElementById('editContacto').value = v.contacto;
-            document.getElementById('editEmail').value = v.email;
+    async function procesarVenta(e) {
+        e.preventDefault();
+        if (!asientoSeleccionado) return alert('Por favor, selecciona un asiento del mapa');
 
-            await cargarAsientosDisponiblesSelect(v.eventoId);
-            document.getElementById('modalEditarVenta').style.display = 'block';
+        let total = asientoSeleccionado.precio;
+        let descuentoAplicado = 0;
+        const codCupon = document.getElementById('ventaCuponSelect').value;
+        const cupon = cuponesEventoActual.find(c => c.codigo === codCupon);
+        if (cupon) {
+            if (cupon.porcentaje > 0) descuentoAplicado = total * (cupon.porcentaje / 100);
+            else if (cupon.monto_fijo > 0) descuentoAplicado = cupon.monto_fijo;
         }
 
-        function cerrarModalEditar() {
-            document.getElementById('modalEditarVenta').style.display = 'none';
-        }
+        const body = {
+            evento_id: document.getElementById('ventaEventoSelect').value,
+            asiento_id: asientoSeleccionado.id,
+            nombre: document.getElementById('vNombre').value,
+            apellido: document.getElementById('vApellido').value,
+            contacto: document.getElementById('vContacto').value,
+            email: document.getElementById('vEmail').value,
+            metodo_pago: document.getElementById('vMetodoPago').value,
+            vendedor: document.getElementById('vVendedor').value,
+            monto_total: Math.max(0, total - descuentoAplicado),
+            monto_descuento: descuentoAplicado
+        };
 
-        async function cargarAsientosDisponiblesSelect(eventoId) {
-            const sel = document.getElementById('selNuevoAsiento');
-            sel.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
+        const res = await fetch('/api/ventas/procesar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
 
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                if (!res.ok) return;
-                const asientos = await res.json();
-
-                if (Array.isArray(asientos)) {
-                    const disponibles = asientos.filter(a => a.vendido === 0 && a.habilitado !== 0);
-                    disponibles.forEach(a => {
-                        sel.innerHTML += `<option value="${a.id}">${a.codigoAsiento} ($${a.precio})</option>`;
-                    });
-                }
-            } catch (e) {
-                console.error("Error al cargar asientos disponibles:", e);
-            }
-        }
-
-        async function guardarCambiosVenta() {
-            const ventaId = document.getElementById('editVentaId').value;
-            const eventoId = document.getElementById('editEventoId').value;
-            const nuevoAsientoId = document.getElementById('selNuevoAsiento').value;
-
-            const body = {
-                ventaId: ventaId,
-                nombre: document.getElementById('editNombre').value.trim(),
-                apellido: document.getElementById('editApellido').value.trim(),
-                contacto: document.getElementById('editContacto').value.trim(),
-                email: document.getElementById('editEmail').value.trim(),
-                nuevoAsientoId: nuevoAsientoId || null
-            };
-
-            if (!body.nombre || !body.apellido || !body.contacto) {
-                return alert('Nombre, Apellido y Teléfono son obligatorios.');
-            }
-
-            try {
-                const res = await fetch('/api/ventas/editar', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-
-                const data = await res.json();
-                alert(data.mensaje || 'Venta actualizada correctamente');
-
-                if (res.ok || data.exito) {
-                    cerrarModalEditar();
-                    cargarTablaDetalleVentas(eventoId);
-                    if (typeof cargarMapaAsientos === 'function') cargarMapaAsientos();
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Error al intentar guardar los cambios.');
-            }
-        }
-
-        function actualizarListaVentas() {
-            const eventoId = document.getElementById('selEventoInforme').value;
-            if (eventoId) {
-                cargarTablaDetalleVentas(eventoId);
-            } else {
-                alert('Selecciona un evento primero.');
-            }
-        }
-
-        function enviarWhatsApp(telefono, cliente, asiento, ventaId, sig) {
-            if (!telefono) return alert('El cliente no tiene registrado número de teléfono.');
-            
-            let numLimpio = telefono.replace(/\D/g, '');
-
-            if (numLimpio.startsWith('0')) {
-                numLimpio = numLimpio.substring(1);
-            }
-
-            if (!numLimpio.startsWith('549')) {
-                if (numLimpio.startsWith('54')) {
-                    numLimpio = '549' + numLimpio.substring(2);
-                } else {
-                    numLimpio = '549' + numLimpio;
-                }
-            }
-
-            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}&sig=${sig}`;
-            const mensaje = encodeURIComponent(
-                `Hola ${cliente}, ¡gracias por tu compra!\n\n` +
-                `🎫 *Tu Entrada Digital*\n` +
-                `📍 Asiento: *${asiento}*\n\n` +
-                `Accede a tu código QR con este enlace seguro:\n${urlEntrada}`
-            );
-
-            window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
-        }
-
-        async function enviarEmailTicket(email, cliente, ventaId) {
-            if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
-
-            try {
-                const respuesta = await fetch('/api/entradas/enviar-email', {
+        const data = await res.json();
+        if (data.exito) {
+            alert(`✅ Venta procesada con éxito.\nID Entrada: ${data.ventaId}`);
+            if (body.email) {
+                fetch('/api/entradas/enviar-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+                    body: JSON.stringify({ ventaId: data.ventaId, hostOrigin: window.location.origin })
                 });
-
-                const data = await respuesta.json();
-
-                if (respuesta.ok && data.exito) {
-                    alert(`✅ ${data.mensaje}`);
-                } else {
-                    alert(`⚠️ Error al enviar correo: ${data.mensaje || 'Respuesta no válida del servidor'}`);
-                }
-            } catch (err) {
-                console.error('Error enviando email:', err);
-                alert('❌ Error de conexión al intentar enviar el correo.');
             }
+            document.getElementById('formProcesarVenta').reset();
+            asientoSeleccionado = null;
+            cargarMapaAsientos();
+        } else {
+            alert(data.mensaje);
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const sesionExistente = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-            if (sesionExistente && sesionExistente.usuario) {
-                establecerSesion(sesionExistente.usuario, sesionExistente.tipo);
-            }
-        });
-    </script>
+    }
+</script>
 </body>
 </html>
 
