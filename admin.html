@@ -5,16 +5,77 @@
     <title>Dashboard de Ventas e Historial</title>
     <!-- Control de Acceso por Rol -->
     <script>
-        (function verificarAcceso() {
-            const usuario = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-            const rolesPermitidos = ['administrador', 'superusuario'];
+    async function cargarDashboard() {
+        // Recupera la sesión guardada del usuario logueado
+        const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
 
-            if (!usuario.rol || !rolesPermitidos.includes(usuario.rol.toLowerCase())) {
-                alert('Acceso denegado: No tienes permisos para ver este reporte.');
-                window.location.href = '/index_5.html'; // Redirige a la página principal
+        if (!usuarioSesion.id) {
+            alert('Debes iniciar sesión para ver este panel.');
+            window.location.href = '/index.html';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/eventos/EV-101/historial', {
+                headers: { 
+                    'X-User-Id': usuarioSesion.id 
+                }
+            });
+
+            if (res.status === 403 || res.status === 401) {
+                const err = await res.json();
+                alert(err.error || 'Acceso restringido.');
+                window.location.href = '/index.html';
+                return;
             }
-        })();
-    </script>
+
+            const data = await res.json();
+            document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre}`;
+            document.getElementById('recaudado').innerText = `$${data.recaudado.toLocaleString()} ARS`;
+            document.getElementById('totalVentas').innerText = data.totalVentas;
+            document.getElementById('asistencia').innerText = data.asistencia;
+
+            const tbody = document.getElementById('tablaVentas');
+            tbody.innerHTML = '';
+            data.historialVentas.forEach(v => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${v.idReserva}</td>
+                        <td>${v.fecha}</td>
+                        <td>${v.cliente}</td>
+                        <td>${v.email}</td>
+                        <td><strong>${v.asiento}</strong></td>
+                        <td>${v.metodoPago}</td>
+                        <td>$${v.monto}</td>
+                        <td><span class="badge badge-success">${v.estado}</span></td>
+                    </tr>`;
+            });
+        } catch (e) {
+            console.error("Error al cargar el dashboard:", e);
+        }
+    }
+
+    async function enviarEmail() {
+        const email = prompt("Ingresa el correo de destino para enviar el informe:");
+        if (!email) return;
+
+        const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
+
+        const res = await fetch('/api/eventos/EV-101/enviar-email', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-User-Id': usuarioSesion.id
+            },
+            body: JSON.stringify({ emailDestino: email })
+        });
+        const data = await res.json();
+        alert(data.mensaje || data.error);
+    }
+
+    cargarDashboard();
+</script>
+
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #0f172a; margin: 0; padding: 30px; }
         .container { max-width: 1200px; margin: 0 auto; }
