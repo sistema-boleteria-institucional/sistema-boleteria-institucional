@@ -3,766 +3,613 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Boletería e Informes</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Sistema de Gestión de Eventos y Entradas</title>
     <style>
-        .hidden { display: none !important; }
-        .asiento { width: 40px; height: 40px; margin: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; border-radius: 4px; }
-        .asiento.disponible { background-color: #198754; color: white; }
-        .asiento.ocupado { background-color: #dc3545; color: white; cursor: not-allowed; }
-        .asiento.seleccionado { background-color: #ffc107; color: black; font-weight: bold; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #334155; }
+        h1 { color: #38bdf8; margin-bottom: 5px; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn { padding: 10px 20px; background-color: #1e293b; color: #94a3b8; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: all 0.3s; }
+        .tab-btn.active { background-color: #0284c7; color: #ffffff; }
+
+        .tab-content { display: none; background: #1e293b; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .tab-content.active { display: block; }
+
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #cbd5e1; }
+        input, select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #334155; background-color: #0f172a; color: #ffffff; }
+        
+        .btn-primary { background-color: #0284c7; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        .btn-primary:hover { background-color: #0369a1; }
+
+        /* Mapa de asientos */
+        .stage { background: #334155; color: #94a3b8; text-align: center; padding: 10px; border-radius: 6px; margin-bottom: 20px; font-weight: bold; letter-spacing: 2px; }
+        .zone-title { margin: 15px 0 10px; color: #38bdf8; font-size: 1.1em; border-bottom: 1px solid #334155; padding-bottom: 5px; }
+        
+        .grid-general { display: grid; grid-template-columns: repeat(14, 1fr); gap: 6px; margin-bottom: 20px; }
+        .grid-gradas { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; margin-bottom: 20px; }
+
+        .seat { aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: bold; cursor: pointer; user-select: none; }
+        .seat.libre { background-color: #22c55e; color: #ffffff; }
+        .seat.ocupado { background-color: #ef4444; color: #ffffff; cursor: not-allowed; }
+        .seat.seleccionado { background-color: #eab308; color: #000000; }
+
+        .legend { display: flex; gap: 20px; margin-bottom: 20px; justify-content: center; background: #0f172a; padding: 10px; border-radius: 6px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        .legend-box { width: 16px; height: 16px; border-radius: 3px; }
+
+        .ticket-box { background: #0f172a; padding: 15px; border-radius: 6px; margin-top: 15px; border: 1px dashed #0284c7; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #334155; padding: 10px; text-align: left; }
+        th { background-color: #0f172a; color: #38bdf8; }
     </style>
 </head>
-<body class="bg-light">
+<body>
 
-<div class="container py-4">
+<div class="container">
+    <header>
+        <h1>Panel de Gestión de Eventos</h1>
+        <p>Reserva y Control de Localidades</p>
+    </header>
 
-    <!-- BARRA DE NAVEGACIÓN Y LOGIN -->
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-        <h2>🎟️ Sistema de Boletería</h2>
-        <div id="sesionInfo">
-            <span id="userBadge" class="badge bg-secondary me-2 hidden"></span>
-            <button id="btnLoginModal" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalLogin">Iniciar Sesión</button>
-            <button id="btnLogout" class="btn btn-outline-danger hidden" onclick="cerrarSesion()">Cerrar Sesión</button>
-        </div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openTab('tabVenta')">Venta de Entradas</button>
+        <button class="tab-btn" onclick="openTab('tabCrearEvento')">Crear / Editar Evento</button>
+        <button class="tab-btn" onclick="openTab('tabCupones')">Cupones</button>
+        <button class="tab-btn" onclick="openTab('tabInformes')">Informes</button>
     </div>
 
-    <!-- PANELES POR ROL -->
-    
-    <!-- PANEL SUPERUSUARIO -->
-    <div id="panelSuperusuario" class="card mb-4 border-danger hidden">
-        <div class="card-header bg-danger text-white">
-            <h5 class="mb-0">⚙️ Panel de Superusuario</h5>
-        </div>
-        <div class="card-body">
-            <!-- Configuración de Correo General -->
-            <h6>Correo Predeterminado para Informes Automáticos</h6>
-            <div class="row g-2 mb-4">
-                <div class="col-md-6">
-                    <input type="email" id="superEmailInforme" class="form-control" placeholder="ejemplo@correo.com">
+    <!-- PESTAÑA VENTA -->
+    <div id="tabVenta" class="tab-content active">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+            <div>
+                <div class="form-group">
+                    <label>Seleccionar Evento:</label>
+                    <select id="selEventoVenta" onchange="cargarMapaAsientos()"></select>
                 </div>
-                <div class="col-md-3">
-                    <button class="btn btn-danger w-100" onclick="guardarEmailInforme()">Guardar Correo</button>
+
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-box" style="background:#22c55e;"></div> Libre</div>
+                    <div class="legend-item"><div class="legend-box" style="background:#ef4444;"></div> Ocupado</div>
+                    <div class="legend-item"><div class="legend-box" style="background:#eab308;"></div> Seleccionado</div>
                 </div>
+
+                <div class="stage">ESCENARIO</div>
+
+                <div class="zone-title">Zona General</div>
+                <div id="gridGeneral" class="grid-general"></div>
+
+                <div class="zone-title">Zona Gradas</div>
+                <div id="gridGradas" class="grid-gradas"></div>
             </div>
 
-            <hr>
-
-            <!-- Gestión de Usuarios -->
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6>Gestión de Usuarios del Sistema</h6>
-                <button class="btn btn-sm btn-success" onclick="abrirModalUsuario()">+ Nuevo Usuario</button>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Usuario</th>
-                            <th>Tipo</th>
-                            <th>Identificación</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaUsuariosBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- PANEL ADMINISTRADOR -->
-    <div id="panelAdmin" class="card mb-4 border-primary hidden">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">🛠️ Panel de Administración</h5>
-        </div>
-        <div class="card-body">
-            <ul class="nav nav-tabs" id="adminTabs" role="tablist">
-                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabEventos">Eventos</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCupones">Cupones</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabInformes">Informes y Detalle</button></li>
-            </ul>
-
-            <div class="tab-content pt-3">
-                <!-- Tab Eventos -->
-                <div class="tab-pane fade show active" id="tabEventos">
-                    <button class="btn btn-primary mb-3" onclick="abrirModalEvento()">+ Crear Nuevo Evento</button>
-                    <div id="listaEventosAdmin" class="row g-3"></div>
-                </div>
-
-                <!-- Tab Cupones -->
-                <div class="tab-pane fade" id="tabCupones">
-                    <form id="formCupon" onsubmit="crearCupon(event)" class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label">Evento</label>
-                            <select id="cuponEventoId" class="form-select" required></select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Código Cupón</label>
-                            <input type="text" id="cuponCodigo" class="form-control" placeholder="EJ: PROMO10" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">% Descuento</label>
-                            <input type="number" id="cuponPorcentaje" class="form-control" min="0" max="100" value="0">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Monto Fijo ($)</label>
-                            <input type="number" id="cuponMonto" class="form-control" min="0" value="0">
-                        </div>
-                        <div class="col-md-2 align-self-end">
-                            <button type="submit" class="btn btn-success w-100">Crear Cupón</button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Tab Informes -->
-                <div class="tab-pane fade" id="tabInformes">
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Seleccionar Evento para Ver Informe</label>
-                            <select id="informeEventoSelect" class="form-select" onchange="cargarInformesDetallados()"></select>
-                        </div>
-                        <div class="col-md-6 align-self-end">
-                            <button class="btn btn-outline-primary" onclick="enviarInformeEmailManual()">📧 Enviar Informe por Email</button>
-                        </div>
-                    </div>
-
-                    <!-- Consolidado -->
-                    <div id="resumenInforme" class="alert alert-info hidden"></div>
-
-                    <!-- Detalle de Ventas -->
-                    <h6 class="mt-4">Detalle de Ventas (Vendedor, Pago y Cancelaciones)</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Cliente</th>
-                                    <th>Asiento</th>
-                                    <th>Monto Total</th>
-                                    <th>Descuento</th>
-                                    <th>Método Pago</th>
-                                    <th>Vendedor</th>
-                                    <th>Fecha</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaDetalleVentas"></tbody>
-                        </table>
-                    </div>
-
-                    <!-- Detalle de Asistencias -->
-                    <h6 class="mt-4">Detalle de Escaneos / Asistencia en Puerta</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered">
-                            <thead>
-                                <tr>
-                                    <th>Asiento</th>
-                                    <th>Zona</th>
-                                    <th>Cliente</th>
-                                    <th>Operario Escaneo</th>
-                                    <th>Fecha / Hora Escaneo</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tablaDetalleEscaneos"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- SECCIÓN PÚBLICA / VENDEDOR: PROCESO DE VENTA -->
-    <div id="seccionVenta" class="card">
-        <div class="card-header bg-dark text-white">
-            <h5 class="mb-0">🎟️ Venta de Entradas</h5>
-        </div>
-        <div class="card-body">
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label class="form-label">Seleccionar Evento</label>
-                    <select id="ventaEventoSelect" class="form-select" onchange="cargarMapaAsientos()"></select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Cupón de Descuento (Opcional)</label>
-                    <select id="ventaCuponSelect" class="form-select" onchange="calcularPrecioFinal()"></select>
-                </div>
-            </div>
-
-            <!-- Mapa de Asientos -->
-            <div id="mapaAsientos" class="p-3 bg-light border rounded mb-3 text-center"></div>
-
-            <!-- Formulario Compra -->
-            <form id="formProcesarVenta" onsubmit="procesarVenta(event)">
-                <input type="hidden" id="asientoSeleccionadoId">
-                <div class="row g-3">
-                    <div class="col-md-3"><input type="text" id="vNombre" class="form-control" placeholder="Nombre" required></div>
-                    <div class="col-md-3"><input type="text" id="vApellido" class="form-control" placeholder="Apellido" required></div>
-                    <div class="col-md-3"><input type="text" id="vContacto" class="form-control" placeholder="Teléfono" required></div>
-                    <div class="col-md-3"><input type="email" id="vEmail" class="form-control" placeholder="Email"></div>
+            <div>
+                <div class="ticket-box">
+                    <h3>Detalle de Reserva</h3>
+                    <br>
+                    <div class="form-group"><label>Asiento Seleccionado:</label><input type="text" id="resAsiento" readonly placeholder="Ninguno"></div>
+                    <div class="form-group"><label>Zona:</label><input type="text" id="resZona" readonly></div>
+                    <div class="form-group"><label>Precio Base ($):</label><input type="text" id="resPrecio" readonly></div>
                     
-                    <div class="col-md-4">
-                        <label class="form-label">Método de Pago</label>
-                        <select id="vMetodoPago" class="form-select" required>
+                    <div class="form-group">
+                        <label>Cupón de Descuento:</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" id="resCupon" placeholder="CODIGO">
+                            <button type="button" style="width: auto; padding: 0 10px;" class="btn-primary" onclick="aplicarCupon()">Aplicar</button>
+                        </div>
+                    </div>
+                    <div class="form-group"><label>Monto Final ($):</label><input type="text" id="resMontoFinal" readonly></div>
+
+                    <hr style="border-color:#334155; margin: 15px 0;">
+
+                    <div class="form-group"><label>Nombre Cliente:</label><input type="text" id="resCliente"></div>
+                    <div class="form-group"><label>DNI:</label><input type="text" id="resDni"></div>
+                    <div class="form-group"><label>Teléfono:</label><input type="text" id="resTel"></div>
+                    <div class="form-group">
+                        <label>Método de Pago:</label>
+                        <select id="resMetodo">
                             <option value="Efectivo">Efectivo</option>
                             <option value="Transferencia">Transferencia</option>
-                            <option value="Tarjeta">Tarjeta</option>
+                            <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Vendedor / Operario</label>
-                        <input type="text" id="vVendedor" class="form-control" placeholder="Nombre vendedor" required>
+                    <div class="form-group"><label>Nº Transacción / Ref:</label><input type="text" id="resTransaccion"></div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="resPagado" checked style="width:auto;"> ¿Marcado como Pagado?</label>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Total a Pagar</label>
-                        <h4 id="lblTotalPagar" class="text-success">$0.00</h4>
-                    </div>
+
+                    <button class="btn-primary" onclick="confirmarVenta()">Confirmar Reserva / Venta</button>
+                    <button id="btnLiberar" class="btn-primary" style="background-color:#ef4444; margin-top:10px; display:none;" onclick="liberarAsiento()">Liberar Asiento</button>
                 </div>
-                <button type="submit" class="btn btn-success mt-3 w-100">Confirmar y Emitir Entrada</button>
-            </form>
-        </div>
-    </div>
-
-</div>
-
-<!-- MODALES -->
-
-<!-- Modal Login -->
-<div class="modal fade" id="modalLogin" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5>Iniciar Sesión</h5></div>
-            <div class="modal-body">
-                <form id="formLogin" onsubmit="ejecutarLogin(event)">
-                    <div class="mb-3"><label>Usuario</label><input type="text" id="loginUsuario" class="form-control" required></div>
-                    <div class="mb-3"><label>Contraseña</label><input type="password" id="loginClave" class="form-control" required></div>
-                    <button type="submit" class="btn btn-primary w-100">Ingresar</button>
-                </form>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Modal Crear/Editar Usuario -->
-<div class="modal fade" id="modalUsuario" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 id="modalUsuarioTitulo">Usuario</h5></div>
-            <div class="modal-body">
-                <form id="formUsuario" onsubmit="guardarUsuario(event)">
-                    <input type="hidden" id="usrId">
-                    <div class="mb-3"><label>Usuario</label><input type="text" id="usrUsuario" class="form-control" required></div>
-                    <div class="mb-3"><label>Contraseña</label><input type="password" id="usrClave" class="form-control" required></div>
-                    <div class="mb-3">
-                        <label>Tipo / Rol</label>
-                        <select id="usrTipo" class="form-select" required>
-                            <option value="vendedor">Vendedor / Operario</option>
-                            <option value="admin">Administrador</option>
-                            <option value="super">Superusuario</option>
-                        </select>
-                    </div>
-                    <div class="mb-3"><label>Identificación</label><input type="text" id="usrIdentificacion" class="form-control" required></div>
-                    <button type="submit" class="btn btn-danger w-100">Guardar Usuario</button>
-                </form>
+    <!-- PESTAÑA CREAR / EDITAR EVENTO -->
+    <div id="tabCrearEvento" class="tab-content">
+        <h3>Crear / Configurar Evento</h3>
+        <div style="max-width: 500px;">
+            <div class="form-group">
+                <label>Seleccionar Evento para Editar (Opcional):</label>
+                <select id="selEventoEditar" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cargarDatosEventoParaEditar()">
+                    <option value="">-- Crear Nuevo Evento --</option>
+                </select>
+            </div>
+
+            <hr style="border-color: #334155; margin: 15px 0;">
+
+            <div class="form-group"><label>ID Evento (Único):</label><input type="text" id="evId" placeholder="EV-2026"></div>
+            <div class="form-group"><label>Nombre Evento:</label><input type="text" id="evNombre" placeholder="Festival de Música"></div>
+            <div class="form-group"><label>Fecha:</label><input type="date" id="evFecha"></div>
+            <div class="form-group"><label>Hora:</label><input type="time" id="evHora"></div>
+            
+            <hr style="border-color: #334155; margin: 15px 0;">
+
+            <div class="form-group">
+                <label>Precio General ($):</label>
+                <input type="number" id="evPrecioGen" value="1500" min="0">
+            </div>
+            <div class="form-group" id="grpDispGen">
+                <label>Cantidad Asientos General (Máximo 112):</label>
+                <input type="number" id="evDispGen" value="112" min="1" max="112">
+            </div>
+
+            <hr style="border-color: #334155; margin: 15px 0;">
+
+            <div class="form-group">
+                <label>Precio Gradas ($):</label>
+                <input type="number" id="evPrecioGrada" value="3000" min="0">
+            </div>
+            <div class="form-group" id="grpDispGrada">
+                <label>Cantidad Asientos Gradas (Máximo 24):</label>
+                <input type="number" id="evDispGrada" value="24" min="1" max="24">
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button id="btnGuardarEvento" class="btn-primary" onclick="crearEvento()">Guardar Evento Nuevo</button>
+                <button id="btnModificarEvento" class="btn-primary" style="background: #eab308; display: none;" onclick="modificarEvento()">Guardar Cambios Evento</button>
+                <button id="btnCancelarEdicionEv" class="btn-primary" style="background: #475569; display: none;" onclick="limpiarFormularioEvento()">Limpiar / Nuevo</button>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Modal Revelar Contraseña -->
-<div class="modal fade" id="modalRevelarClave" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5>Confirmar Identidad de Superusuario</h5></div>
-            <div class="modal-body">
-                <p>Ingrese su clave de Superusuario para revelar la contraseña requerida:</p>
-                <input type="password" id="claveSuperConfirmar" class="form-control mb-3" placeholder="Su clave">
-                <button class="btn btn-danger w-100" onclick="confirmarRevelarClave()">Revelar Contraseña</button>
-                <div id="resultadoClaveRevelada" class="alert alert-success mt-3 hidden"></div>
+    <!-- PESTAÑA CUPONES -->
+    <div id="tabCupones" class="tab-content">
+        <h3>Crear Cupón de Descuento</h3>
+        <div style="max-width: 500px;">
+            <div class="form-group">
+                <label>Evento:</label>
+                <select id="cupEventoId"></select>
             </div>
+            <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO10"></div>
+            <div class="form-group"><label>Porcentaje Descuento (%):</label><input type="number" id="cupPorcentaje" placeholder="10"></div>
+            <div class="form-group"><label>Límite Usos:</label><input type="number" id="cupMax" value="10"></div>
+            <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
         </div>
+    </div>
+
+    <!-- PESTAÑA INFORMES -->
+    <div id="tabInformes" class="tab-content">
+        <h3>Informes y Reportes</h3>
+        <div class="form-group" style="max-width:300px;">
+            <label>Seleccionar Evento:</label>
+            <select id="selEventoInforme" onchange="cargarInforme()"></select>
+        </div>
+
+        <div id="resumenInforme" style="margin-bottom: 20px; font-size: 1.1em;"></div>
+
+        <table id="tablaVentas">
+            <thead>
+                <tr>
+                    <th>Asiento</th>
+                    <th>Zona</th>
+                    <th>Cliente</th>
+                    <th>DNI</th>
+                    <th>Teléfono</th>
+                    <th>Método Pago</th>
+                    <th>Transacción</th>
+                    <th>Monto</th>
+                    <th>Estado Pago</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
     </div>
 </div>
 
-<!-- Modal Crear/Editar Evento -->
-<div class="modal fade" id="modalEvento" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 id="modalEventoTitulo">Evento</h5></div>
-            <div class="modal-body">
-                <form id="formEvento" onsubmit="guardarEvento(event)">
-                    <input type="hidden" id="evId">
-                    <div class="mb-2"><label>Nombre</label><input type="text" id="evNombre" class="form-control" required></div>
-                    <div class="mb-2"><label>Fecha</label><input type="date" id="evFecha" class="form-control" required></div>
-                    <div class="mb-2"><label>Hora</label><input type="time" id="evHora" class="form-control" required></div>
-                    <div class="mb-2"><label>Precio General</label><input type="number" id="evPrecioGen" class="form-control" required></div>
-                    <div class="mb-2"><label>Disp. General</label><input type="number" id="evDispGen" class="form-control" value="112" required></div>
-                    <div class="mb-2"><label>Precio Gradas</label><input type="number" id="evPrecioGrada" class="form-control" required></div>
-                    <div class="mb-2"><label>Disp. Gradas</label><input type="number" id="evDispGrada" class="form-control" value="24" required></div>
-                    <button type="submit" class="btn btn-primary w-100 mt-2">Guardar Evento</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    let usuarioActual = null;
-    let usuarioTargetClave = null;
-    let listaEventosGlobal = [];
-    let asientosEventoActual = [];
-    let cuponesEventoActual = [];
+    let asientoSeleccionado = null;
+    let descuentoAplicado = 0;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        cargarEventos();
-    });
+    function openTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        event.currentTarget.classList.add('active');
 
-    // --- AUTENTICACIÓN Y ROLES ---
-    async function ejecutarLogin(e) {
-        e.preventDefault();
-        const usuario = document.getElementById('loginUsuario').value;
-        const clave = document.getElementById('loginClave').value;
+        if(tabId === 'tabVenta') cargarEventosEnSelect();
+        if(tabId === 'tabCrearEvento') cargarEventosEnSelect();
+        if(tabId === 'tabCupones') cargarEventosEnSelect();
+        if(tabId === 'tabInformes') cargarEventosEnSelect();
+    }
 
-        const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario, clave })
-        });
-        const data = await res.json();
+    async function cargarEventosEnSelect() {
+        try {
+            const res = await fetch('/api/eventos');
+            if(!res.ok) return;
+            const eventos = await res.json();
+            
+            const selVenta = document.getElementById('selEventoVenta');
+            const selInf = document.getElementById('selEventoInforme');
+            const selCup = document.getElementById('cupEventoId');
+            const selEdit = document.getElementById('selEventoEditar');
+            
+            selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+            selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+            if (selCup) selCup.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+            if (selEdit) selEdit.innerHTML = '<option value="">-- Crear Nuevo Evento --</option>';
 
-        if (data.exito) {
-            usuarioActual = data;
-            document.getElementById('vVendedor').value = data.usuario;
-            actualizarInterfazRol();
-            bootstrap.Modal.getInstance(document.getElementById('modalLogin')).hide();
-        } else {
-            alert(data.mensaje);
+            if(Array.isArray(eventos)){
+                eventos.forEach(ev => {
+                    const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
+                    selVenta.innerHTML += opt;
+                    selInf.innerHTML += opt;
+                    if (selCup) selCup.innerHTML += opt;
+                    if (selEdit) selEdit.innerHTML += opt;
+                });
+            }
+        } catch (err) {
+            console.error("Error al obtener eventos:", err);
         }
     }
 
-    function cerrarSesion() {
-        usuarioActual = null;
-        actualizarInterfazRol();
-    }
-
-    function actualizarInterfazRol() {
-        const badge = document.getElementById('userBadge');
-        const btnLogin = document.getElementById('btnLoginModal');
-        const btnLogout = document.getElementById('btnLogout');
-        const panelSuper = document.getElementById('panelSuperusuario');
-        const panelAdmin = document.getElementById('panelAdmin');
-
-        panelSuper.classList.add('hidden');
-        panelAdmin.classList.add('hidden');
-
-        if (!usuarioActual) {
-            badge.classList.add('hidden');
-            btnLogin.classList.remove('hidden');
-            btnLogout.classList.add('hidden');
+    async function cargarDatosEventoParaEditar() {
+        const id = document.getElementById('selEventoEditar').value;
+        if (!id) {
+            limpiarFormularioEvento();
             return;
         }
 
-        badge.textContent = `${usuarioActual.usuario} (${usuarioActual.tipo.toUpperCase()})`;
-        badge.classList.remove('hidden');
-        btnLogin.classList.add('hidden');
-        btnLogout.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/eventos');
+            const eventos = await res.json();
+            const ev = eventos.find(x => x.id === id);
 
-        if (usuarioActual.tipo === 'super') {
-            panelSuper.classList.remove('hidden');
-            panelAdmin.classList.remove('hidden');
-            cargarUsuariosSuper();
-        } else if (usuarioActual.tipo === 'admin') {
-            panelAdmin.classList.remove('hidden');
+            if (ev) {
+                document.getElementById('evId').value = ev.id;
+                document.getElementById('evId').disabled = true;
+                document.getElementById('evNombre').value = ev.nombre;
+                document.getElementById('evFecha').value = ev.fecha;
+                document.getElementById('evHora').value = ev.hora;
+                document.getElementById('evPrecioGen').value = ev.precioGeneral;
+                document.getElementById('evPrecioGrada').value = ev.precioGradas;
+
+                document.getElementById('grpDispGen').style.display = 'none';
+                document.getElementById('grpDispGrada').style.display = 'none';
+
+                document.getElementById('btnGuardarEvento').style.display = 'none';
+                document.getElementById('btnModificarEvento').style.display = 'block';
+                document.getElementById('btnCancelarEdicionEv').style.display = 'block';
+            }
+        } catch (e) {
+            console.error("Error al cargar evento:", e);
         }
     }
 
-    // --- SUPERUSUARIO ---
-    async function cargarUsuariosSuper() {
-        const res = await fetch('/api/super/usuarios');
-        const usuarios = await res.json();
-        const tbody = document.getElementById('tablaUsuariosBody');
-        tbody.innerHTML = '';
+    function limpiarFormularioEvento() {
+        document.getElementById('selEventoEditar').value = '';
+        document.getElementById('evId').value = '';
+        document.getElementById('evId').disabled = false;
+        document.getElementById('evNombre').value = '';
+        document.getElementById('evFecha').value = '';
+        document.getElementById('evHora').value = '';
+        document.getElementById('evPrecioGen').value = '1500';
+        document.getElementById('evDispGen').value = '112';
+        document.getElementById('evPrecioGrada').value = '3000';
+        document.getElementById('evDispGrada').value = '24';
 
-        usuarios.forEach(u => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${u.id}</td>
-                    <td>${u.usuario}</td>
-                    <td><span class="badge bg-info">${u.tipo}</span></td>
-                    <td>${u.identificacion}</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-dark" onclick="solicitarRevelarClave(${u.id})">🔑 Ver Clave</button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="editarUsuario(${JSON.stringify(u).replace(/"/g, '&quot;')})">✏️</button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="eliminarUsuario(${u.id})">🗑️</button>
-                    </td>
-                </tr>
-            `;
-        });
+        document.getElementById('grpDispGen').style.display = 'block';
+        document.getElementById('grpDispGrada').style.display = 'block';
+
+        document.getElementById('btnGuardarEvento').style.display = 'block';
+        document.getElementById('btnModificarEvento').style.display = 'none';
+        document.getElementById('btnCancelarEdicionEv').style.display = 'none';
     }
 
-    async function guardarEmailInforme() {
-        const email = document.getElementById('superEmailInforme').value;
-        const res = await fetch('/api/config/email-informe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-        });
-        const data = await res.json();
-        alert(data.mensaje);
-    }
-
-    function abrirModalUsuario() {
-        document.getElementById('usrId').value = '';
-        document.getElementById('formUsuario').reset();
-        document.getElementById('modalUsuarioTitulo').textContent = 'Crear Usuario';
-        new bootstrap.Modal(document.getElementById('modalUsuario')).show();
-    }
-
-    function editarUsuario(u) {
-        document.getElementById('usrId').value = u.id;
-        document.getElementById('usrUsuario').value = u.usuario;
-        document.getElementById('usrClave').value = '';
-        document.getElementById('usrTipo').value = u.tipo;
-        document.getElementById('usrIdentificacion').value = u.identificacion;
-        document.getElementById('modalUsuarioTitulo').textContent = 'Editar Usuario';
-        new bootstrap.Modal(document.getElementById('modalUsuario')).show();
-    }
-
-    async function guardarUsuario(e) {
-        e.preventDefault();
-        const id = document.getElementById('usrId').value;
+    async function crearEvento() {
         const body = {
-            usuario: document.getElementById('usrUsuario').value,
-            clave: document.getElementById('usrClave').value,
-            tipo: document.getElementById('usrTipo').value,
-            identificacion: document.getElementById('usrIdentificacion').value
-        };
-
-        const url = id ? `/api/usuarios/modificar/${id}` : '/api/usuarios/crear';
-        const method = id ? 'PUT' : 'POST';
-
-        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const data = await res.json();
-        if (data.exito) {
-            bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
-            cargarUsuariosSuper();
-        } else {
-            alert(data.mensaje);
-        }
-    }
-
-    function solicitarRevelarClave(usuarioId) {
-        usuarioTargetClave = usuarioId;
-        document.getElementById('claveSuperConfirmar').value = '';
-        document.getElementById('resultadoClaveRevelada').classList.add('hidden');
-        new bootstrap.Modal(document.getElementById('modalRevelarClave')).show();
-    }
-
-    async function confirmarRevelarClave() {
-        const claveSuper = document.getElementById('claveSuperConfirmar').value;
-        const res = await fetch('/api/super/revelar-clave', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ claveSuper, usuarioIdTarget: usuarioTargetClave })
-        });
-        const data = await res.json();
-        const resDiv = document.getElementById('resultadoClaveRevelada');
-        if (data.exito) {
-            resDiv.textContent = `Contraseña: ${data.clave}`;
-            resDiv.classList.remove('hidden');
-        } else {
-            alert(data.mensaje);
-        }
-    }
-
-    async function eliminarUsuario(id) {
-        if (!confirm('¿Seguro que desea eliminar este usuario?')) return;
-        const res = await fetch(`/api/super/usuarios/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.exito) cargarUsuariosSuper();
-    }
-
-    // --- EVENTOS Y CUPONES ---
-    async function cargarEventos() {
-        const res = await fetch('/api/eventos');
-        listaEventosGlobal = await res.json();
-
-        const selects = [document.getElementById('informeEventoSelect'), document.getElementById('cuponEventoId'), document.getElementById('ventaEventoSelect')];
-        selects.forEach(s => s.innerHTML = '<option value="">Seleccione un evento</option>');
-
-        const divAdmin = document.getElementById('listaEventosAdmin');
-        divAdmin.innerHTML = '';
-
-        listaEventosGlobal.forEach(ev => {
-            selects.forEach(s => s.innerHTML += `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`);
-
-            divAdmin.innerHTML += `
-                <div class="col-md-4">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h5>${ev.nombre}</h5>
-                            <p class="mb-1">📅 ${ev.fecha} - ⏰ ${ev.hora} hs</p>
-                            <p class="mb-1"><strong>Gen:</strong> $${ev.precioGeneral} | <strong>Grada:</strong> $${ev.precioGradas}</p>
-                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="editarEvento(${JSON.stringify(ev).replace(/"/g, '&quot;')})">Editar Evento</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-    }
-
-    function abrirModalEvento() {
-        document.getElementById('evId').value = `EVT-${Date.now()}`;
-        document.getElementById('formEvento').reset();
-        document.getElementById('modalEventoTitulo').textContent = 'Crear Evento';
-        new bootstrap.Modal(document.getElementById('modalEvento')).show();
-    }
-
-    function editarEvento(ev) {
-        document.getElementById('evId').value = ev.id;
-        document.getElementById('evNombre').value = ev.nombre;
-        document.getElementById('evFecha').value = ev.fecha;
-        document.getElementById('evHora').value = ev.hora;
-        document.getElementById('evPrecioGen').value = ev.precioGeneral;
-        document.getElementById('evDispGen').value = ev.dispGen;
-        document.getElementById('evPrecioGrada').value = ev.precioGradas;
-        document.getElementById('evDispGrada').value = ev.dispGrada;
-        document.getElementById('modalEventoTitulo').textContent = 'Editar Evento';
-        new bootstrap.Modal(document.getElementById('modalEvento')).show();
-    }
-
-    async function guardarEvento(e) {
-        e.preventDefault();
-        const evId = document.getElementById('evId').value;
-        const body = {
-            id: evId,
-            nombre: document.getElementById('evNombre').value,
+            id: document.getElementById('evId').value.trim(),
+            nombre: document.getElementById('evNombre').value.trim(),
             fecha: document.getElementById('evFecha').value,
             hora: document.getElementById('evHora').value,
-            precioGeneral: Number(document.getElementById('evPrecioGen').value),
-            dispGen: Number(document.getElementById('evDispGen').value),
-            precioGradas: Number(document.getElementById('evPrecioGrada').value),
-            dispGrada: Number(document.getElementById('evDispGrada').value)
+            precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
+            cantGen: parseInt(document.getElementById('evDispGen').value) || 112,
+            precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0,
+            cantGradas: parseInt(document.getElementById('evDispGrada').value) || 24
         };
 
-        const existe = listaEventosGlobal.some(x => x.id === evId);
-        const url = existe ? `/api/eventos/modificar/${evId}` : '/api/eventos/crear';
-        const method = existe ? 'PUT' : 'POST';
+        if(!body.id || !body.nombre || !body.fecha || !body.hora) return alert('Completa todos los campos obligatorios del evento.');
 
-        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const data = await res.json();
-        if (data.exito) {
-            bootstrap.Modal.getInstance(document.getElementById('modalEvento')).hide();
-            cargarEventos();
-        } else {
+        try {
+            const res = await fetch('/api/eventos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
             alert(data.mensaje);
+            if(data.exito) {
+                limpiarFormularioEvento();
+                cargarEventosEnSelect();
+            }
+        } catch (e) {
+            alert('Error al crear evento');
         }
     }
 
-    async function crearCupon(e) {
-        e.preventDefault();
+    async function modificarEvento() {
         const body = {
-            evento_id: document.getElementById('cuponEventoId').value,
-            codigo: document.getElementById('cuponCodigo').value,
-            porcentaje: Number(document.getElementById('cuponPorcentaje').value),
-            monto_fijo: Number(document.getElementById('cuponMonto').value)
+            id: document.getElementById('evId').value.trim(),
+            nombre: document.getElementById('evNombre').value.trim(),
+            fecha: document.getElementById('evFecha').value,
+            hora: document.getElementById('evHora').value,
+            precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
+            precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0
         };
 
-        const res = await fetch('/api/cupones/crear', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        alert(data.mensaje);
-        if (data.exito) document.getElementById('formCupon').reset();
+        if (!body.id || !body.nombre || !body.fecha || !body.hora) {
+            return alert('Completa todos los campos obligatorios del evento.');
+        }
+
+        try {
+            const res = await fetch('/api/eventos/modificar', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+
+            if (data.exito) {
+                limpiarFormularioEvento();
+                cargarEventosEnSelect();
+            }
+        } catch (e) {
+            alert('Error al modificar el evento.');
+        }
     }
 
-    // --- INFORMES Y DETALLE ---
-    async function cargarInformesDetallados() {
-        const eventoId = document.getElementById('informeEventoSelect').value;
-        if (!eventoId) return;
-
-        // Consolidado
-        const resInf = await fetch(`/api/informe/${eventoId}`);
-        const inf = await resInf.json();
-        const resDiv = document.getElementById('resumenInforme');
-        resDiv.innerHTML = `
-            <strong>Resumen Consolidado:</strong> Entradas Vendidas: ${inf.vendidas} | Asistentes Reales: ${inf.asistentes} | 
-            Recaudación Total: $${inf.recaudado.toFixed(2)} | Total Descuentos: $${inf.montoDescuento.toFixed(2)}
-        `;
-        resDiv.classList.remove('hidden');
-
-        // Detalle de Ventas
-        const resV = await fetch(`/api/informe/ventas-detalle/${eventoId}`);
-        const ventas = await resV.json();
-        const tVentas = document.getElementById('tablaDetalleVentas');
-        tVentas.innerHTML = '';
-        ventas.forEach(v => {
-            tVentas.innerHTML += `
-                <tr>
-                    <td>${v.id}</td>
-                    <td>${v.nombre} ${v.apellido}</td>
-                    <td>${v.codigoAsiento}</td>
-                    <td>$${Number(v.monto_total).toFixed(2)}</td>
-                    <td>$${Number(v.monto_descuento || 0).toFixed(2)}</td>
-                    <td>${v.metodo_pago || 'N/A'}</td>
-                    <td>${v.vendedor || 'Sistema'}</td>
-                    <td>${new Date(v.fechaCompra).toLocaleString()}</td>
-                    <td><button class="btn btn-sm btn-danger" onclick="cancelarVenta(${v.id})">Cancelar (48hs)</button></td>
-                </tr>
-            `;
-        });
-
-        // Detalle Escaneos
-        const resE = await fetch(`/api/informe/escaneos-detalle/${eventoId}`);
-        const escaneos = await resE.json();
-        const tEsc = document.getElementById('tablaDetalleEscaneos');
-        tEsc.innerHTML = '';
-        escaneos.forEach(e => {
-            tEsc.innerHTML += `
-                <tr>
-                    <td>${e.codigoAsiento}</td>
-                    <td>${e.tipoZona}</td>
-                    <td>${e.nombre || ''} ${e.apellido || ''}</td>
-                    <td>${e.operario_escaneo || 'Sin Registro'}</td>
-                    <td>${e.fecha_escaneo ? new Date(e.fecha_escaneo).toLocaleString() : 'N/A'}</td>
-                </tr>
-            `;
-        });
-    }
-
-    async function enviarInformeEmailManual() {
-        const eventoId = document.getElementById('informeEventoSelect').value;
-        if (!eventoId) return alert('Seleccione un evento primero');
-        const res = await fetch('/api/informe/enviar-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ eventoId })
-        });
-        const data = await res.json();
-        alert(data.mensaje);
-    }
-
-    async function cancelarVenta(ventaId) {
-        if (!confirm('¿Desea cancelar esta venta? (Permitido hasta 48hs desúes de la compra)')) return;
-        const res = await fetch(`/api/ventas/cancelar/${ventaId}`, { method: 'DELETE' });
-        const data = await res.json();
-        alert(data.mensaje);
-        if (data.exito) cargarInformesDetallados();
-    }
-
-    // --- PROCESO DE VENTA ---
     async function cargarMapaAsientos() {
-        const eventoId = document.getElementById('ventaEventoSelect').value;
-        if (!eventoId) return;
+        const eventoId = document.getElementById('selEventoVenta').value;
+        const gridGen = document.getElementById('gridGeneral');
+        const gridGrada = document.getElementById('gridGradas');
+        
+        gridGen.innerHTML = '';
+        gridGrada.innerHTML = '';
+        limpiarFormularioReserva();
 
-        // Cargar asientos
-        const resA = await fetch(`/api/eventos/${eventoId}/asientos`);
-        asientosEventoActual = await resA.json();
+        if(!eventoId) return;
 
-        // Cargar cupones
-        const resC = await fetch(`/api/cupones/evento/${eventoId}`);
-        cuponesEventoActual = await resC.json();
+        try {
+            const res = await fetch(`/api/asientos/${eventoId}`);
+            const asientos = await res.json();
 
-        const selectC = document.getElementById('ventaCuponSelect');
-        selectC.innerHTML = '<option value="">Sin cupón</option>';
-        cuponesEventoActual.forEach(c => {
-            const descTxt = c.porcentaje > 0 ? `${c.porcentaje}% OFF` : `$${c.monto_fijo} OFF`;
-            selectC.innerHTML += `<option value="${c.codigo}">${c.codigo} (${descTxt})</option>`;
-        });
+            asientos.forEach(a => {
+                const el = document.createElement('div');
+                el.className = `seat ${a.estado}`;
+                el.innerText = a.numero;
+                el.onclick = () => seleccionarAsiento(a);
 
-        const container = document.getElementById('mapaAsientos');
-        container.innerHTML = '';
-
-        asientosEventoActual.forEach(a => {
-            const div = document.createElement('div');
-            div.className = `asiento ${a.vendido ? 'ocupado' : 'disponible'}`;
-            div.textContent = a.codigoAsiento;
-            if (!a.vendido) {
-                div.onclick = () => seleccionarAsiento(div, a);
-            }
-            container.appendChild(div);
-        });
+                if(a.tipoZona === 'General') {
+                    gridGen.appendChild(el);
+                } else {
+                    gridGrada.appendChild(el);
+                }
+            });
+        } catch (e) {
+            console.error('Error al cargar mapa:', e);
+        }
     }
 
-    let asientoSeleccionado = null;
-
-    function seleccionarAsiento(elemento, asiento) {
-        document.querySelectorAll('.asiento.seleccionado').forEach(el => el.classList.remove('seleccionado'));
-        elemento.classList.add('seleccionado');
+    function seleccionarAsiento(asiento) {
         asientoSeleccionado = asiento;
-        document.getElementById('asientoSeleccionadoId').value = asiento.id;
-        calcularPrecioFinal();
+        descuentoAplicado = 0;
+
+        document.getElementById('resAsiento').value = `Asiento #${asiento.numero}`;
+        document.getElementById('resZona').value = asiento.tipoZona;
+        document.getElementById('resPrecio').value = asiento.precio;
+        document.getElementById('resMontoFinal').value = asiento.precio;
+        document.getElementById('resCupon').value = '';
+
+        if(asiento.estado === 'ocupado') {
+            document.getElementById('resCliente').value = asiento.cliente || '';
+            document.getElementById('resDni').value = asiento.dni || '';
+            document.getElementById('resTel').value = asiento.telefono || '';
+            document.getElementById('resMetodo').value = asiento.metodoPago || 'Efectivo';
+            document.getElementById('resTransaccion').value = asiento.transaccion || '';
+            document.getElementById('resPagado').checked = asiento.pagado == 1;
+            document.getElementById('btnLiberar').style.display = 'block';
+        } else {
+            document.getElementById('resCliente').value = '';
+            document.getElementById('resDni').value = '';
+            document.getElementById('resTel').value = '';
+            document.getElementById('resTransaccion').value = '';
+            document.getElementById('resPagado').checked = true;
+            document.getElementById('btnLiberar').style.display = 'none';
+        }
     }
 
-    function calcularPrecioFinal() {
-        if (!asientoSeleccionado) return;
-        let total = asientoSeleccionado.precio;
-        let descuentoAplicado = 0;
+    async function aplicarCupon() {
+        if(!asientoSeleccionado) return alert('Selecciona un asiento primero');
+        const codigo = document.getElementById('resCupon').value.trim();
+        const eventoId = document.getElementById('selEventoVenta').value;
 
-        const codCupon = document.getElementById('ventaCuponSelect').value;
-        const cupon = cuponesEventoActual.find(c => c.codigo === codCupon);
+        if(!codigo) return;
 
-        if (cupon) {
-            if (cupon.porcentaje > 0) descuentoAplicado = total * (cupon.porcentaje / 100);
-            else if (cupon.monto_fijo > 0) descuentoAplicado = cupon.monto_fijo;
+        try {
+            const res = await fetch('/api/cupones/validar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ eventoId, codigo })
+            });
+            const data = await res.json();
+            if(data.valido) {
+                descuentoAplicado = data.porcentaje;
+                const precio = asientoSeleccionado.precio;
+                const total = precio - (precio * (descuentoAplicado / 100));
+                document.getElementById('resMontoFinal').value = total.toFixed(2);
+                alert(`Cupón aplicado: ${descuentoAplicado}% de descuento`);
+            } else {
+                alert(data.mensaje);
+            }
+        } catch(e) {
+            alert('Error al validar cupón');
         }
-
-        total = Math.max(0, total - descuentoAplicado);
-        document.getElementById('lblTotalPagar').textContent = `$${total.toFixed(2)}`;
     }
 
-    async function procesarVenta(e) {
-        e.preventDefault();
-        if (!asientoSeleccionado) return alert('Por favor, selecciona un asiento del mapa');
-
-        let total = asientoSeleccionado.precio;
-        let descuentoAplicado = 0;
-        const codCupon = document.getElementById('ventaCuponSelect').value;
-        const cupon = cuponesEventoActual.find(c => c.codigo === codCupon);
-        if (cupon) {
-            if (cupon.porcentaje > 0) descuentoAplicado = total * (cupon.porcentaje / 100);
-            else if (cupon.monto_fijo > 0) descuentoAplicado = cupon.monto_fijo;
-        }
+    async function confirmarVenta() {
+        if(!asientoSeleccionado) return alert('Selecciona un asiento');
+        const eventoId = document.getElementById('selEventoVenta').value;
 
         const body = {
-            evento_id: document.getElementById('ventaEventoSelect').value,
-            asiento_id: asientoSeleccionado.id,
-            nombre: document.getElementById('vNombre').value,
-            apellido: document.getElementById('vApellido').value,
-            contacto: document.getElementById('vContacto').value,
-            email: document.getElementById('vEmail').value,
-            metodo_pago: document.getElementById('vMetodoPago').value,
-            vendedor: document.getElementById('vVendedor').value,
-            monto_total: Math.max(0, total - descuentoAplicado),
-            monto_descuento: descuentoAplicado
+            eventoId,
+            asientoId: asientoSeleccionado.id,
+            cliente: document.getElementById('resCliente').value.trim(),
+            dni: document.getElementById('resDni').value.trim(),
+            telefono: document.getElementById('resTel').value.trim(),
+            metodoPago: document.getElementById('resMetodo').value,
+            transaccion: document.getElementById('resTransaccion').value.trim(),
+            pagado: document.getElementById('resPagado').checked,
+            cupon: document.getElementById('resCupon').value.trim(),
+            descuento: descuentoAplicado
         };
 
-        const res = await fetch('/api/ventas/procesar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
+        if(!body.cliente) return alert('Ingresa el nombre del cliente');
 
-        const data = await res.json();
-        if (data.exito) {
-            alert(`✅ Venta procesada con éxito.\nID Entrada: ${data.ventaId}`);
-            if (body.email) {
-                fetch('/api/entradas/enviar-email', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ventaId: data.ventaId, hostOrigin: window.location.origin })
-                });
-            }
-            document.getElementById('formProcesarVenta').reset();
-            asientoSeleccionado = null;
-            cargarMapaAsientos();
-        } else {
+        try {
+            const res = await fetch('/api/asientos/reservar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
             alert(data.mensaje);
+            cargarMapaAsientos();
+        } catch(e) {
+            alert('Error al guardar venta');
         }
     }
+
+    async function liberarAsiento() {
+        if(!asientoSeleccionado) return;
+        if(!confirm('¿Estás seguro de liberar esta entrada?')) return;
+
+        const eventoId = document.getElementById('selEventoVenta').value;
+
+        try {
+            const res = await fetch('/api/asientos/liberar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ eventoId, asientoId: asientoSeleccionado.id })
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+            cargarMapaAsientos();
+        } catch(e) {
+            alert('Error al liberar asiento');
+        }
+    }
+
+    function limpiarFormularioReserva() {
+        asientoSeleccionado = null;
+        document.getElementById('resAsiento').value = '';
+        document.getElementById('resZona').value = '';
+        document.getElementById('resPrecio').value = '';
+        document.getElementById('resMontoFinal').value = '';
+        document.getElementById('resCliente').value = '';
+        document.getElementById('resDni').value = '';
+        document.getElementById('resTel').value = '';
+        document.getElementById('resTransaccion').value = '';
+        document.getElementById('btnLiberar').style.display = 'none';
+    }
+
+    async function crearCupon() {
+        const eventoId = document.getElementById('cupEventoId').value;
+        const codigo = document.getElementById('cupCodigo').value.trim();
+        const porcentaje = parseFloat(document.getElementById('cupPorcentaje').value) || 0;
+        const maxUsos = parseInt(document.getElementById('cupMax').value) || 1;
+
+        if(!eventoId || !codigo) return alert('Completa los datos del cupón');
+
+        try {
+            const res = await fetch('/api/cupones', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ eventoId, codigo, porcentaje, maxUsos })
+            });
+            const data = await res.json();
+            alert(data.mensaje);
+        } catch(e) {
+            alert('Error al crear cupón');
+        }
+    }
+
+    async function cargarInforme() {
+        const eventoId = document.getElementById('selEventoInforme').value;
+        const tbody = document.querySelector('#tablaVentas tbody');
+        const divResumen = document.getElementById('resumenInforme');
+        tbody.innerHTML = '';
+        divResumen.innerHTML = '';
+
+        if(!eventoId) return;
+
+        try {
+            const res = await fetch(`/api/asientos/${eventoId}`);
+            const asientos = await res.json();
+
+            let recaudado = 0;
+            let vendidos = 0;
+
+            asientos.forEach(a => {
+                if(a.estado === 'ocupado') {
+                    vendidos++;
+                    const desc = a.descuento || 0;
+                    const precioFinal = a.precio - (a.precio * (desc / 100));
+                    recaudado += precioFinal;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>#${a.numero}</td>
+                        <td>${a.tipoZona}</td>
+                        <td>${a.cliente || ''}</td>
+                        <td>${a.dni || ''}</td>
+                        <td>${a.telefono || ''}</td>
+                        <td>${a.metodoPago || ''}</td>
+                        <td>${a.transaccion || ''}</td>
+                        <td>$${precioFinal.toFixed(2)}</td>
+                        <td>${a.pagado ? 'PAGADO' : 'PENDIENTE'}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            });
+
+            divResumen.innerHTML = `<strong>Total Vendidos:</strong> ${vendidos} / ${asientos.length} | <strong>Recaudación Estimada:</strong> $${recaudado.toFixed(2)}`;
+
+        } catch(e) {
+            console.error('Error al cargar informe:', e);
+        }
+    }
+
+    window.onload = () => {
+        cargarEventosEnSelect();
+    };
 </script>
+
 </body>
 </html>
 
