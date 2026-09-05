@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Acceso Puerta</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Librería HTML5 QR Scanner -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body {
@@ -22,7 +21,6 @@
             text-align: center;
         }
 
-        /* AMPLIA EL VISOR DE LA CÁMARA */
         #qr-reader {
             width: 100% !important;
             max-width: 500px;
@@ -44,7 +42,6 @@
             background: rgba(0,0,0,0.2);
         }
 
-        /* Botón para cámara nativa del celular */
         .btn-camara-nativa {
             background-color: #0d9488;
             color: white;
@@ -95,73 +92,71 @@
         <h2>📷 Control de Acceso (Puerta)</h2>
         <p style="font-size:0.85em; color:#94a3b8;">Operador: <span id="lblOperario">-</span></p>
 
-        <!-- VISOR DE CÁMARA WEB EN VIVO (AGRANDADO) -->
         <div id="qr-reader"></div>
 
-        <!-- OPCIÓN DE CÁMARA NATIVA (LENS / FOTO DIRECTA DEL MÓVIL) -->
         <label for="qr-file-input" class="btn-camara-nativa">
             📸 Tomar Foto con Cámara Nativa / Archivo
         </label>
         <input type="file" id="qr-file-input" accept="image/*" capture="environment" style="display: none;">
 
-        <!-- INGRESO MANUAL -->
         <div class="manual-input">
             <input type="text" id="txtCodigoManual" placeholder="Código o ID de Entrada">
             <button class="btn-primary" style="width:auto; padding:10px 15px;" onclick="validarManual()">Validar</button>
         </div>
 
-        <!-- RESULTADO DE LECTURA -->
         <div id="resBox" class="resultado-box"></div>
 
-        <button class="btn-primary" style="background:#dc2626; margin-top:20px; width:100%; max-width:500px;" onclick="volverAlSistema()">
-            ⬅️ Volver a Boletería
+        <button id="btnVolver" class="btn-primary" style="background:#dc2626; margin-top:20px; width:100%; max-width:500px;" onclick="volverAlSistema()">
+            ⬅️ Cerrar Sesión / Volver
         </button>
     </div>
 
     <script>
     let html5QrCode = null;
     document.addEventListener('DOMContentLoaded', () => {
-    // 1. Validar que exista un usuario logueado en la sesión
-    const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-    
-    if (!sesion.usuario) {
-        alert('⚠️ Acceso no autorizado. Por favor inicia sesión primero.');
-        window.location.href = 'index.html';
-        return;
-    }
-
-    // 2. Mostrar el nombre del operador logueado
-    document.getElementById('lblOperario').innerText = sesion.usuario;
-
-    // 3. Inicializar lector de cámara y listeners
-    html5QrCode = new Html5Qrcode("qr-reader");
-    iniciarCamaraEnVivo();
-
-    const fileInput = document.getElementById('qr-file-input');
-    fileInput.addEventListener('change', async e => {
-        if (e.target.files.length === 0) return;
-        const imageFile = e.target.files[0];
-
-        try {
-            if (html5QrCode.isScanning) {
-                await html5QrCode.stop();
-            }
-
-            const blobProcesado = await redimensionarImagen(imageFile, 800);
-            const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
-
-            const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
-            procesarCodigoQR(qrCodeMessage);
-
-        } catch (err) {
-            console.error("Error al leer la foto:", err);
-            mostrarResultado(false, "No se pudo detectar un código QR claro en la imagen.");
-        } finally {
-            setTimeout(() => { iniciarCamaraEnVivo(); }, 3000);
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+        
+        if (!sesion.usuario) {
+            alert('⚠️ Acceso no autorizado. Por favor inicia sesión primero.');
+            window.location.href = 'index.html';
+            return;
         }
-    });
-});
 
+        document.getElementById('lblOperario').innerText = sesion.usuario;
+
+        // Ocultar botón de retorno al sistema para el rol exclusivo "puerta"
+        if (sesion.tipo && sesion.tipo.toLowerCase() === 'puerta') {
+            const btnVolver = document.getElementById('btnVolver');
+            btnVolver.innerText = '🚪 Cerrar Sesión';
+        }
+
+        html5QrCode = new Html5Qrcode("qr-reader");
+        iniciarCamaraEnVivo();
+
+        const fileInput = document.getElementById('qr-file-input');
+        fileInput.addEventListener('change', async e => {
+            if (e.target.files.length === 0) return;
+            const imageFile = e.target.files[0];
+
+            try {
+                if (html5QrCode.isScanning) {
+                    await html5QrCode.stop();
+                }
+
+                const blobProcesado = await redimensionarImagen(imageFile, 800);
+                const archivoLimpio = new File([blobProcesado], "qr_captura.jpg", { type: "image/jpeg" });
+
+                const qrCodeMessage = await html5QrCode.scanFile(archivoLimpio, true);
+                procesarCodigoQR(qrCodeMessage);
+
+            } catch (err) {
+                console.error("Error al leer la foto:", err);
+                mostrarResultado(false, "No se pudo detectar un código QR claro en la imagen.");
+            } finally {
+                setTimeout(() => { iniciarCamaraEnVivo(); }, 3000);
+            }
+        });
+    });
 
     async function iniciarCamaraEnVivo() {
         try {
@@ -171,16 +166,13 @@
                 { facingMode: "environment" }, 
                 { fps: 10, qrbox: { width: 250, height: 250 } },
                 (decodedText) => {
-                    // Al detectar con éxito en vivo
                     html5QrCode.pause();
                     procesarCodigoQR(decodedText);
                     setTimeout(() => { 
                         try { html5QrCode.resume(); } catch(e){} 
                     }, 3000);
                 },
-                (errorMessage) => {
-                    // Búsqueda silenciosa frame a frame
-                }
+                (errorMessage) => {}
             );
         } catch (err) {
             console.log("Cámara en vivo no disponible o sin permisos.");
@@ -188,8 +180,6 @@
     }
 
     async function procesarCodigoQR(textoQr) {
-        console.log("QR Detectado:", textoQr);
-
         let idEntrada = textoQr;
         let sig = '';
 
@@ -267,12 +257,13 @@
     }
 
     function volverAlSistema() {
+        const sesion = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
+        if (sesion.tipo && sesion.tipo.toLowerCase() === 'puerta') {
+            sessionStorage.removeItem('usuarioLogueado');
+        }
         window.location.href = 'index.html';
     }
 </script>
-
-                
 </body>
 </html>
-
 
