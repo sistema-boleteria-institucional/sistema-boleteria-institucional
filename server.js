@@ -12,19 +12,6 @@ const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-se
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// Configuración de Nodemailer
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
-        pass: process.env.GMAIL_PASS || 'wwopwhvtbnoxkahn'
-    },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 10000
-});
-
 // Seguridad HMAC
 function generarFirma(ventaId, asientoCodigo) {
     return crypto
@@ -93,7 +80,8 @@ async function inicializarTablasDB() {
                 precioGeneral REAL,
                 dispGen INTEGER,
                 precioGradas REAL,
-                dispGrada INTEGER
+                dispGrada INTEGER,
+                informe_enviado INTEGER DEFAULT 0
             );
         `);
 
@@ -116,7 +104,9 @@ async function inicializarTablasDB() {
                 precio REAL,
                 vendido INTEGER DEFAULT 0,
                 habilitado INTEGER DEFAULT 1,
-                asistio INTEGER DEFAULT 0
+                asistio INTEGER DEFAULT 0,
+                operario_escaneo TEXT,
+                fecha_escaneo TEXT
             );
         `);
 
@@ -132,7 +122,16 @@ async function inicializarTablasDB() {
                 email TEXT,
                 metodo_pago TEXT,
                 monto_total REAL,
+                monto_descuento REAL DEFAULT 0,
+                vendedor TEXT,
                 fechaCompra TEXT
+            );
+        `);
+
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS configuraciones (
+                clave TEXT PRIMARY KEY,
+                valor TEXT
             );
         `);
 
@@ -265,10 +264,42 @@ app.post('/api/eventos/crear', async (req, res) => {
     }
 });
 
-app.post('/api/config/email-informe', (req, res) => {
+app.put('/api/eventos/modificar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nombre, fecha, hora, precioGeneral, precioGradas } = req.body;
+    if (db) {
+        try {
+            await db.execute({
+                sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, precioGradas = ? WHERE id = ?",
+                args: [nombre, fecha, hora, precioGeneral, precioGradas, id]
+            });
+            return res.json({ exito: true, mensaje: 'Evento modificado correctamente' });
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al modificar evento' }); }
+    } else {
+        const ev = eventosMemoria.find(e => e.id === id);
+        if (!ev) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado' });
+        ev.nombre = nombre; ev.fecha = fecha; ev.hora = hora;
+        ev.precioGeneral = precioGeneral; ev.precioGradas = precioGradas;
+        return res.json({ exito: true, mensaje: 'Evento modificado (Memoria)' });
+    }
+});
+
+app.post('/api/config/email-informe', async (req, res) => {
     const { email } = req.body;
-    configMemoria.emailInforme = email;
-    res.json({ exito: true, mensaje: 'Email de informes guardado correctamente' });
+    if (!email) return res.status(400).json({ exito: false, mensaje: 'Email es requerido' });
+
+    if (db) {
+        try {
+            await db.execute({
+                sql: "INSERT INTO configuraciones (clave, valor) VALUES ('email_informe', ?) ON CONFLICT(clave) DO UPDATE SET valor = ?",
+                args: [email, email]
+            });
+            return res.json({ exito: true, mensaje: 'Email de informes guardado en la base de datos' });
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al guardar el correo' }); }
+    } else {
+        configMemoria.emailInforme = email;
+        res.json({ exito: true, mensaje: 'Email de informes guardado correctamente (Memoria)' });
+    }
 });
 
 app.post('/api/cupones/crear', async (req, res) => {
@@ -344,8 +375,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
             const insRes = await db.execute({
-                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString()]
+                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, monto_descuento, vendedor, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, venta.monto_descuento || 0, venta.vendedor || 'Sistema', new Date().toISOString()]
             });
 
             const nuevaVentaId = insRes.rows[0].id;
@@ -362,13 +393,14 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
         asiento.vendido = 1;
         const nuevaVentaId = ventasMemoria.length + 1;
-        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date().toISOString() });
+        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, monto_descuento: venta.monto_descuento || 0, vendedor: venta.vendedor || 'Sistema', fechaCompra: new Date().toISOString() });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
         res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
     }
 });
 
+// Cancelar venta: permitido hasta 48 horas
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
     if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
@@ -379,10 +411,10 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
             const venta = vRes.rows[0];
-            const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
+            const diferenciaHoras = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60 * 60);
 
-            if (diferenciaMinutos > 15) {
-                return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido para cancelar (${Math.floor(diferenciaMinutos)} min).` });
+            if (diferenciaHoras > 48) {
+                return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido para cancelar (${Math.floor(diferenciaHoras)} hs). Límite: 48 hs.` });
             }
 
             await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
@@ -397,10 +429,10 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
         if (indexVenta === -1) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
         const venta = ventasMemoria[indexVenta];
-        const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
+        const diferenciaHoras = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60 * 60);
 
-        if (diferenciaMinutos > 15) {
-            return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido (${Math.floor(diferenciaMinutos)} min).` });
+        if (diferenciaHoras > 48) {
+            return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido (${Math.floor(diferenciaHoras)} hs). Límite: 48 hs.` });
         }
 
         const lista = asientosMemoria[venta.evento_id] || [];
@@ -412,28 +444,82 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     }
 });
 
+// Consolidado para informes de eventos
+async function consolidarDatosEvento(eventoId) {
+    let info = { nombre: '', fecha: '', hora: '', vendidas: 0, asistentes: 0, recaudado: 0, montoDescuento: 0 };
+    if (db) {
+        const ev = await db.execute({ sql: "SELECT * FROM eventos WHERE id = ?", args: [eventoId] });
+        if (ev.rows.length === 0) return null;
+        info.nombre = ev.rows[0].nombre;
+        info.fecha = ev.rows[0].fecha;
+        info.hora = ev.rows[0].hora;
+
+        const v = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+        info.vendidas = v.rows.length;
+        info.recaudado = v.rows.reduce((sum, item) => sum + Number(item.monto_total || 0), 0);
+        info.montoDescuento = v.rows.reduce((sum, item) => sum + Number(item.monto_descuento || 0), 0);
+
+        const a = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ? AND asistio = 1", args: [eventoId] });
+        info.asistentes = a.rows.length;
+    } else {
+        const ev = eventosMemoria.find(e => e.id === eventoId);
+        if (!ev) return null;
+        info.nombre = ev.nombre; info.fecha = ev.fecha; info.hora = ev.hora;
+        const ventas = ventasMemoria.filter(v => v.evento_id === eventoId);
+        info.vendidas = ventas.length;
+        info.recaudado = ventas.reduce((s, x) => s + Number(x.monto_total || 0), 0);
+        info.montoDescuento = ventas.reduce((s, x) => s + Number(x.monto_descuento || 0), 0);
+        const asientos = asientosMemoria[eventoId] || [];
+        info.asistentes = asientos.filter(a => a.asistio === 1).length;
+    }
+    return info;
+}
+
 app.get('/api/informe/:eventoId', async (req, res) => {
+    const data = await consolidarDatosEvento(req.params.eventoId);
+    if (!data) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado' });
+    res.json(data);
+});
+
+// Informe detallado de ventas por evento (vendedor, método de pago, cliente, monto, descuento)
+app.get('/api/informe/ventas-detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
         try {
-            const ventasRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
-            const asientosRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
-
-            const vendidas = ventasRes.rows.length;
-            const recaudado = ventasRes.rows.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-            const asistentes = asientosRes.rows.filter(a => a.vendido === 1 && a.asistio === 1).length;
-
-            return res.json({ vendidas, asistentes, recaudado });
-        } catch (e) { console.error(e); }
+            const result = await db.execute({
+                sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
+                             v.codigoAsiento, v.monto_total, v.monto_descuento, v.metodo_pago, v.vendedor, v.fechaCompra
+                      FROM ventas v
+                      WHERE v.evento_id = ?
+                      ORDER BY v.id DESC`,
+                args: [eventoId]
+            });
+            return res.json(result.rows);
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' }); }
+    } else {
+        const lista = ventasMemoria.filter(v => v.evento_id === eventoId);
+        res.json(lista);
     }
+});
 
-    const ventasEvento = ventasMemoria.filter(v => v.evento_id === eventoId);
-    const listaAsientos = asientosMemoria[eventoId] || [];
-    const vendidas = ventasEvento.length;
-    const recaudado = ventasEvento.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-    const asistentes = listaAsientos.filter(a => a.vendido === 1 && a.asistio === 1).length;
-
-    res.json({ vendidas, asistentes, recaudado });
+// Informe detallado de entradas escaneadas y operario que escaneo por evento
+app.get('/api/informe/escaneos-detalle/:eventoId', async (req, res) => {
+    const { eventoId } = req.params;
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: `SELECT a.codigoAsiento, a.tipoZona, a.operario_escaneo, a.fecha_escaneo, v.nombre, v.apellido
+                      FROM asientos a
+                      LEFT JOIN ventas v ON (a.id = v.asiento_id)
+                      WHERE a.evento_id = ? AND a.asistio = 1`,
+                args: [eventoId]
+            });
+            return res.json(result.rows);
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al obtener escaneos' }); }
+    } else {
+        const lista = (asientosMemoria[eventoId] || []).filter(a => a.asistio === 1);
+        res.json(lista);
+    }
 });
 
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
@@ -662,7 +748,7 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
     }
 });
 
-// Endpoints Superusuario
+// Endpoints de Gestión de Usuarios para Superusuario
 app.post('/api/usuarios/crear', async (req, res) => {
     const nuevoUsr = req.body;
     if (db) {
@@ -681,6 +767,25 @@ app.post('/api/usuarios/crear', async (req, res) => {
     }
 });
 
+app.put('/api/usuarios/modificar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { usuario, clave, tipo, identificacion } = req.body;
+    if (db) {
+        try {
+            await db.execute({
+                sql: "UPDATE usuarios SET usuario = ?, clave = ?, tipo = ?, identificacion = ? WHERE id = ?",
+                args: [usuario, clave, tipo, identificacion, id]
+            });
+            return res.json({ exito: true, mensaje: 'Usuario modificado correctamente' });
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al modificar usuario' }); }
+    } else {
+        const u = usuariosMemoria.find(usr => usr.id == id);
+        if (!u) return res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
+        u.usuario = usuario; u.clave = clave; u.tipo = tipo; u.identificacion = identificacion;
+        return res.json({ exito: true, mensaje: 'Usuario modificado (Memoria)' });
+    }
+});
+
 app.get('/api/super/usuarios', async (req, res) => {
     if (db) {
         try {
@@ -688,7 +793,7 @@ app.get('/api/super/usuarios', async (req, res) => {
             return res.json(result.rows);
         } catch (e) { console.error(e); }
     }
-    res.json(usuariosMemoria);
+    res.json(usuariosMemoria.map(({ clave, ...u }) => u));
 });
 
 app.post('/api/super/revelar-clave', async (req, res) => {
@@ -723,10 +828,99 @@ app.delete('/api/super/usuarios/:id', async (req, res) => {
     res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
 });
 
-// Puerta Escaneo
+// Función central para enviar informe por correo
+async function enviarInformeEmail(destinoEmail, info) {
+    if (!process.env.BREVO_API_KEY) return console.log('Sin BREVO_API_KEY configurada.');
+
+    await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            sender: { name: 'Boletería Sistema', email: 'gonzalog2019@gmail.com' },
+            to: [{ email: destinoEmail }],
+            subject: `📊 Informe Automático de Evento - ${info.nombre}`,
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+                    <h2 style="color: #0d6efd;">Informe General de Evento</h2>
+                    <p><strong>Evento:</strong> ${info.nombre}</p>
+                    <p><strong>Fecha y Hora:</strong> ${info.fecha} - ${info.hora} hs</p>
+                    <hr/>
+                    <ul>
+                        <li><strong>Entradas Vendidas:</strong> ${info.vendidas}</li>
+                        <li><strong>Asistentes Reales:</strong> ${info.asistentes}</li>
+                        <li><strong>Monto Recaudado:</strong> $${info.recaudado.toFixed(2)}</li>
+                        <li><strong>Monto Descuento:</strong> $${info.montoDescuento.toFixed(2)}</li>
+                    </ul>
+                </div>
+            `
+        })
+    });
+}
+
+// Envío manual de informe
+app.post('/api/informe/enviar-email', async (req, res) => {
+    const { eventoId, emailDestino } = req.body;
+    try {
+        let emailFinal = emailDestino;
+        if (!emailFinal && db) {
+            const conf = await db.execute("SELECT valor FROM configuraciones WHERE clave = 'email_informe'");
+            if (conf.rows.length > 0) emailFinal = conf.rows[0].valor;
+        }
+        if (!emailFinal) emailFinal = configMemoria.emailInforme || 'gonzalog2019@gmail.com';
+
+        const info = await consolidarDatosEvento(eventoId);
+        if (!info) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado' });
+
+        await enviarInformeEmail(emailFinal, info);
+        return res.json({ exito: true, mensaje: `Informe enviado exitosamente a ${emailFinal}` });
+    } catch (e) {
+        return res.status(500).json({ exito: false, mensaje: 'Error al enviar informe' });
+    }
+});
+
+// Tarea Automatizada: Chequear eventos que pasaron 12 horas para envío de informe
+async function procesarInformesAutomaticos() {
+    try {
+        let emailDestino = 'gonzalog2019@gmail.com';
+        if (db) {
+            const conf = await db.execute("SELECT valor FROM configuraciones WHERE clave = 'email_informe'");
+            if (conf.rows.length > 0) emailDestino = conf.rows[0].valor;
+
+            const evs = await db.execute("SELECT * FROM eventos WHERE informe_enviado = 0 OR informe_enviado IS NULL");
+            const ahora = new Date();
+
+            for (const ev of evs.rows) {
+                if (ev.fecha && ev.hora) {
+                    const fechaHoraEv = new Date(`${ev.fecha}T${ev.hora}:00`);
+                    const limite12hs = new Date(fechaHoraEv.getTime() + (12 * 60 * 60 * 1000));
+
+                    if (ahora >= limite12hs) {
+                        const info = await consolidarDatosEvento(ev.id);
+                        if (info) {
+                            await enviarInformeEmail(emailDestino, info);
+                            await db.execute({ sql: "UPDATE eventos SET informe_enviado = 1 WHERE id = ?", args: [ev.id] });
+                            console.log(`Informe automático enviado para el evento: ${ev.nombre}`);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Error procesando informes automáticos:", e);
+    }
+}
+
+// Ejecutar revisión cada 1 hora (3600000 ms)
+setInterval(procesarInformesAutomaticos, 3600000);
+
+// Puerta Escaneo con Registro de Operario
 app.post('/api/puerta/validar', async (req, res) => {
     try {
-        const { id, sig } = req.body;
+        const { id, sig, operario } = req.body;
         if (!id) return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
 
         let ventaId = id;
@@ -795,8 +989,8 @@ app.post('/api/puerta/validar', async (req, res) => {
             }
 
             await db.execute({
-                sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
-                args: [venta.asiento_id]
+                sql: "UPDATE asientos SET asistio = 1, operario_escaneo = ?, fecha_escaneo = ? WHERE id = ?",
+                args: [operario || 'Operario Generico', new Date().toISOString(), venta.asiento_id]
             });
 
             return res.json({
@@ -843,7 +1037,11 @@ app.post('/api/puerta/validar', async (req, res) => {
                 });
             }
 
-            if (asiento) asiento.asistio = 1;
+            if (asiento) {
+                asiento.asistio = 1;
+                asiento.operario_escaneo = operario || 'Operario Generico';
+                asiento.fecha_escaneo = new Date().toISOString();
+            }
 
             return res.json({
                 exito: true,
