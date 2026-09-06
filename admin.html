@@ -3,79 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Dashboard de Ventas e Historial</title>
-    <!-- Control de Acceso por Rol -->
-    <script>
-    async function cargarDashboard() {
-        // Recupera la sesión guardada del usuario logueado
-        const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-
-        if (!usuarioSesion.id) {
-            alert('Debes iniciar sesión para ver este panel.');
-            window.location.href = '/index.html';
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/eventos/EV-101/historial', {
-                headers: { 
-                    'X-User-Id': usuarioSesion.id 
-                }
-            });
-
-            if (res.status === 403 || res.status === 401) {
-                const err = await res.json();
-                alert(err.error || 'Acceso restringido.');
-                window.location.href = '/index.html';
-                return;
-            }
-
-            const data = await res.json();
-            document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre}`;
-            document.getElementById('recaudado').innerText = `$${data.recaudado.toLocaleString()} ARS`;
-            document.getElementById('totalVentas').innerText = data.totalVentas;
-            document.getElementById('asistencia').innerText = data.asistencia;
-
-            const tbody = document.getElementById('tablaVentas');
-            tbody.innerHTML = '';
-            data.historialVentas.forEach(v => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${v.idReserva}</td>
-                        <td>${v.fecha}</td>
-                        <td>${v.cliente}</td>
-                        <td>${v.email}</td>
-                        <td><strong>${v.asiento}</strong></td>
-                        <td>${v.metodoPago}</td>
-                        <td>$${v.monto}</td>
-                        <td><span class="badge badge-success">${v.estado}</span></td>
-                    </tr>`;
-            });
-        } catch (e) {
-            console.error("Error al cargar el dashboard:", e);
-        }
-    }
-
-    async function enviarEmail() {
-        const email = prompt("Ingresa el correo de destino para enviar el informe:");
-        if (!email) return;
-
-        const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-
-        const res = await fetch('/api/eventos/EV-101/enviar-email', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-User-Id': usuarioSesion.id
-            },
-            body: JSON.stringify({ emailDestino: email })
-        });
-        const data = await res.json();
-        alert(data.mensaje || data.error);
-    }
-
-    cargarDashboard();
-</script>
-
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #0f172a; margin: 0; padding: 30px; }
         .container { max-width: 1200px; margin: 0 auto; }
@@ -144,53 +71,75 @@
 
     <script>
         async function cargarDashboard() {
-            const usuario = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-            
-            // Envío de rol en cabecera para validación con Backend
-            const res = await fetch('/api/eventos/EV-101/historial', {
-                headers: { 'X-User-Role': usuario.rol || '' }
-            });
+            // Recupera la sesión guardada
+            const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
+            const rol = usuarioSesion.tipo || usuarioSesion.rol;
 
-            if (res.status === 403 || res.status === 401) {
-                alert('No tienes autorización para acceder a los datos de ventas.');
-                window.location.href = '/index_5.html';
+            // Validación estricta en el cliente para los tipos de la BD ('super' o 'adm')
+            if (!rol || (rol !== 'super' && rol !== 'adm')) {
+                alert('Acceso no autorizado. Solamente usuarios super o adm pueden ingresar.');
+                window.location.href = '/index.html';
                 return;
             }
 
-            const data = await res.json();
-            document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre}`;
-            document.getElementById('recaudado').innerText = `$${data.recaudado.toLocaleString()} ARS`;
-            document.getElementById('totalVentas').innerText = data.totalVentas;
-            document.getElementById('asistencia').innerText = data.asistencia;
+            try {
+                const res = await fetch('/api/eventos/EV-101/historial', {
+                    headers: { 
+                        'X-User-Id': usuarioSesion.id || '',
+                        'X-User-Role': rol
+                    }
+                });
 
-            const tbody = document.getElementById('tablaVentas');
-            tbody.innerHTML = '';
-            data.historialVentas.forEach(v => {
-                const esOk = v.estado === 'Completado';
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${v.idReserva}</td>
-                        <td>${v.fecha}</td>
-                        <td>${v.cliente}</td>
-                        <td>${v.email}</td>
-                        <td><strong>${v.asiento}</strong></td>
-                        <td>${v.metodoPago}</td>
-                        <td>$${v.monto}</td>
-                        <td><span class="badge ${esOk ? 'badge-success' : 'badge-warning'}">${v.estado}</span></td>
-                    </tr>`;
-            });
+                if (res.status === 403 || res.status === 401) {
+                    const err = await res.json().catch(() => ({}));
+                    alert(err.error || 'Acceso restringido.');
+                    window.location.href = '/index.html';
+                    return;
+                }
+
+                const data = await res.json();
+                document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || 'Sin Nombre'}`;
+                document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
+                document.getElementById('totalVentas').innerText = data.totalVentas || 0;
+                document.getElementById('asistencia').innerText = data.asistencia || 0;
+
+                const tbody = document.getElementById('tablaVentas');
+                tbody.innerHTML = '';
+                
+                if (data.historialVentas) {
+                    data.historialVentas.forEach(v => {
+                        const esOk = v.estado === 'Completado';
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${v.idReserva}</td>
+                                <td>${v.fecha}</td>
+                                <td>${v.cliente}</td>
+                                <td>${v.email}</td>
+                                <td><strong>${v.asiento}</strong></td>
+                                <td>${v.metodoPago}</td>
+                                <td>$${v.monto}</td>
+                                <td><span class="badge ${esOk ? 'badge-success' : 'badge-warning'}">${v.estado}</span></td>
+                            </tr>`;
+                    });
+                }
+            } catch (e) {
+                console.error("Error al cargar el dashboard:", e);
+            }
         }
 
         async function enviarEmail() {
             const email = prompt("Ingresa el correo de destino para enviar el informe:");
             if (!email) return;
-            const usuario = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-            
+
+            const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
+            const rol = usuarioSesion.tipo || usuarioSesion.rol;
+
             const res = await fetch('/api/eventos/EV-101/enviar-email', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
-                    'X-User-Role': usuario.rol || ''
+                    'X-User-Id': usuarioSesion.id || '',
+                    'X-User-Role': rol || ''
                 },
                 body: JSON.stringify({ emailDestino: email })
             });
@@ -198,7 +147,9 @@
             alert(data.mensaje || data.error);
         }
 
-        cargarDashboard();
+        // Ejecutar al cargar la página
+        document.addEventListener('DOMContentLoaded', cargarDashboard);
     </script>
 </body>
 </html>
+
