@@ -155,6 +155,24 @@
             const usuarioInput = document.getElementById('usuario').value.trim();
             const claveInput = document.getElementById('clave').value.trim();
             const divError = document.getElementById('mensajeError');
+// Dentro de procesarLogin() en admin.html
+const usuarioDB = data.usuario || data;
+
+// Extrae el rol sin importar si la columna se llama 'tipo', 'Tipo', 'rol' o 'Rol'
+const tipoDB = String(
+    usuarioDB.tipo || usuarioDB.Tipo || usuarioDB.rol || usuarioDB.Rol || ''
+).toLowerCase().trim();
+
+if (tipoDB !== 'super' && tipoDB !== 'adm') {
+    divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}'.`;
+    divError.style.display = 'block';
+    return;
+}
+
+// Guarda la información limpia para las peticiones posteriores
+usuarioDB.tipo = tipoDB; 
+localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioDB));
+ocultarModalYMostrarDashboard(usuarioDB);
 
             divError.style.display = 'none';
 
