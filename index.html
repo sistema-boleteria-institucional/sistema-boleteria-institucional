@@ -89,6 +89,25 @@
             background-color: #0f766e !important;
             color: #fff !important;
         }
+
+        /* Estilos generales para imprimir PDF */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #tabReporteEventos, #tabReporteEventos * {
+                visibility: visible;
+            }
+            #tabReporteEventos {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -159,6 +178,7 @@
                     <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
                     <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
                     <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
+                    <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reportes por Evento</button>
                     <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
                     <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
                     <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
@@ -289,6 +309,49 @@
             </div>
         </div>
 
+        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO (ADMIN / SUPER) -->
+        <div id="tabReporteEventos" class="tab-content">
+            <h3>📈 Reporte Consolidado por Eventos</h3>
+            <div class="no-print" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                <div class="form-group" style="max-width: 300px; margin-bottom: 0;">
+                    <label>Filtrar por Evento:</label>
+                    <select id="selFiltroReporteEvento" onchange="filtrarReporteConsolidado()">
+                        <option value="TODOS">-- Todos los Eventos --</option>
+                    </select>
+                </div>
+                <button class="btn-primary" style="width: auto;" onclick="cargarReportesConsolidados()">🔄 Cargar / Actualizar</button>
+                <button class="btn-primary" style="width: auto; background: #0284c7;" onclick="window.print()">🖨️ Descargar PDF / Imprimir</button>
+                <button class="btn-primary" style="width: auto; background: #25D366;" onclick="compartirWhatsAppReporteGlobal()">💬 Enviar Reporte por WhatsApp</button>
+            </div>
+
+            <div style="overflow-x: auto; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <table class="tabla-admin" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Evento</th>
+                            <th>Fecha</th>
+                            <th style="text-align: center;">Cant. Vendida</th>
+                            <th style="text-align: center;">Asistentes</th>
+                            <th style="text-align: right;">Monto Recaudado</th>
+                            <th style="text-align: right;">Total Descuentos</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyReporteEventos">
+                        <tr><td colspan="6" style="text-align: center; color: #94a3b8;">Cargando datos del reporte...</td></tr>
+                    </tbody>
+                    <tfoot id="tfootReporteEventos" style="font-weight: bold; background: #1e293b; color: #38bdf8;">
+                        <tr>
+                            <td colspan="2" style="text-align: right;">TOTALES GENERALES:</td>
+                            <td id="totVendidas" style="text-align: center;">0</td>
+                            <td id="totAsistentes" style="text-align: center;">0</td>
+                            <td id="totRecaudado" style="text-align: right;">$0.00</td>
+                            <td id="totDescuentos" style="text-align: right;">$0.00</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
         <!-- PESTAÑA EVENTOS -->
         <div id="tabCrearEvento" class="tab-content">
             <h3>Crear / Configurar Evento</h3>
@@ -408,6 +471,7 @@
         let asientoSeleccionado = null;
         let descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
         let cuponesEventoActual = [];
+        let listaGlobalReportes = []; // Cache local para los reportes consolidados
 
         async function iniciarSesionBackend() {
             const usuario = document.getElementById('loginUsuario').value.trim();
@@ -474,6 +538,7 @@
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
                 document.getElementById('btnTabCupones').style.display = 'block';
+                document.getElementById('btnTabReporteEventos').style.display = 'block'; // Habilitar modulo reportes
             }
             if (rol === 'super' || rol === 'admin') {
                 document.getElementById('btnTabSuper').style.display = 'block';
@@ -510,6 +575,10 @@
         function mostrarTab(tabId, btn) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
+
+            if (tabId === 'tabReporteEventos') {
+                cargarReportesConsolidados();
+            }
         }
 
         async function cargarEventosEnSelect() {
@@ -521,10 +590,12 @@
                 const selVenta = document.getElementById('selEventoVenta');
                 const selInf = document.getElementById('selEventoInforme');
                 const selCup = document.getElementById('cupEventoId');
+                const selReporte = document.getElementById('selFiltroReporteEvento');
                 
                 selVenta.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
                 selInf.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
                 if (selCup) selCup.innerHTML = '<option value="">-- Seleccionar Evento --</option>';
+                if (selReporte) selReporte.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
 
                 if(Array.isArray(eventos)){
                     eventos.forEach(ev => {
@@ -532,6 +603,7 @@
                         selVenta.innerHTML += opt;
                         selInf.innerHTML += opt;
                         if (selCup) selCup.innerHTML += opt;
+                        if (selReporte) selReporte.innerHTML += `<option value="${ev.id}">${ev.nombre}</option>`;
                     });
                 }
             } catch (err) {
@@ -917,6 +989,131 @@
             window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
         }
 
+        /* LÓGICA DEL REPORTE CONSOLIDADO DE EVENTOS */
+        async function cargarReportesConsolidados() {
+            const tbody = document.getElementById('tbodyReporteEventos');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">Cargando reporte de eventos...</td></tr>';
+
+            try {
+                const res = await fetch('/api/eventos/reporte-general');
+                let reportes = [];
+                
+                if (res.ok) {
+                    reportes = await res.json();
+                } else {
+                    // Fallback local obteniendo primero la lista de eventos
+                    const resEv = await fetch('/api/eventos');
+                    const eventos = await resEv.json();
+
+                    if (Array.isArray(eventos)) {
+                        for (let ev of eventos) {
+                            try {
+                                const resInf = await fetch(`/api/informe/${ev.id}`);
+                                const inf = await resInf.json();
+                                reportes.push({
+                                    id: ev.id,
+                                    nombre: ev.nombre,
+                                    fecha: ev.fecha,
+                                    vendidas: inf.vendidas || 0,
+                                    asistentes: inf.asistentes || 0,
+                                    recaudado: inf.recaudado || 0,
+                                    descuento_total: inf.descuento_total || 0
+                                });
+                            } catch (e) {
+                                console.error(`Error obteniendo informe de ${ev.id}:`, e);
+                            }
+                        }
+                    }
+                }
+
+                listaGlobalReportes = Array.isArray(reportes) ? reportes : [];
+                filtrarReporteConsolidado();
+
+            } catch (err) {
+                console.error("Error al cargar reportes consolidados:", err);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444;">Error al comunicarse con el servidor.</td></tr>';
+            }
+        }
+
+        function filtrarReporteConsolidado() {
+            const filtro = document.getElementById('selFiltroReporteEvento').value;
+            const tbody = document.getElementById('tbodyReporteEventos');
+            tbody.innerHTML = '';
+
+            let listado = listaGlobalReportes;
+            if (filtro !== 'TODOS') {
+                listado = listado.filter(item => String(item.id) === String(filtro));
+            }
+
+            if (listado.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No se encontraron eventos para mostrar.</td></tr>';
+                actualizarTotalesConsolidados(0, 0, 0, 0);
+                return;
+            }
+
+            let totVen = 0, totAsis = 0, totRec = 0, totDesc = 0;
+
+            listado.forEach(r => {
+                const vendidas = parseInt(r.vendidas || r.vendidas_cantidad || 0);
+                const asistentes = parseInt(r.asistentes || r.asistentes_cantidad || 0);
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || 0);
+                const descuentos = parseFloat(r.descuento_total || r.monto_descuento || 0);
+
+                totVen += vendidas;
+                totAsis += asistentes;
+                totRec += recaudado;
+                totDesc += descuentos;
+
+                tbody.innerHTML += `
+                    <tr style="border-bottom: 1px solid #334155;">
+                        <td style="padding: 10px;"><strong>${r.nombre}</strong></td>
+                        <td style="padding: 10px;">${r.fecha || 'N/A'}</td>
+                        <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${vendidas}</td>
+                        <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${asistentes}</td>
+                        <td style="padding: 10px; text-align: right; color: #eab308; font-weight: bold;">$${recaudado.toFixed(2)}</td>
+                        <td style="padding: 10px; text-align: right; color: #ef4444;">$${descuentos.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            actualizarTotalesConsolidados(totVen, totAsis, totRec, totDesc);
+        }
+
+        function actualizarTotalesConsolidados(ven, asis, rec, desc) {
+            document.getElementById('totVendidas').innerText = ven;
+            document.getElementById('totAsistentes').innerText = asis;
+            document.getElementById('totRecaudado').innerText = `$${rec.toFixed(2)}`;
+            document.getElementById('totDescuentos').innerText = `$${desc.toFixed(2)}`;
+        }
+
+        function compartirWhatsAppReporteGlobal() {
+            const filtro = document.getElementById('selFiltroReporteEvento').value;
+            let listado = listaGlobalReportes;
+            
+            if (filtro !== 'TODOS') {
+                listado = listado.filter(item => String(item.id) === String(filtro));
+            }
+
+            if (listado.length === 0) return alert('No hay información cargada para compartir.');
+
+            let msj = `📊 *REPORTE DE EVENTOS*\n----------------------------------\n`;
+            
+            listado.forEach(r => {
+                msj += `🎭 *${r.nombre}* (${r.fecha || 'S/D'})\n`;
+                msj += `🎟️ Vendidas: ${r.vendidas || 0}\n`;
+                msj += `👥 Asistentes: ${r.asistentes || 0}\n`;
+                msj += `💰 Recaudado: $${(parseFloat(r.recaudado) || 0).toFixed(2)}\n`;
+                msj += `🏷️ Descuentos: $${(parseFloat(r.descuento_total) || 0).toFixed(2)}\n`;
+                msj += `----------------------------------\n`;
+            });
+
+            const totRec = document.getElementById('totRecaudado').innerText;
+            const totVen = document.getElementById('totVendidas').innerText;
+            msj += `*TOTAL VENDIDAS:* ${totVen}\n*TOTAL RECAUDADO:* ${totRec}`;
+
+            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`, '_blank');
+        }
+
         async function cargarTablaDetalleVentas(eventoId) {
             const tbody = document.getElementById('tablaDetalleVentas');
             if (!tbody) return;
@@ -1165,5 +1362,4 @@
     </script>
 </body>
 </html>
-
 
