@@ -166,49 +166,6 @@ let asientosMemoria = {};
 let ventasMemoria = [];
 let configMemoria = {};
 
-// Middleware para verificar si el usuario tiene rol de 'super' o 'adm'
-async function verificarPermisosAdmin(req, res, next) {
-    const usuarioId = req.headers['x-user-id'];
-
-    if (!usuarioId) {
-        return res.status(401).json({ exito: false, error: 'No autorizado. Debe iniciar sesión.' });
-    }
-
-    try {
-        if (db) {
-            const result = await db.execute({
-                sql: "SELECT tipo FROM usuarios WHERE id = ?",
-                args: [usuarioId]
-            });
-
-            if (result.rows.length === 0) {
-                return res.status(403).json({ exito: false, error: 'Usuario no encontrado.' });
-            }
-
-            const tipoUsuario = (result.rows[0].tipo || '').trim().toLowerCase();
-            const rolesPermitidos = ['super', 'adm'];
-
-            if (!rolesPermitidos.includes(tipoUsuario)) {
-                return res.status(403).json({ exito: false, error: 'Acceso denegado. Se requiere rol adm o super.' });
-            }
-        } else {
-            const u = usuariosMemoria.find(usr => usr.id == usuarioId);
-            if (!u) return res.status(403).json({ exito: false, error: 'Usuario no encontrado.' });
-            
-            const tipoUsuario = (u.tipo || '').trim().toLowerCase();
-            const rolesPermitidos = ['super', 'adm'];
-
-            if (!rolesPermitidos.includes(tipoUsuario)) {
-                return res.status(403).json({ exito: false, error: 'Acceso denegado. Se requiere rol adm o super.' });
-            }
-        }
-        next();
-    } catch (err) {
-        console.error("Error al verificar permisos:", err);
-        return res.status(500).json({ exito: false, error: 'Error al verificar permisos en el servidor.' });
-    }
-}
-
 async function generarAsientosParaEvento(eventoObj) {
     const pGen = Number(eventoObj.precioGeneral) || 1500;
     const pGrada = Number(eventoObj.precioGradas) || 3000;
@@ -258,36 +215,24 @@ async function generarAsientosParaEvento(eventoObj) {
 
 // Endpoints Auth & Eventos
 app.post('/api/login', async (req, res) => {
-    try {
-        const { usuario, clave } = req.body;
-        
-        // Consulta a la base de datos Turso
-        const result = await turso.execute({
-            sql: "SELECT * FROM usuarios WHERE usuario = ? AND clave = ?",
-            args: [usuario, clave]
-        });
-
-        if (!result.rows || result.rows.length === 0) {
-            return res.status(401).json({ exito: false, mensaje: "Usuario o contraseña incorrectos" });
-        }
-
-        const u = result.rows[0];
-
-        // Se mapea explícitamente el rol para evitar el error 'desconocido'
-        return res.json({
-            exito: true,
-            usuario: {
-                id: u.id || u.ID || u.Identificacion || 1,
-                usuario: u.usuario || u.Nombre || usuario,
-                tipo: String(u.tipo || u.Tipo || u.rol || u.Rol || u.TIPO || 'super').toLowerCase().trim()
+    const { usuario, clave } = req.body;
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: "SELECT * FROM usuarios WHERE LOWER(usuario) = LOWER(?) AND clave = ?",
+                args: [usuario || '', clave || '']
+            });
+            if (result.rows.length > 0) {
+                const u = result.rows[0];
+                return res.json({ exito: true, usuario: u.usuario, tipo: u.tipo, id: u.id });
             }
-        });
-    } catch (error) {
-        console.error("Error en /api/login:", error);
-        return res.status(500).json({ exito: false, mensaje: "Error interno del servidor" });
+        } catch (e) { console.error(e); }
+    } else {
+        const usr = usuariosMemoria.find(u => u.usuario.toLowerCase() === (usuario || '').toLowerCase() && u.clave === clave);
+        if (usr) return res.json({ exito: true, usuario: usr.usuario, tipo: usr.tipo, id: usr.id });
     }
+    res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
 });
-
 
 app.get('/api/eventos', async (req, res) => {
     if (db) {
@@ -489,116 +434,6 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     const asistentes = listaAsientos.filter(a => a.vendido === 1 && a.asistio === 1).length;
 
     res.json({ vendidas, asistentes, recaudado });
-});
-
-// Endpoints protegidos para Admin/Dashboard
-app.get('/api/eventos/:id/historial', verificarPermisosAdmin, async (req, res) => {
-    const { id } = req.params;
-    if (db) {
-        try {
-            const resEvento = await db.execute({ sql: "SELECT nombre FROM eventos WHERE id = ?", args: [id] });
-            const resVentas = await db.execute({
-                sql: "SELECT v.*, a.asistio FROM ventas v LEFT JOIN asientos a ON v.asiento_id = a.id WHERE v.evento_id = ?",
-                args: [id]
-            });
-
-            let recaudado = 0;
-            let asistencia = 0;
-
-            const historialVentas = resVentas.rows.map(v => {
-                recaudado += Number(v.monto_total || 0);
-                if (v.asistio === 1) asistencia++;
-                return {
-                    idReserva: v.id,
-                    fecha: v.fechaCompra,
-                    cliente: `${v.nombre} ${v.apellido}`,
-                    email: v.email,
-                    asiento: v.codigoAsiento,
-                    metodoPago: v.metodo_pago,
-                    monto: v.monto_total,
-                    estado: 'Completado'
-                };
-            });
-
-            return res.json({
-                nombre: resEvento.rows[0]?.nombre || id,
-                recaudado,
-                totalVentas: historialVentas.length,
-                asistencia,
-                historialVentas
-            });
-        } catch (e) {
-            console.error("Error cargando historial de ventas:", e);
-            return res.status(500).json({ error: 'Error al obtener ventas de la base de datos' });
-        }
-    } else {
-        const ventasEvento = ventasMemoria.filter(v => v.evento_id === id);
-        const listaAsientos = asientosMemoria[id] || [];
-        const evento = eventosMemoria.find(e => e.id === id) || {};
-
-        let recaudado = 0;
-        let asistencia = 0;
-
-        const historialVentas = ventasEvento.map(v => {
-            recaudado += Number(v.monto_total || 0);
-            const a = listaAsientos.find(as => as.id === v.asiento_id);
-            if (a && a.asistio === 1) asistencia++;
-
-            return {
-                idReserva: v.id,
-                fecha: v.fechaCompra,
-                cliente: `${v.nombre} ${v.apellido}`,
-                email: v.email,
-                asiento: v.codigoAsiento,
-                metodoPago: v.metodo_pago,
-                monto: v.monto_total,
-                estado: 'Completado'
-            };
-        });
-
-        res.json({
-            nombre: evento.nombre || id,
-            recaudado,
-            totalVentas: historialVentas.length,
-            asistencia,
-            historialVentas
-        });
-    }
-});
-
-app.post('/api/eventos/:id/enviar-email', verificarPermisosAdmin, async (req, res) => {
-    const { emailDestino } = req.body;
-    if (!emailDestino) return res.status(400).json({ exito: false, mensaje: 'Email de destino requerido' });
-
-    try {
-        if (!process.env.BREVO_API_KEY) {
-            return res.status(500).json({ exito: false, mensaje: 'Clave API de Brevo no configurada.' });
-        }
-
-        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'api-key': process.env.BREVO_API_KEY,
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                sender: { name: 'Boletería Institucional', email: 'gonzalog2019@gmail.com' },
-                to: [{ email: emailDestino }],
-                subject: `📊 Informe del Evento - ${req.params.id}`,
-                htmlContent: `<p>Se adjunta el reporte solicitado del evento <strong>${req.params.id}</strong>.</p>`
-            })
-        });
-
-        if (!response.ok) {
-            const errData = await response.json();
-            return res.status(500).json({ exito: false, mensaje: errData.message || 'Error al enviar reporte' });
-        }
-
-        res.json({ exito: true, mensaje: `Reporte enviado exitosamente a ${emailDestino}` });
-    } catch (e) {
-        res.status(500).json({ exito: false, mensaje: 'Error al enviar email de informe' });
-    }
 });
 
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
@@ -860,14 +695,14 @@ app.post('/api/super/revelar-clave', async (req, res) => {
     const { claveSuper, usuarioIdTarget } = req.body;
     if (db) {
         try {
-            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'adm') AND clave = ?", args: [claveSuper] });
+            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
             if (superRes.rows.length === 0) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
 
             const targetRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
             if (targetRes.rows.length > 0) return res.json({ exito: true, clave: targetRes.rows[0].clave });
         } catch (e) { console.error(e); }
     } else {
-        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'adm') && u.clave === claveSuper);
+        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
         if (!superAdmin) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
 
         const target = usuariosMemoria.find(u => u.id === usuarioIdTarget);
