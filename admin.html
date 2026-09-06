@@ -80,7 +80,7 @@
             <form id="formLogin" onsubmit="procesarLogin(event)">
                 <div class="form-group">
                     <label for="usuario">Usuario</label>
-                    <input type="text" id="usuario" required placeholder="Ej: admin">
+                    <input type="text" id="usuario" required placeholder="Ej: PEPE o admin">
                 </div>
                 <div class="form-group">
                     <label for="clave">Contraseña</label>
@@ -96,7 +96,7 @@
     <div id="contenidoDashboard" class="container">
         <div class="card">
             <div class="header">
-                <h1 id="tituloEvento">Reporte de Ventas</h1>
+                <h1 id="tituloEvento">Cargando reporte...</h1>
                 <div>
                     <button class="btn btn-excel" onclick="window.location.href='/api/eventos/EV-101/descargar-excel'">Descargar Excel</button>
                     <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
@@ -132,65 +132,70 @@
                         <th>Estado</th>
                     </tr>
                 </thead>
-                <tbody id="tablaVentas"></tbody>
+                <tbody id="tablaVentas">
+                    <tr><td colspan="8" style="text-align: center;">Cargando datos...</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
 
     <script>
-        // Al cargar la página, verificamos si ya hay una sesión activa guardada
+        // Al cargar la página, verificamos si ya existe una sesión guardada válida
         document.addEventListener('DOMContentLoaded', () => {
             const sesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-            if (sesion.tipo === 'super' || sesion.tipo === 'adm') {
+            const rol = String(sesion.tipo || sesion.rol || '').toLowerCase();
+            if (rol === 'super' || rol === 'adm') {
                 ocultarModalYMostrarDashboard(sesion);
             }
         });
 
-       async function procesarLogin(event) {
-    event.preventDefault();
-    const usuarioInput = document.getElementById('usuario').value.trim();
-    const claveInput = document.getElementById('clave').value.trim();
-    const divError = document.getElementById('mensajeError');
+        // 1. CONSULTA Y VERIFICACIÓN CONTRA LA BASE DE DATOS
+        async function procesarLogin(event) {
+            event.preventDefault();
+            const usuarioInput = document.getElementById('usuario').value.trim();
+            const claveInput = document.getElementById('clave').value.trim();
+            const divError = document.getElementById('mensajeError');
 
-    divError.style.display = 'none';
+            divError.style.display = 'none';
 
-    try {
-        const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
-        });
+            try {
+                // Envía el usuario y contraseña a la API para consultar en Turso
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
+                });
 
-        const data = await res.json();
+                const data = await res.json();
 
-        if (!res.ok || !data.exito) {
-            divError.innerText = data.mensaje || 'Credenciales incorrectas.';
-            divError.style.display = 'block';
-            return;
+                // Si la consulta en la BD falla o no coincide la contraseña
+                if (!res.ok || !data.exito) {
+                    divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
+                    divError.style.display = 'block';
+                    return;
+                }
+
+                // COTEJO DEL TIPO DE USUARIO OBTENIDO DE LA BASE DE DATOS
+                const usuarioDB = data.usuario || data;
+                const tipoDB = String(usuarioDB.tipo || usuarioDB.rol || '').toLowerCase().trim();
+
+                // Validación estricta: solo se permite el acceso a los tipos 'super' o 'adm'
+                if (tipoDB !== 'super' && tipoDB !== 'adm') {
+                    divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}', el cual no es de administrador.`;
+                    divError.style.display = 'block';
+                    return;
+                }
+
+                // Si se autenticó y tiene los permisos adecuados, guardamos la sesión
+                localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioDB));
+                ocultarModalYMostrarDashboard(usuarioDB);
+
+            } catch (error) {
+                console.error('Error al intentar autenticar:', error);
+                divError.innerText = 'Error al conectar con el servidor backend.';
+                divError.style.display = 'block';
+            }
         }
-
-        // Extrae el rol sin importar si viene como data.tipo, data.rol o dentro de data.usuario
-        const usrObj = data.usuario || data;
-        const rol = String(usrObj.tipo || usrObj.rol || '').toLowerCase().trim();
-
-        // Permite el ingreso si es 'super', 'adm' o 'admin'
-        if (rol !== 'super' && rol !== 'adm' && rol !== 'admin') {
-            divError.innerText = `Acceso denegado: El rol detectado (${rol || 'ninguno'}) no es administrador.`;
-            divError.style.display = 'block';
-            return;
-        }
-
-        // Guardamos el objeto de usuario y mostramos el dashboard
-        localStorage.setItem('usuarioLogueado', JSON.stringify(usrObj));
-        ocultarModalYMostrarDashboard(usrObj);
-
-    } catch (error) {
-        console.error('Error durante el inicio de sesión:', error);
-        divError.innerText = 'Error al conectar con el servidor.';
-        divError.style.display = 'block';
-    }
-}
-
 
         function ocultarModalYMostrarDashboard(usuarioSesion) {
             document.getElementById('modalLogin').style.display = 'none';
@@ -198,48 +203,54 @@
             cargarDashboard(usuarioSesion);
         }
 
+        // 2. OBTIENE EL REPORTE CON LOS DATOS DE LA BASE DE DATOS
         async function cargarDashboard(usuarioSesion) {
             try {
                 const res = await fetch('/api/eventos/EV-101/historial', {
                     headers: { 
-                        'X-User-Id': usuarioSesion.id || '',
-                        'X-User-Role': usuarioSesion.tipo || ''
+                        'X-User-Id': usuarioSesion.id || usuarioSesion.Identificacion || '',
+                        'X-User-Role': usuarioSesion.tipo || usuarioSesion.rol || ''
                     }
                 });
 
                 if (!res.ok) {
-                    alert('Error o falta de permisos para obtener los datos.');
+                    alert('Error al consultar el reporte de la base de datos.');
                     cerrarSesion();
                     return;
                 }
 
                 const data = await res.json();
-                document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || 'Sin Nombre'}`;
+
+                // Actualizar los resúmenes y estadísticas recibidas desde la base de datos
+                document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || 'Ventas Registradas'}`;
                 document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
                 document.getElementById('totalVentas').innerText = data.totalVentas || 0;
                 document.getElementById('asistencia').innerText = data.asistencia || 0;
 
+                // Renderizar las filas recibidas de la base de datos
                 const tbody = document.getElementById('tablaVentas');
                 tbody.innerHTML = '';
                 
-                if (data.historialVentas) {
+                if (data.historialVentas && data.historialVentas.length > 0) {
                     data.historialVentas.forEach(v => {
                         const esOk = v.estado === 'Completado';
                         tbody.innerHTML += `
                             <tr>
-                                <td>${v.idReserva}</td>
-                                <td>${v.fecha}</td>
-                                <td>${v.cliente}</td>
-                                <td>${v.email}</td>
-                                <td><strong>${v.asiento}</strong></td>
-                                <td>${v.metodoPago}</td>
-                                <td>$${v.monto}</td>
-                                <td><span class="badge ${esOk ? 'badge-success' : 'badge-warning'}">${v.estado}</span></td>
+                                <td>${v.idReserva || '-'}</td>
+                                <td>${v.fecha || '-'}</td>
+                                <td>${v.cliente || '-'}</td>
+                                <td>${v.email || '-'}</td>
+                                <td><strong>${v.asiento || '-'}</strong></td>
+                                <td>${v.metodoPago || '-'}</td>
+                                <td>$${v.monto || 0}</td>
+                                <td><span class="badge ${esOk ? 'badge-success' : 'badge-warning'}">${v.estado || 'Pendiente'}</span></td>
                             </tr>`;
                     });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
                 }
             } catch (e) {
-                console.error("Error al cargar el dashboard:", e);
+                console.error("Error al cargar la información de la base de datos:", e);
             }
         }
 
@@ -249,16 +260,20 @@
 
             const usuarioSesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
 
-            const res = await fetch('/api/eventos/EV-101/enviar-email', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Role': usuarioSesion.tipo || ''
-                },
-                body: JSON.stringify({ emailDestino: email })
-            });
-            const data = await res.json();
-            alert(data.mensaje || data.error);
+            try {
+                const res = await fetch('/api/eventos/EV-101/enviar-email', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-User-Role': usuarioSesion.tipo || usuarioSesion.rol || ''
+                    },
+                    body: JSON.stringify({ emailDestino: email })
+                });
+                const data = await res.json();
+                alert(data.mensaje || data.error);
+            } catch (err) {
+                alert("Error enviando el correo.");
+            }
         }
 
         function cerrarSesion() {
