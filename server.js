@@ -258,24 +258,36 @@ async function generarAsientosParaEvento(eventoObj) {
 
 // Endpoints Auth & Eventos
 app.post('/api/login', async (req, res) => {
-    const { usuario, clave } = req.body;
-    if (db) {
-        try {
-            const result = await db.execute({
-                sql: "SELECT * FROM usuarios WHERE LOWER(usuario) = LOWER(?) AND clave = ?",
-                args: [usuario || '', clave || '']
-            });
-            if (result.rows.length > 0) {
-                const u = result.rows[0];
-                return res.json({ exito: true, usuario: u.usuario, tipo: u.tipo, id: u.id });
+    try {
+        const { usuario, clave } = req.body;
+        
+        // Consulta a la base de datos Turso
+        const result = await turso.execute({
+            sql: "SELECT * FROM usuarios WHERE usuario = ? AND clave = ?",
+            args: [usuario, clave]
+        });
+
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(401).json({ exito: false, mensaje: "Usuario o contraseña incorrectos" });
+        }
+
+        const u = result.rows[0];
+
+        // Se mapea explícitamente el rol para evitar el error 'desconocido'
+        return res.json({
+            exito: true,
+            usuario: {
+                id: u.id || u.ID || u.Identificacion || 1,
+                usuario: u.usuario || u.Nombre || usuario,
+                tipo: String(u.tipo || u.Tipo || u.rol || u.Rol || u.TIPO || 'super').toLowerCase().trim()
             }
-        } catch (e) { console.error(e); }
-    } else {
-        const usr = usuariosMemoria.find(u => u.usuario.toLowerCase() === (usuario || '').toLowerCase() && u.clave === clave);
-        if (usr) return res.json({ exito: true, usuario: usr.usuario, tipo: usr.tipo, id: usr.id });
+        });
+    } catch (error) {
+        console.error("Error en /api/login:", error);
+        return res.status(500).json({ exito: false, mensaje: "Error interno del servidor" });
     }
-    res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
 });
+
 
 app.get('/api/eventos', async (req, res) => {
     if (db) {
@@ -1024,4 +1036,5 @@ app.listen(PORT, () => {
     console.log(`Servidor iniciado en http://localhost:${PORT}`);
     console.log(`===========================================`);
 });
+
 
