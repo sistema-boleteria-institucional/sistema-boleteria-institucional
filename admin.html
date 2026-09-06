@@ -146,48 +146,51 @@
             }
         });
 
-        async function procesarLogin(event) {
-            event.preventDefault();
-            const usuarioInput = document.getElementById('usuario').value.trim();
-            const claveInput = document.getElementById('clave').value.trim();
-            const divError = document.getElementById('mensajeError');
+       async function procesarLogin(event) {
+    event.preventDefault();
+    const usuarioInput = document.getElementById('usuario').value.trim();
+    const claveInput = document.getElementById('clave').value.trim();
+    const divError = document.getElementById('mensajeError');
 
-            divError.style.display = 'none';
+    divError.style.display = 'none';
 
-            try {
-                // Petición al backend para verificar usuario y clave contra la BD
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
-                });
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
+        });
 
-                const data = await res.json();
+        const data = await res.json();
 
-                if (!res.ok || !data.exito) {
-                    divError.innerText = data.mensaje || 'Credenciales incorrectas.';
-                    divError.style.display = 'block';
-                    return;
-                }
-
-                // VALIDACIÓN CLAVE: Verificamos que el tipo registrado en la BD sea 'super' o 'adm'
-                const rol = data.usuario.tipo; 
-                if (rol !== 'super' && rol !== 'adm') {
-                    divError.innerText = 'Acceso denegado: Tu usuario no es administrador.';
-                    divError.style.display = 'block';
-                    return;
-                }
-
-                // Si las credenciales y el rol son correctos, guardamos y mostramos el panel
-                localStorage.setItem('usuarioLogueado', JSON.stringify(data.usuario));
-                ocultarModalYMostrarDashboard(data.usuario);
-
-            } catch (error) {
-                console.error('Error durante el inicio de sesión:', error);
-                divError.innerText = 'Error al conectar con el servidor.';
-                divError.style.display = 'block';
-            }
+        if (!res.ok || !data.exito) {
+            divError.innerText = data.mensaje || 'Credenciales incorrectas.';
+            divError.style.display = 'block';
+            return;
         }
+
+        // Extrae el rol sin importar si viene como data.tipo, data.rol o dentro de data.usuario
+        const usrObj = data.usuario || data;
+        const rol = String(usrObj.tipo || usrObj.rol || '').toLowerCase().trim();
+
+        // Permite el ingreso si es 'super', 'adm' o 'admin'
+        if (rol !== 'super' && rol !== 'adm' && rol !== 'admin') {
+            divError.innerText = `Acceso denegado: El rol detectado (${rol || 'ninguno'}) no es administrador.`;
+            divError.style.display = 'block';
+            return;
+        }
+
+        // Guardamos el objeto de usuario y mostramos el dashboard
+        localStorage.setItem('usuarioLogueado', JSON.stringify(usrObj));
+        ocultarModalYMostrarDashboard(usrObj);
+
+    } catch (error) {
+        console.error('Error durante el inicio de sesión:', error);
+        divError.innerText = 'Error al conectar con el servidor.';
+        divError.style.display = 'block';
+    }
+}
+
 
         function ocultarModalYMostrarDashboard(usuarioSesion) {
             document.getElementById('modalLogin').style.display = 'none';
