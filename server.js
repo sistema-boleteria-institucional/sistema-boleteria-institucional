@@ -392,12 +392,13 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
+// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
-    const { rol } = req.body; // El frontend debe enviar { rol: usuarioActual.tipo }
+    const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
 
-    if (!['super', 'admin', 'adm'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Permiso denegado. Solo administradores pueden cancelar ventas.' });
+    if (!['super', 'admin', 'adm', 'vendedor'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Permiso denegado. Rol no autorizado.' });
     }
 
     if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
@@ -439,7 +440,7 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
         const evento = eventosMemoria.find(e => e.id === venta.evento_id);
 
         if (evento && !validarLimite12Hs(evento.fecha, evento.hora)) {
-            return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido: No se pueden cancelar ventas pasadas las 12hs del inicio del evento.' });
+            return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido' });
         }
 
         const lista = asientosMemoria[venta.evento_id] || [];
@@ -475,16 +476,21 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-app.get('/api/reportes/consolidado', async (req, res) => {
+// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
+app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
     if (db) {
         try {
             const result = await db.execute(`
                 SELECT 
+                    e.id as id,
                     e.id as evento_id,
+                    e.nombre as nombre,
                     e.nombre as evento_nombre,
                     e.fecha,
                     e.hora,
+                    COUNT(v.id) as vendidas,
                     COUNT(v.id) as entradas_vendidas,
+                    COALESCE(SUM(v.monto_total), 0) as recaudado,
                     COALESCE(SUM(v.monto_total), 0) as total_recaudado
                 FROM eventos e
                 LEFT JOIN ventas v ON e.id = v.evento_id
@@ -500,18 +506,21 @@ app.get('/api/reportes/consolidado', async (req, res) => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total), 0);
             return {
+                id: e.id,
                 evento_id: e.id,
+                nombre: e.nombre,
                 evento_nombre: e.nombre,
                 fecha: e.fecha,
                 hora: e.hora,
+                vendidas: ventas.length,
                 entradas_vendidas: ventas.length,
+                recaudado: totalRecaudado,
                 total_recaudado: totalRecaudado
             };
         });
         return res.json(reportes);
     }
 });
-
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -554,13 +563,14 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     }
 });
 
-// Editar Evento
+// 3. EDITAR EVENTO (Lee rol de req.body o req.query)
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
-    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
+    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada } = req.body;
+    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
 
     if (!['super', 'admin', 'adm'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Sin autorización' });
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para editar eventos.' });
     }
 
     if (db) {
@@ -580,14 +590,13 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
         return res.json({ exito: true, mensaje: 'Evento actualizado (Memoria)' });
     }
 });
-
-// Borrar Evento
+// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    const { rol } = req.body;
+    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
 
     if (!['super', 'admin', 'adm'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Sin autorización' });
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para eliminar eventos.' });
     }
 
     if (db) {
