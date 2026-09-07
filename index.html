@@ -1042,50 +1042,37 @@
         }
 
         /* LÓGICA DEL REPORTE CONSOLIDADO DE EVENTOS */
-        async function cargarReportesConsolidados() {
-            const tbody = document.getElementById('tbodyReporteEventos');
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">Cargando reporte de eventos...</td></tr>';
+        async function cargarReporteConsolidado() {
+    try {
+        const res = await fetch('/api/reportes/consolidado');
+        const reportes = await res.json();
+        const tbody = document.getElementById('tbodyReporteConsolidado');
+        if (!tbody) return;
 
-            try {
-                const res = await fetch('/api/eventos/reporte-general');
-                let reportes = [];
-                
-                if (res.ok) {
-                    reportes = await res.json();
-                } else {
-                    // Fallback local obteniendo primero la lista de eventos
-                    const resEv = await fetch('/api/eventos');
-                    const eventos = await resEv.json();
+        tbody.innerHTML = '';
+        if (Array.isArray(reportes)) {
+            reportes.forEach(r => {
+                const vendidas = r.vendidas ?? 0;
+                const asistentes = r.asistentes ?? 0;
+                const recaudado = r.recaudado ?? 0;
+                const descuento = r.descuento ?? 0;
 
-                    if (Array.isArray(eventos)) {
-                        for (let ev of eventos) {
-                            try {
-                                const resInf = await fetch(`/api/informe/${ev.id}`);
-                                const inf = await resInf.json();
-                                reportes.push({
-                                    id: ev.id,
-                                    nombre: ev.nombre,
-                                    fecha: ev.fecha,
-                                    vendidas: inf.vendidas || 0,
-                                    asistentes: inf.asistentes || 0,
-                                    recaudado: inf.recaudado || 0,
-                                    descuento_total: inf.descuento_total || 0
-                                });
-                            } catch (e) {
-                                console.error(`Error obteniendo informe de ${ev.id}:`, e);
-                            }
-                        }
-                    }
-                }
-
-                listaGlobalReportes = Array.isArray(reportes) ? reportes : [];
-                filtrarReporteConsolidado();
-
-            } catch (err) {
-                console.error("Error al cargar reportes consolidados:", err);
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444;">Error al comunicarse con el servidor.</td></tr>';
-            }
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${r.nombre || r.evento_nombre}</strong></td>
+                        <td>${r.fecha}</td>
+                        <td>${vendidas}</td>
+                        <td style="color:#10b981; font-weight:bold;">${asistentes}</td>
+                        <td style="color:#f59e0b; font-weight:bold;">$${Number(recaudado).toFixed(2)}</td>
+                        <td style="color:#3b82f6;">$${Number(descuento).toFixed(2)}</td>
+                    </tr>
+                `;
+            });
         }
+    } catch (e) {
+        console.error("Error al cargar reporte consolidado:", e);
+    }
+}
 
         function filtrarReporteConsolidado() {
             const filtro = document.getElementById('selFiltroReporteEvento').value;
@@ -1463,7 +1450,10 @@ async function eliminarEvento(eventoId) {
     try {
         const res = await fetch('/api/eventos');
         const eventos = await res.json();
-        const tbody = document.getElementById('tbodyGestionEventos');
+        
+        // Ajusta la ID del tbody según como esté nombrada en tu HTML (ej: tbodyGestionEventos o tablaEventos)
+        const tbody = document.getElementById('tbodyGestionEventos') || document.querySelector('#tablaEventos tbody');
+        if (!tbody) return;
         tbody.innerHTML = '';
 
         if (Array.isArray(eventos)) {
@@ -1472,18 +1462,21 @@ async function eliminarEvento(eventoId) {
                     <tr>
                         <td>${ev.id}</td>
                         <td><strong>${ev.nombre}</strong></td>
-                        <td>${ev.fecha} ${ev.hora}hs</td>
+                        <td>${ev.fecha} ${ev.hora || ''}hs</td>
                         <td>
-                            <button class="btn-primary" style="background:#ef4444; padding: 4px 8px; width:auto;" onclick="eliminarEvento('${ev.id}')">❌ Eliminar</button>
+                            <button class="btn-primary" style="background:#f59e0b; padding:4px 10px; width:auto; margin-right:5px; border-radius:4px; cursor:pointer;" onclick="editarEvento('${ev.id}')">✏️ Editar</button>
+                            <button class="btn-primary" style="background:#ef4444; padding:4px 10px; width:auto; border-radius:4px; cursor:pointer;" onclick="eliminarEvento('${ev.id}')">❌ Eliminar</button>
                         </td>
                     </tr>
                 `;
             });
         }
-    } catch(e) {
-        console.error("Error al cargar lista de gestión de eventos", e);
+    } catch (e) {
+        console.error("Error al cargar lista de eventos:", e);
     }
 };
+
+        
         // Abrir el modal con los datos cargados del evento
 async function editarEvento(eventoId) {
     try {
