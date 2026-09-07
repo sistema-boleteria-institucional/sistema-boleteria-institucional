@@ -386,7 +386,23 @@
                 <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
             </div>
         </div>
-
+        <!-- eventos existentes -->
+<hr style="border-color: #334155; margin: 30px 0;">
+<h4>Eventos Existentes</h4>
+<button class="btn-primary" style="width:auto; margin-bottom:10px;" onclick="cargarListaGestionEventos()">🔄 Cargar Lista</button>
+<table class="tabla-admin" style="width:100%;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Fecha/Hora</th>
+            <th>Acción</th>
+        </tr>
+    </thead>
+    <tbody id="tbodyGestionEventos">
+        <tr><td colspan="4" style="text-align:center;">Haz clic en Cargar Lista</td></tr>
+    </tbody>
+</table>
         <!-- PESTAÑA CUPONES -->
         <div id="tabCupones" class="tab-content">
             <h3>Gestión de Cupones de Descuento</h3>
@@ -1359,6 +1375,80 @@
                 establecerSesion(sesionExistente.usuario, sesionExistente.tipo);
             }
         });
+
+        // Función para cancelar una venta de entrada
+async function cancelarVenta(ventaId, eventoId) {
+    if (!confirm("¿Seguro que deseas cancelar esta venta? El asiento quedará liberado.")) return;
+
+    try {
+        const rolActual = usuarioSesion ? usuarioSesion.tipo : 'vendedor';
+        const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${encodeURIComponent(rolActual)}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rol: rolActual })
+        });
+
+        const data = await res.json();
+        alert(data.mensaje);
+
+        if (data.exito) {
+            cargarTablaDetalleVentas(eventoId);
+            cargarDetalleInforme();
+        }
+    } catch (err) {
+        alert("Error al intentar cancelar la entrada.");
+    }
+};
+
+// Función para eliminar un evento completo
+async function eliminarEvento(eventoId) {
+    if (!confirm("¿ATENCIÓN: Estás seguro de eliminar este evento? Se borrarán sus asientos y ventas asociadas.")) return;
+
+    try {
+        const rolActual = usuarioSesion ? usuarioSesion.tipo : '';
+        const res = await fetch(`/api/eventos/eliminar/${eventoId}?rol=${encodeURIComponent(rolActual)}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rol: rolActual })
+        });
+
+        const data = await res.json();
+        alert(data.mensaje);
+
+        if (data.exito) {
+            cargarEventosEnSelect();
+            if (typeof cargarListaGestionEventos === 'function') cargarListaGestionEventos();
+        }
+    } catch (e) {
+        alert("Error al eliminar el evento.");
+    }
+};
+        async function cargarListaGestionEventos() {
+    try {
+        const res = await fetch('/api/eventos');
+        const eventos = await res.json();
+        const tbody = document.getElementById('tbodyGestionEventos');
+        tbody.innerHTML = '';
+
+        if (Array.isArray(eventos)) {
+            eventos.forEach(ev => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${ev.id}</td>
+                        <td><strong>${ev.nombre}</strong></td>
+                        <td>${ev.fecha} ${ev.hora}hs</td>
+                        <td>
+                            <button class="btn-primary" style="background:#ef4444; padding: 4px 8px; width:auto;" onclick="eliminarEvento('${ev.id}')">❌ Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+    } catch(e) {
+        console.error("Error al cargar lista de gestión de eventos", e);
+    }
+}
+        
     </script>
 </body>
 </html>
