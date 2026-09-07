@@ -481,7 +481,43 @@
             </table>
         </div>
     </div>
+    <!-- MODAL PARA EDITAR EVENTO -->
+<div id="modalEditarEvento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; justify-content:center; align-items:center;">
+    <div style="background:#1e293b; color:#fff; padding:25px; border-radius:12px; width:90%; max-width:500px; border:1px solid #334155;">
+        <h3>✏️ Editar Evento</h3>
+        <input type="hidden" id="editEventoId">
+        
+        <label style="display:block; margin-top:10px;">Nombre del Evento:</label>
+        <input type="text" id="editNombre" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+        
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <div style="flex:1;">
+                <label>Fecha:</label>
+                <input type="date" id="editFecha" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            </div>
+            <div style="flex:1;">
+                <label>Hora:</label>
+                <input type="time" id="editHora" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            </div>
+        </div>
 
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <div style="flex:1;">
+                <label>Precio General ($):</label>
+                <input type="number" id="editPrecioGeneral" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            </div>
+            <div style="flex:1;">
+                <label>Precio Gradas ($):</label>
+                <input type="number" id="editPrecioGradas" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            </div>
+        </div>
+
+        <div style="margin-top:20px; display:flex; justify-end; gap:10px;">
+            <button onclick="cerrarModalEditar()" style="padding:8px 16px; background:#64748b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancelar</button>
+            <button onclick="guardarEdicionEvento()" style="padding:8px 16px; background:#10b981; color:#fff; border:none; border-radius:6px; cursor:pointer;">💾 Guardar Cambios</button>
+        </div>
+    </div>
+</div>
     <script>
         let usuarioSesion = null;
         let asientoSeleccionado = null;
@@ -1446,6 +1482,63 @@ async function eliminarEvento(eventoId) {
         }
     } catch(e) {
         console.error("Error al cargar lista de gestión de eventos", e);
+    }
+};
+        // Abrir el modal con los datos cargados del evento
+async function editarEvento(eventoId) {
+    try {
+        const res = await fetch(`/api/eventos/${eventoId}`);
+        if (!res.ok) throw new Error("No se pudo obtener la información del evento");
+        const ev = await res.json();
+
+        document.getElementById('editEventoId').value = ev.id;
+        document.getElementById('editNombre').value = ev.nombre;
+        document.getElementById('editFecha').value = ev.fecha;
+        document.getElementById('editHora').value = ev.hora;
+        document.getElementById('editPrecioGeneral').value = ev.precioGeneral || ev.preciogeneral || 0;
+        document.getElementById('editPrecioGradas').value = ev.precioGradas || ev.preciogradas || 0;
+
+        document.getElementById('modalEditarEvento').style.display = 'flex';
+    } catch (e) {
+        alert("Error al cargar datos del evento: " + e.message);
+    }
+}
+
+function cerrarModalEditar() {
+    document.getElementById('modalEditarEvento').style.display = 'none';
+}
+
+// Enviar los cambios guardados al backend
+async function guardarEdicionEvento() {
+    const id = document.getElementById('editEventoId').value;
+    const rolActual = usuarioSesion ? usuarioSesion.tipo : '';
+
+    const payload = {
+        nombre: document.getElementById('editNombre').value,
+        fecha: document.getElementById('editFecha').value,
+        hora: document.getElementById('editHora').value,
+        precioGeneral: parseFloat(document.getElementById('editPrecioGeneral').value) || 0,
+        precioGradas: parseFloat(document.getElementById('editPrecioGradas').value) || 0,
+        rol: rolActual
+    };
+
+    try {
+        const res = await fetch(`/api/eventos/editar/${id}?rol=${encodeURIComponent(rolActual)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        alert(data.mensaje);
+
+        if (data.exito) {
+            cerrarModalEditar();
+            if (typeof cargarListaGestionEventos === 'function') cargarListaGestionEventos();
+            if (typeof cargarEventosEnSelect === 'function') cargarEventosEnSelect();
+        }
+    } catch (e) {
+        alert("Error al intentar guardar los cambios del evento.");
     }
 }
         
