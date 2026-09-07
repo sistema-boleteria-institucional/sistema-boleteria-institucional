@@ -333,8 +333,26 @@ app.get('/api/cupones', async (req, res) => {
 
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
+    
+    // Función auxiliar para verificar si el evento ya superó las 5 hs
+    const validarTiempoVenta = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteVenta = new Date(inicioEvento.getTime() + (5 * 60 * 60 * 1000));
+        return new Date() <= limiteVenta;
+    };
+
     if (db) {
         try {
+            // Verificar tiempo del evento
+            const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
+            if (evRes.rows.length > 0) {
+                const { fecha, hora } = evRes.rows[0];
+                if (!validarTiempoVenta(fecha, hora)) {
+                    return res.status(403).json({ exito: false, mensaje: 'La venta para este evento ha finalizado (pasaron más de 5hs del inicio).' });
+                }
+            }
+
             const asientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ? AND evento_id = ?", args: [venta.asiento_id, venta.evento_id] });
             if (asientoRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Asiento no encontrado' });
 
@@ -356,6 +374,11 @@ app.post('/api/ventas/procesar', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
         }
     } else {
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+        if (evento && !validarTiempoVenta(evento.fecha, evento.hora)) {
+            return res.status(403).json({ exito: false, mensaje: 'La venta para este evento ha finalizado (pasaron más de 5hs del inicio).' });
+        }
+
         const lista = asientosMemoria[venta.evento_id] || [];
         const asiento = lista.find(a => a.id === venta.asiento_id);
         if (!asiento || asiento.vendido === 1) return res.json({ exito: false, mensaje: 'Asiento no disponible' });
@@ -371,18 +394,34 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
+    const { rol } = req.body; // El frontend debe enviar { rol: usuarioActual.tipo }
+
+    if (!['super', 'admin', 'adm'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Permiso denegado. Solo administradores pueden cancelar ventas.' });
+    }
+
     if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
+
+    const validarLimite12Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteCancelacion = new Date(inicioEvento.getTime() + (12 * 60 * 60 * 1000));
+        return new Date() <= limiteCancelacion;
+    };
 
     if (db) {
         try {
-            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE id = ?", args: [ventaId] });
+            const vRes = await db.execute({ 
+                sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
+                args: [ventaId] 
+            });
+
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
             const venta = vRes.rows[0];
-            const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
 
-            if (diferenciaMinutos > 15) {
-                return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido para cancelar (${Math.floor(diferenciaMinutos)} min).` });
+            if (!validarLimite12Hs(venta.fecha, venta.hora)) {
+                return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido: No se pueden cancelar ventas pasadas las 12hs del inicio del evento.' });
             }
 
             await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
@@ -397,10 +436,10 @@ app.delete('/api/ventas/cancelar/:id', async (req, res) => {
         if (indexVenta === -1) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
         const venta = ventasMemoria[indexVenta];
-        const diferenciaMinutos = (new Date() - new Date(venta.fechaCompra)) / (1000 * 60);
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
 
-        if (diferenciaMinutos > 15) {
-            return res.status(403).json({ exito: false, mensaje: `Tiempo límite excedido (${Math.floor(diferenciaMinutos)} min).` });
+        if (evento && !validarLimite12Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido: No se pueden cancelar ventas pasadas las 12hs del inicio del evento.' });
         }
 
         const lista = asientosMemoria[venta.evento_id] || [];
@@ -434,6 +473,43 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     const asistentes = listaAsientos.filter(a => a.vendido === 1 && a.asistio === 1).length;
 
     res.json({ vendidas, asistentes, recaudado });
+});
+
+app.get('/api/reportes/consolidado', async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute(`
+                SELECT 
+                    e.id as evento_id,
+                    e.nombre as evento_nombre,
+                    e.fecha,
+                    e.hora,
+                    COUNT(v.id) as entradas_vendidas,
+                    COALESCE(SUM(v.monto_total), 0) as total_recaudado
+                FROM eventos e
+                LEFT JOIN ventas v ON e.id = v.evento_id
+                GROUP BY e.id, e.nombre, e.fecha, e.hora
+                ORDER BY e.fecha DESC
+            `);
+            return res.json(result.rows);
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
+        }
+    } else {
+        const reportes = eventosMemoria.map(e => {
+            const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
+            const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total), 0);
+            return {
+                evento_id: e.id,
+                evento_nombre: e.nombre,
+                fecha: e.fecha,
+                hora: e.hora,
+                entradas_vendidas: ventas.length,
+                total_recaudado: totalRecaudado
+            };
+        });
+        return res.json(reportes);
+    }
 });
 
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
@@ -475,6 +551,60 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 sig: generarFirma(v.id, v.codigoAsiento)
             }));
         res.json(lista);
+    }
+});
+
+// Editar Evento
+app.put('/api/eventos/editar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
+
+    if (!['super', 'admin', 'adm'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización' });
+    }
+
+    if (db) {
+        try {
+            await db.execute({
+                sql: `UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?`,
+                args: [nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, id]
+            });
+            return res.json({ exito: true, mensaje: 'Evento actualizado correctamente' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar evento' });
+        }
+    } else {
+        const ev = eventosMemoria.find(e => e.id === id);
+        if (!ev) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado' });
+        Object.assign(ev, { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada });
+        return res.json({ exito: true, mensaje: 'Evento actualizado (Memoria)' });
+    }
+});
+
+// Borrar Evento
+app.delete('/api/eventos/eliminar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { rol } = req.body;
+
+    if (!['super', 'admin', 'adm'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización' });
+    }
+
+    if (db) {
+        try {
+            await db.execute({ sql: "DELETE FROM ventas WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM cupones WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM eventos WHERE id = ?", args: [id] });
+            return res.json({ exito: true, mensaje: 'Evento eliminado correctamente' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el evento' });
+        }
+    } else {
+        eventosMemoria = eventosMemoria.filter(e => e.id !== id);
+        delete asientosMemoria[id];
+        ventasMemoria = ventasMemoria.filter(v => v.evento_id !== id);
+        return res.json({ exito: true, mensaje: 'Evento eliminado (Memoria)' });
     }
 });
 
