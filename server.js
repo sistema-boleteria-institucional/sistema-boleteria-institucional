@@ -563,31 +563,47 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     }
 });
 
-// 3. EDITAR EVENTO (Lee rol de req.body o req.query)
+// 3. EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
-    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada } = req.body;
-    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
+    const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
 
-    if (!['super', 'admin', 'adm'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para editar eventos.' });
+    // Control opcional de permisos por rol
+    const rolConsulta = req.query.rol || rol;
+    if (rolConsulta && !['admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
+        return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
 
     if (db) {
         try {
             await db.execute({
-                sql: `UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?`,
-                args: [nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, id]
+                sql: `UPDATE eventos 
+                      SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, precioGradas = ? 
+                      WHERE id = ?`,
+                args: [nombre, fecha, hora, precioGeneral, precioGradas, id]
             });
-            return res.json({ exito: true, mensaje: 'Evento actualizado correctamente' });
+            return res.json({ exito: true, mensaje: "Evento actualizado correctamente." });
         } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar evento' });
+            console.error("Error al actualizar evento:", e);
+            return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
         }
     } else {
-        const ev = eventosMemoria.find(e => e.id === id);
-        if (!ev) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado' });
-        Object.assign(ev, { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada });
-        return res.json({ exito: true, mensaje: 'Evento actualizado (Memoria)' });
+        // Modo Memoria
+        const idx = eventosMemoria.findIndex(e => e.id === id);
+        if (idx === -1) {
+            return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
+        }
+
+        eventosMemoria[idx] = {
+            ...eventosMemoria[idx],
+            nombre: nombre || eventosMemoria[idx].nombre,
+            fecha: fecha || eventosMemoria[idx].fecha,
+            hora: hora || eventosMemoria[idx].hora,
+            precioGeneral: precioGeneral !== undefined ? precioGeneral : eventosMemoria[idx].precioGeneral,
+            precioGradas: precioGradas !== undefined ? precioGradas : eventosMemoria[idx].precioGradas
+        };
+
+        return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Modo Memoria)." });
     }
 });
 // 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
