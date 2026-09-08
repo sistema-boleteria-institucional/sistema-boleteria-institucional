@@ -67,7 +67,7 @@ if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
         url: process.env.TURSO_DATABASE_URL,
         authToken: process.env.TURSO_AUTH_TOKEN
     });
-    console.log(' Conectado exitosamente a la base de datos de Turso.');
+    console.log('Conectado exitosamente a la base de datos de Turso.');
 } else {
     console.warn('⚠️ No se encontraron las credenciales de Turso. Usando almacenamiento temporal en memoria.');
 }
@@ -148,7 +148,7 @@ async function inicializarTablasDB() {
                 args: ['operario1', '1234', 'vendedor', 'VEN-01']
             });
         }
-        console.log(' Tablas creadas/verificadas en Turso.');
+        console.log('Tablas creadas/verificadas en Turso.');
     } catch (e) {
         console.error('Error al inicializar las tablas de Turso:', e);
     }
@@ -335,7 +335,6 @@ app.get('/api/cupones', async (req, res) => {
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
     
-    // Función auxiliar para verificar si el evento ya superó las 5 hs
     const validarTiempoVenta = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -345,7 +344,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
     if (db) {
         try {
-            // Verificar tiempo del evento
             const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
             if (evRes.rows.length > 0) {
                 const { fecha, hora } = evRes.rows[0];
@@ -393,7 +391,99 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
+// EDITAR VENTA (Con restricción de cambio entre General y Gradas)
+app.put('/api/ventas/editar', async (req, res) => {
+    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
+
+    if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido.' });
+
+    if (db) {
+        try {
+            const vRes = await db.execute({ 
+                sql: "SELECT v.*, a.tipoZona as zonaActual, a.codigoAsiento as codigoActual FROM ventas v JOIN asientos a ON v.asiento_id = a.id WHERE v.id = ?", 
+                args: [ventaId] 
+            });
+
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
+
+            const ventaActual = vRes.rows[0];
+
+            if (nuevoAsientoId && nuevoAsientoId != ventaActual.asiento_id) {
+                const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
+                if (nAsientoRes.rows.length === 0) return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento no existe.' });
+                const nuevoAsiento = nAsientoRes.rows[0];
+
+                if (nuevoAsiento.vendido === 1) return res.status(400).json({ exito: false, mensaje: 'El asiento seleccionado ya está vendido.' });
+
+                // Validar que no se pueda cambiar entre General y Gradas
+                const esActualGen = ventaActual.zonaActual === 'General' || (ventaActual.codigoActual && ventaActual.codigoActual.startsWith('GEN'));
+                const esNuevoGen = nuevoAsiento.tipoZona === 'General' || (nuevoAsiento.codigoAsiento && nuevoAsiento.codigoAsiento.startsWith('GEN'));
+
+                if (esActualGen !== esNuevoGen) {
+                    return res.status(400).json({ 
+                        exito: false, 
+                        mensaje: 'No está permitido cambiar de categoría (General a Grada o viceversa). Debe cancelar la venta y registrar una nueva.' 
+                    });
+                }
+
+                // Liberar asiento viejo y ocupar el nuevo
+                await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [ventaActual.asiento_id] });
+                await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
+                await db.execute({
+                    sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ?, asiento_id = ?, codigoAsiento = ? WHERE id = ?",
+                    args: [nombre, apellido, contacto, email || '', nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
+                });
+            } else {
+                await db.execute({
+                    sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
+                    args: [nombre, apellido, contacto, email || '', ventaId]
+                });
+            }
+
+            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente.' });
+        } catch (e) {
+            console.error("Error al editar venta:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta en base de datos.' });
+        }
+    } else {
+        const venta = ventasMemoria.find(v => v.id == ventaId);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
+
+        const listaAsientos = asientosMemoria[venta.evento_id] || [];
+        const asientoActual = listaAsientos.find(a => a.id == venta.asiento_id);
+
+        if (nuevoAsientoId && nuevoAsientoId != venta.asiento_id) {
+            const nuevoAsiento = listaAsientos.find(a => a.id == nuevoAsientoId);
+            if (!nuevoAsiento) return res.status(400).json({ exito: false, mensaje: 'Asiento no existe.' });
+            if (nuevoAsiento.vendido === 1) return res.status(400).json({ exito: false, mensaje: 'El asiento ya está vendido.' });
+
+            const esActualGen = asientoActual ? (asientoActual.tipoZona === 'General' || asientoActual.codigoAsiento.startsWith('GEN')) : true;
+            const esNuevoGen = nuevoAsiento.tipoZona === 'General' || nuevoAsiento.codigoAsiento.startsWith('GEN');
+
+            if (esActualGen !== esNuevoGen) {
+                return res.status(400).json({ 
+                    exito: false, 
+                    mensaje: 'No está permitido cambiar de categoría (General a Grada o viceversa). Debe cancelar la venta y registrar una nueva.' 
+                });
+            }
+
+            if (asientoActual) { asientoActual.vendido = 0; asientoActual.asistio = 0; }
+            nuevoAsiento.vendido = 1;
+            venta.asiento_id = nuevoAsiento.id;
+            venta.codigoAsiento = nuevoAsiento.codigoAsiento;
+        }
+
+        venta.nombre = nombre;
+        venta.apellido = apellido;
+        venta.contacto = contacto;
+        venta.email = email || '';
+
+        return res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria).' });
+    }
+});
+
+// CANCELAR VENTA/ENTRADA
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
     const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
@@ -477,7 +567,7 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
+// REPORTE CONSOLIDADO POR EVENTOS
 app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
     if (db) {
         try {
@@ -519,7 +609,6 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
         }
     } else {
-        // Modo Memoria
         const reportes = eventosMemoria.map(e => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
@@ -543,6 +632,7 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
         return res.json(reportes);
     }
 });
+
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -585,13 +675,12 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     }
 });
 
-// 3. EDITAR / ACTUALIZAR EVENTO
+// EDITAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
 
     const rolConsulta = req.query.rol || rol;
-    // Se agregan 'super' y 'adm' a la lista de roles autorizados
     if (rolConsulta && !['super', 'admin', 'adm', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
@@ -609,292 +698,58 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
         }
     } else {
-        // Modo Memoria
-        const idx = eventosMemoria.findIndex(e => e.id === id);
-        if (idx === -1) {
-            return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
+        const ev = eventosMemoria.find(e => e.id === id);
+        if (ev) {
+            ev.nombre = nombre; ev.fecha = fecha; ev.hora = hora;
+            ev.precioGeneral = precioGeneral; ev.precioGradas = precioGradas;
+            return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Memoria)." });
         }
-
-        eventosMemoria[idx] = {
-            ...eventosMemoria[idx],
-            nombre: nombre || eventosMemoria[idx].nombre,
-            fecha: fecha || eventosMemoria[idx].fecha,
-            hora: hora || eventosMemoria[idx].hora,
-            precioGeneral: precioGeneral !== undefined ? precioGeneral : eventosMemoria[idx].precioGeneral,
-            precioGradas: precioGradas !== undefined ? precioGradas : eventosMemoria[idx].precioGradas
-        };
-
-        return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Modo Memoria)." });
+        return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
     }
 });
-// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
+
+// ELIMINAR EVENTO
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
-
-    if (!['super', 'admin', 'adm'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para eliminar eventos.' });
+    const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
+    if (!['super', 'admin', 'adm', 'administrador'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: "Permiso denegado." });
     }
-
     if (db) {
         try {
             await db.execute({ sql: "DELETE FROM ventas WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM cupones WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM eventos WHERE id = ?", args: [id] });
-            return res.json({ exito: true, mensaje: 'Evento eliminado correctamente' });
+            return res.json({ exito: true, mensaje: "Evento eliminado correctamente." });
         } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el evento' });
+            return res.status(500).json({ exito: false, mensaje: "Error al eliminar evento." });
         }
     } else {
         eventosMemoria = eventosMemoria.filter(e => e.id !== id);
         delete asientosMemoria[id];
         ventasMemoria = ventasMemoria.filter(v => v.evento_id !== id);
-        return res.json({ exito: true, mensaje: 'Evento eliminado (Memoria)' });
+        return res.json({ exito: true, mensaje: "Evento eliminado (Memoria)." });
     }
 });
 
-app.put('/api/ventas/editar', async (req, res) => {
-    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
-
-    if (db) {
-        try {
-            await db.execute({
-                sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
-                args: [nombre, apellido, contacto, email || '', ventaId]
-            });
-
-            if (nuevoAsientoId) {
-                const vRes = await db.execute({ sql: "SELECT asiento_id, evento_id FROM ventas WHERE id = ?", args: [ventaId] });
-                if (vRes.rows.length > 0) {
-                    const asientoViejoId = vRes.rows[0].asiento_id;
-
-                    const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
-                    if (nAsientoRes.rows.length > 0) {
-                        const nuevoAsiento = nAsientoRes.rows[0];
-
-                        if (asientoViejoId) {
-                            await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejoId] });
-                        }
-
-                        await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
-
-                        await db.execute({
-                            sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
-                            args: [nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
-                        });
-                    }
-                }
-            }
-
-            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
-        } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
-        }
-    } else {
-        const v = ventasMemoria.find(x => x.id == ventaId);
-        if (!v) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
-
-        v.nombre = nombre;
-        v.apellido = apellido;
-        v.contacto = contacto;
-        v.email = email || '';
-
-        if (nuevoAsientoId) {
-            const lista = asientosMemoria[v.evento_id] || [];
-            const asientoViejo = lista.find(a => a.id === v.asiento_id);
-            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
-
-            if (asientoViejo) asientoViejo.vendido = 0;
-            if (asientoNuevo) {
-                asientoNuevo.vendido = 1;
-                v.asiento_id = asientoNuevo.id;
-                v.codigoAsiento = asientoNuevo.codigoAsiento;
-            }
-        }
-
-        res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
-    }
-});
-
-app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
-    const { id } = req.params;
-    const { sig } = req.query;
-
-    if (db) {
-        try {
-            const vRes = await db.execute({
-                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
-                      FROM ventas v
-                      JOIN eventos e ON v.evento_id = e.id
-                      WHERE v.id = ?`,
-                args: [id]
-            });
-            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
-
-            const venta = vRes.rows[0];
-            const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
-            const qrCodeUrl = await QRCode.toDataURL(qrPayload);
-
-            return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl, sig } });
-        } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
-        }
-    } else {
-        const venta = ventasMemoria.find(v => v.id == id);
-        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
-
-        const evento = eventosMemoria.find(e => e.id === venta.evento_id) || {};
-        const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
-        const qrCodeUrl = await QRCode.toDataURL(qrPayload);
-
-        res.json({
-            exito: true,
-            ticket: {
-                ...venta,
-                evento_nombre: evento.nombre || 'Evento',
-                evento_fecha: evento.fecha || '',
-                evento_hora: evento.hora || '',
-                qr: qrCodeUrl,
-                sig
-            }
-        });
-    }
-});
-
-
-// =========================================================================
-// 1. FUNCIÓN PARA GENERAR QR CON LOGO EN EL CENTRO
-// =========================================================================
-async function generarQRConLogo(textoQR, rutaLogo, tamano = 300) {
-    const canvas = createCanvas(tamano, tamano);
-    const ctx = canvas.getContext('2d');
-
-    // Generar el QR básico con corrección de errores ALTA ('H') para soportar el logo
-    await QRCode.toCanvas(canvas, textoQR, {
-        errorCorrectionLevel: 'H',
-        margin: 2,
-        width: tamano,
-        color: {
-            dark: '#000000',
-            light: '#ffffff'
-        }
-    });
-
-    // Intentar superponer el logo en el centro
-    try {
-        const logo = await loadImage(rutaLogo);
-        const tamanoLogo = tamano * 0.22;
-        const x = (tamano - tamanoLogo) / 2;
-        const y = (tamano - tamanoLogo) / 2;
-        const padding = 8;
-
-        // Fondo blanco para aislar los módulos del QR detrás del logo
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x - padding / 2, y - padding / 2, tamanoLogo + padding, tamanoLogo + padding);
-
-        // Dibujar el logo
-        ctx.drawImage(logo, x, y, tamanoLogo, tamanoLogo);
-    } catch (err) {
-        console.warn('Advertencia: No se pudo cargar el logo, generando QR limpio:', err.message);
-    }
-
-    return canvas.toDataURL('image/png');
-}
-
-// =========================================================================
-// 2. ENDPOINT EN server (10)_2.js
-// =========================================================================
-app.post('/api/entradas/enviar-email', async (req, res) => {
-    try {
-        const { ticketData, sig } = req.body;
-
-        // Carga útil que leerá el validador al escanear
-        const qrPayload = JSON.stringify({ 
-            ticket_id: ticketData.id, 
-            asiento: ticketData.codigoAsiento, 
-            sig 
-        });
-
-        // Archivos locales del servidor
-        const rutaLogo = path.join(__dirname, 'logo.png');
-        const rutaPlantilla = path.join(__dirname, 'plantilla_entrada.png');
-
-        // Generar QR con el logo
-        const qrConLogoBase64 = await generarQRConLogo(qrPayload, rutaLogo, 300);
-
-        // Crear lienzo principal para la entrada combinada
-        const canvasTicket = createCanvas(800, 400);
-        const ctx = canvasTicket.getContext('2d');
-
-        // Cargar plantilla exportada de Canva
-        const fondoCanva = await loadImage(rutaPlantilla);
-        ctx.drawImage(fondoCanva, 0, 0, 800, 400);
-
-        // Dibujar datos dinámicos del comprador
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px Arial';
-        ctx.fillText(`${ticketData.nombre} ${ticketData.apellido}`, 50, 180);
-
-        ctx.font = '20px Arial';
-        ctx.fillText(`Evento: ${ticketData.evento_nombre}`, 50, 220);
-        ctx.fillText(`Asiento: ${ticketData.codigoAsiento}`, 50, 260);
-
-        // Estampar el QR generado con el logo sobre la imagen
-        const imgQR = await loadImage(qrConLogoBase64);
-        ctx.drawImage(imgQR, 550, 100, 180, 180);
-
-        // Convertir la imagen completa a Base64 para el mail
-        const ticketImagenFinal = canvasTicket.toDataURL('image/png');
-
-        // Envío del correo vía Brevo SMTP
-        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-            method: 'POST',
-            headers: {
-                'accept': 'application/json',
-                'api-key': process.env.BREVO_API_KEY,
-                'content-type': 'application/json'
-            },
-            body: JSON.stringify({
-                sender: { name: 'Boletería Institucional', email: 'gonzalog2019@gmail.com' },
-                to: [{ email: ticketData.email, name: `${ticketData.nombre} ${ticketData.apellido}` }],
-                subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
-                htmlContent: `
-                    <div style="font-family: Arial, sans-serif; text-align: center;">
-                        <h2>¡Hola ${ticketData.nombre}! Aquí tienes tu entrada oficial:</h2>
-                        <br/>
-                        <img src="${ticketImagenFinal}" alt="Entrada Digital" style="max-width: 100%; border-radius: 10px;" />
-                    </div>
-                `
-            })
-        });
-
-        const data = await response.json();
-        return res.json({ success: true, data });
-
-    } catch (error) {
-        console.error('Error generando entrada:', error);
-        return res.status(500).json({ error: 'No se pudo generar ni enviar la entrada' });
-    }
-});
-
-
-// Endpoints Superusuario
+// GESTIÓN DE USUARIOS
 app.post('/api/usuarios/crear', async (req, res) => {
-    const nuevoUsr = req.body;
+    const { usuario, clave, tipo, identificacion } = req.body;
+    if (!usuario || !clave) return res.status(400).json({ exito: false, mensaje: 'Usuario y clave requeridos.' });
     if (db) {
         try {
             await db.execute({
                 sql: "INSERT INTO usuarios (usuario, clave, tipo, identificacion) VALUES (?, ?, ?, ?)",
-                args: [nuevoUsr.usuario, nuevoUsr.clave, nuevoUsr.tipo, nuevoUsr.identificacion]
+                args: [usuario, clave, tipo || 'vendedor', identificacion || '']
             });
-            return res.json({ exito: true, mensaje: 'Usuario guardado' });
-        } catch (e) { return res.json({ exito: false, mensaje: 'El usuario ya existe' }); }
+            return res.json({ exito: true, mensaje: 'Usuario creado exitosamente.' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al crear usuario.' });
+        }
     } else {
-        if (usuariosMemoria.some(u => u.usuario.toLowerCase() === nuevoUsr.usuario.toLowerCase())) return res.json({ exito: false, mensaje: 'El usuario ya existe' });
-        nuevoUsr.id = usuariosMemoria.length + 1;
-        usuariosMemoria.push(nuevoUsr);
-        res.json({ exito: true, mensaje: 'Usuario creado (Memoria)' });
+        usuariosMemoria.push({ id: usuariosMemoria.length + 1, usuario, clave, tipo: tipo || 'vendedor', identificacion: identificacion || '' });
+        return res.json({ exito: true, mensaje: 'Usuario creado (Memoria).' });
     }
 });
 
@@ -903,190 +758,78 @@ app.get('/api/super/usuarios', async (req, res) => {
         try {
             const result = await db.execute("SELECT id, usuario, tipo, identificacion FROM usuarios");
             return res.json(result.rows);
-        } catch (e) { console.error(e); }
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: "Error al consultar usuarios." }); }
     }
-    res.json(usuariosMemoria);
+    res.json(usuariosMemoria.map(u => ({ id: u.id, usuario: u.usuario, tipo: u.tipo, identificacion: u.identificacion })));
 });
 
 app.post('/api/super/revelar-clave', async (req, res) => {
     const { claveSuper, usuarioIdTarget } = req.body;
     if (db) {
         try {
-            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
-            if (superRes.rows.length === 0) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
+            const sRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
+            if (sRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Clave de superusuario incorrecta.' });
 
-            const targetRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
-            if (targetRes.rows.length > 0) return res.json({ exito: true, clave: targetRes.rows[0].clave });
-        } catch (e) { console.error(e); }
+            const uRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
+            if (uRes.rows.length > 0) return res.json({ exito: true, clave: uRes.rows[0].clave });
+            return res.json({ exito: false, mensaje: 'Usuario no encontrado.' });
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al consultar clave.' }); }
     } else {
-        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
-        if (!superAdmin) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
-
-        const target = usuariosMemoria.find(u => u.id === usuarioIdTarget);
+        const superUsr = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
+        if (!superUsr) return res.json({ exito: false, mensaje: 'Clave de superusuario incorrecta.' });
+        const target = usuariosMemoria.find(u => u.id == usuarioIdTarget);
         if (target) return res.json({ exito: true, clave: target.clave });
+        return res.json({ exito: false, mensaje: 'Usuario no encontrado.' });
     }
-    res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
 });
 
 app.delete('/api/super/usuarios/:id', async (req, res) => {
-    const id = parseInt(req.params.id, 10);
+    const { id } = req.params;
     if (db) {
         try {
             await db.execute({ sql: "DELETE FROM usuarios WHERE id = ?", args: [id] });
-            return res.json({ exito: true, mensaje: 'Usuario eliminado' });
-        } catch (e) { console.error(e); }
+            return res.json({ exito: true, mensaje: 'Usuario eliminado.' });
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al eliminar usuario.' }); }
+    } else {
+        usuariosMemoria = usuariosMemoria.filter(u => u.id != id);
+        return res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria).' });
     }
-    usuariosMemoria = usuariosMemoria.filter(u => u.id !== id);
-    res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
 });
 
-// Puerta Escaneo
-app.post('/api/puerta/validar', async (req, res) => {
+// ENVIAR ENTRADA POR EMAIL
+app.post('/api/entradas/enviar-email', async (req, res) => {
+    const { ventaId, hostOrigin } = req.body;
+    let venta = null;
+    if (db) {
+        try {
+            const resV = await db.execute({ sql: "SELECT * FROM ventas WHERE id = ?", args: [ventaId] });
+            if (resV.rows.length > 0) venta = resV.rows[0];
+        } catch (e) {}
+    } else {
+        venta = ventasMemoria.find(v => v.id == ventaId);
+    }
+    if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
+    if (!venta.email) return res.status(400).json({ exito: false, mensaje: 'La venta no tiene un email registrado.' });
+
+    const sig = generarFirma(venta.id, venta.codigoAsiento);
+    const link = `${hostOrigin || 'http://localhost:3000'}/entrada.html?id=${venta.id}&sig=${sig}`;
+
     try {
-        const { id, sig } = req.body;
-        if (!id) return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
-
-        let ventaId = id;
-        let sigRecibida = sig || null;
-
-        if (typeof id === 'string' && id.trim().startsWith('{')) {
-            try {
-                const parsed = JSON.parse(id);
-                ventaId = parsed.ticket_id || parsed.id || id;
-                sigRecibida = parsed.sig || sigRecibida;
-            } catch (e) {}
-        }
-
-        if (db) {
-            const vRes = await db.execute({
-                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora 
-                      FROM ventas v 
-                      LEFT JOIN eventos e ON v.evento_id = e.id 
-                      WHERE v.id = ? OR v.codigoAsiento = ?`,
-                args: [ventaId, ventaId]
-            });
-
-            if (vRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
-
-            const venta = vRes.rows[0];
-
-            if (venta.evento_fecha && venta.evento_hora) {
-                const fechaHoraEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
-                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
-                const cierreEvento = new Date(`${venta.evento_fecha}T23:59:59`);
-                const horaActual = new Date();
-
-                if (horaActual < aperturaPuertas) {
-                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    return res.json({ 
-                        exito: false, 
-                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${venta.evento_nombre}</strong><br>El ingreso habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
-                    });
-                }
-
-                if (horaActual > cierreEvento) {
-                    return res.json({ 
-                        exito: false, 
-                        mensaje: `⛔ ENTRADA EXPIRADA<br>Esta entrada correspondía al evento del <strong>${venta.evento_fecha}</strong>.` 
-                    });
-                }
-            }
-
-            if (sigRecibida && typeof generarFirma === 'function') {
-                const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
-                if (sigRecibida !== firmaEsperada) {
-                    return res.json({ exito: false, mensaje: '¡ALERTA! Entrada falsificada o firma inválida.' });
-                }
-            }
-
-            const asientoRes = await db.execute({
-                sql: "SELECT asistio FROM asientos WHERE id = ?",
-                args: [venta.asiento_id]
-            });
-
-            if (asientoRes.rows.length > 0 && asientoRes.rows[0].asistio === 1) {
-                return res.json({ 
-                    exito: false, 
-                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
-                });
-            }
-
-            await db.execute({
-                sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
-                args: [venta.asiento_id]
-            });
-
-            return res.json({
-                exito: true,
-                asiento: venta.codigoAsiento,
-                cliente: `${venta.nombre} ${venta.apellido}`,
-                mensaje: 'INGRESO PERMITIDO'
-            });
-
-        } else {
-            const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
-            if (!venta) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
-
-            const evento = eventosMemoria.find(e => e.id === venta.evento_id);
-            if (evento && evento.fecha && evento.hora) {
-                const fechaHoraEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
-                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
-                const cierreEvento = new Date(`${evento.fecha}T23:59:59`);
-                const horaActual = new Date();
-
-                if (horaActual < aperturaPuertas) {
-                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    return res.json({ 
-                        exito: false, 
-                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${evento.nombre}</strong><br>Habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
-                    });
-                }
-
-                if (horaActual > cierreEvento) {
-                    return res.json({ 
-                        exito: false, 
-                        mensaje: `⛔ ENTRADA EXPIRADA<br>Pertenecía al evento del <strong>${evento.fecha}</strong>.` 
-                    });
-                }
-            }
-
-            const lista = asientosMemoria[venta.evento_id] || [];
-            const asiento = lista.find(a => a.id === venta.asiento_id);
-
-            if (asiento && asiento.asistio === 1) {
-                return res.json({ 
-                    exito: false, 
-                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido}` 
-                });
-            }
-
-            if (asiento) asiento.asistio = 1;
-
-            return res.json({
-                exito: true,
-                asiento: venta.codigoAsiento,
-                cliente: `${venta.nombre} ${venta.apellido}`,
-                mensaje: 'INGRESO PERMITIDO'
-            });
-        }
-    } catch (error) {
-        return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
+        await transporter.sendMail({
+            from: '"Boletería Institucional" <gonzalog2019@gmail.com>',
+            to: venta.email,
+            subject: 'Tu Entrada Digital - Boletería Institucional',
+            html: `<h3>Hola ${venta.nombre} ${venta.apellido}</h3><p>Tu entrada para el asiento <strong>${venta.codigoAsiento}</strong> ha sido confirmada.</p><p><a href="${link}">Haz clic aquí para ver tu ticket digital</a></p>`
+        });
+        return res.json({ exito: true, mensaje: 'Email enviado correctamente.' });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico.' });
     }
-});
-
-app.get('/puerta.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'puerta.html'));
-});
-
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`===========================================`);
-    console.log(`Servidor iniciado en http://localhost:${PORT}`);
-    console.log(`===========================================`);
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
 });
-
 
