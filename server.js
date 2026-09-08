@@ -4,6 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 const QRCode = require('qrcode');
+const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
@@ -789,6 +790,34 @@ app.post('/api/entradas/enviar-email', async (req, res) => {
 
         const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
         const qrDataUrl = await QRCode.toDataURL(qrPayload);
+
+        // =========================================================================
+// 🎨 INICIO DE CÓDIGO CANVAS (Generación de la imagen del ticket)
+// =========================================================================
+// 1. Crear el lienzo con las dimensiones de tu diseño de Canva (ej. 800x400 px)
+const canvas = createCanvas(800, 400);
+const ctx = canvas.getContext('2d');
+
+// 2. Cargar tu plantilla base descargada de Canva
+const fondoCanva = await loadImage(path.join(__dirname, 'plantilla_entrada.png'));
+ctx.drawImage(fondoCanva, 0, 0, 800, 400);
+
+// 3. Estilo y dibujo del Texto (Nombre, Asiento, Evento, etc.)
+ctx.fillStyle = '#ffffff'; // Color del texto
+ctx.font = 'bold 22px Arial';
+ctx.fillText(`${ticketData.nombre} ${ticketData.apellido}`, 50, 180);
+
+ctx.font = '20px Arial';
+ctx.fillText(`Evento: ${ticketData.evento_nombre}`, 50, 220);
+ctx.fillText(`Asiento: ${ticketData.codigoAsiento}`, 50, 260);
+
+// 4. Dibujar el código QR sobre el ticket (en las coordenadas X=550, Y=100)
+const imgQR = await loadImage(qrDataUrl);
+ctx.drawImage(imgQR, 550, 100, 180, 180);
+
+// 5. Convertir el ticket final a Base64 para el correo
+const ticketImagenBase64 = canvas.toDataURL('image/png');
+// =========================================================================
 
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
             method: 'POST',
