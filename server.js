@@ -593,12 +593,11 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
 
-    // Control opcional de permisos por rol
     const rolConsulta = req.query.rol || rol;
-    if (rolConsulta && !['admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
+    // Se agregan 'super' y 'adm' a la lista de roles autorizados
+    if (rolConsulta && !['super', 'admin', 'adm', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
-
     if (db) {
         try {
             await db.execute({
