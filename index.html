@@ -164,7 +164,7 @@
     </div>
 
     <!-- PANEL PRINCIPAL -->
-    <div id="appContainer" class="container">
+    <div id="appContainer" class="container" style="display:none;">
         <header>
             <h2>Boletería Institucional</h2>
             <div class="operario-info">Usuario: <span id="lblOperario">-</span> (<span id="lblTipo"></span>)</div>
@@ -285,7 +285,7 @@
             </div>
 
             <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS -->
-            <div id="seccionEntradasVendidas" class="card mt-4 d-none" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+            <div id="seccionEntradasVendidas" class="card mt-4" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h4 style="margin: 0;">📋 Listado de Entradas Vendidas</h4>
                     <button class="btn-primary" style="width: auto; padding: 5px 12px;" onclick="actualizarListaVentas()">🔄 Actualizar</button>
@@ -309,7 +309,7 @@
             </div>
         </div>
 
-        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO (ADMIN / SUPER) -->
+        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO -->
         <div id="tabReporteEventos" class="tab-content">
             <h3>📈 Reporte Consolidado por Eventos</h3>
             <div class="no-print" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
@@ -385,24 +385,25 @@
 
                 <button class="btn-primary" onclick="crearEvento()">Guardar Evento</button>
             </div>
+
+            <hr style="border-color: #334155; margin: 30px 0;">
+            <h4>Eventos Existentes</h4>
+            <button class="btn-primary" style="width:auto; margin-bottom:10px;" onclick="cargarListaGestionEventos()">🔄 Cargar Lista</button>
+            <table class="tabla-admin" style="width:100%;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Fecha/Hora</th>
+                        <th style="text-align: center;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyGestionEventos">
+                    <tr><td colspan="4" style="text-align:center;">Haz clic en Cargar Lista</td></tr>
+                </tbody>
+            </table>
         </div>
-        <!-- eventos existentes -->
-<hr style="border-color: #334155; margin: 30px 0;">
-<h4>Eventos Existentes</h4>
-<button class="btn-primary" style="width:auto; margin-bottom:10px;" onclick="cargarListaGestionEventos()">🔄 Cargar Lista</button>
-<table class="tabla-admin" style="width:100%;">
-    <thead>
-        <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Fecha/Hora</th>
-            <th>Acción</th>
-        </tr>
-    </thead>
-    <tbody id="tbodyGestionEventos">
-        <tr><td colspan="4" style="text-align:center;">Haz clic en Cargar Lista</td></tr>
-    </tbody>
-</table>
+
         <!-- PESTAÑA CUPONES -->
         <div id="tabCupones" class="tab-content">
             <h3>Gestión de Cupones de Descuento</h3>
@@ -481,49 +482,63 @@
             </table>
         </div>
     </div>
+
     <!-- MODAL PARA EDITAR EVENTO -->
-<div id="modalEditarEvento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; justify-content:center; align-items:center;">
-    <div style="background:#1e293b; color:#fff; padding:25px; border-radius:12px; width:90%; max-width:500px; border:1px solid #334155;">
-        <h3>✏️ Editar Evento</h3>
-        <input type="hidden" id="editEventoId">
-        
-        <label style="display:block; margin-top:10px;">Nombre del Evento:</label>
-        <input type="text" id="editNombre" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
-        
-        <div style="display:flex; gap:10px; margin-top:10px;">
-            <div style="flex:1;">
-                <label>Fecha:</label>
-                <input type="date" id="editFecha" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+    <div id="modalEditarEvento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; justify-content:center; align-items:center;">
+        <div style="background:#1e293b; color:#fff; padding:25px; border-radius:12px; width:90%; max-width:500px; border:1px solid #334155;">
+            <h3>✏️ Editar Evento</h3>
+            <input type="hidden" id="editEvId">
+            
+            <label style="display:block; margin-top:10px;">Nombre del Evento:</label>
+            <input type="text" id="editEvNombre" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <div style="flex:1;">
+                    <label>Fecha:</label>
+                    <input type="date" id="editEvFecha" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
+                <div style="flex:1;">
+                    <label>Hora:</label>
+                    <input type="time" id="editEvHora" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
             </div>
-            <div style="flex:1;">
-                <label>Hora:</label>
-                <input type="time" id="editHora" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
-            </div>
-        </div>
 
-        <div style="display:flex; gap:10px; margin-top:10px;">
-            <div style="flex:1;">
-                <label>Precio General ($):</label>
-                <input type="number" id="editPrecioGeneral" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <div style="flex:1;">
+                    <label>Precio General ($):</label>
+                    <input type="number" id="editEvPrecioGeneral" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
+                <div style="flex:1;">
+                    <label>Precio Gradas ($):</label>
+                    <input type="number" id="editEvPrecioGradas" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
             </div>
-            <div style="flex:1;">
-                <label>Precio Gradas ($):</label>
-                <input type="number" id="editPrecioGradas" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
-            </div>
-        </div>
 
-        <div style="margin-top:20px; display:flex; justify-end; gap:10px;">
-            <button onclick="cerrarModalEditar()" style="padding:8px 16px; background:#64748b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancelar</button>
-            <button onclick="guardarEdicionEvento()" style="padding:8px 16px; background:#10b981; color:#fff; border:none; border-radius:6px; cursor:pointer;">💾 Guardar Cambios</button>
+            <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
+                <button onclick="cerrarModalEditarEvento()" style="padding:8px 16px; background:#64748b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancelar</button>
+                <button onclick="guardarEdicionEvento()" style="padding:8px 16px; background:#10b981; color:#fff; border:none; border-radius:6px; cursor:pointer;">💾 Guardar Cambios</button>
+            </div>
         </div>
     </div>
-</div>
+
     <script>
         let usuarioSesion = null;
         let asientoSeleccionado = null;
         let descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
         let cuponesEventoActual = [];
-        let listaGlobalReportes = []; // Cache local para los reportes consolidados
+        let listaGlobalReportes = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const sesionGuardada = sessionStorage.getItem('usuarioLogueado');
+            if (sesionGuardada) {
+                try {
+                    const { usuario, tipo } = JSON.parse(sesionGuardada);
+                    establecerSesion(usuario, tipo);
+                } catch (e) {
+                    console.error('Error al restaurar sesión:', e);
+                }
+            }
+        });
 
         async function iniciarSesionBackend() {
             const usuario = document.getElementById('loginUsuario').value.trim();
@@ -574,7 +589,6 @@
         function establecerSesion(nombre, tipo) {
             const rol = (tipo || '').toLowerCase();
 
-            // REDIRECCIÓN AUTOMÁTICA SI ES USUARIO PUERTA
             if (rol === 'puerta') {
                 window.location.href = 'puerta.html';
                 return;
@@ -586,13 +600,13 @@
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('appContainer').style.display = 'block';
 
-            if (rol === 'adm' || rol === 'super' || rol === 'admin') {
+            if (['adm', 'super', 'admin'].includes(rol)) {
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
                 document.getElementById('btnTabCupones').style.display = 'block';
-                document.getElementById('btnTabReporteEventos').style.display = 'block'; // Habilitar modulo reportes
+                document.getElementById('btnTabReporteEventos').style.display = 'block';
             }
-            if (rol === 'super' || rol === 'admin') {
+            if (['super', 'admin'].includes(rol)) {
                 document.getElementById('btnTabSuper').style.display = 'block';
                 cargarUsuariosSuper();
             }
@@ -612,7 +626,7 @@
 
             if (sesion && sesion.usuario) {
                 const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta', 'adm'];
-                if (rolesPuerta.includes(sesion.tipo.toLowerCase())) {
+                if (rolesPuerta.includes((sesion.tipo || '').toLowerCase())) {
                     btnPuerta.style.display = 'block';
                 }
             } else {
@@ -872,12 +886,8 @@
             const dispGenVal = parseInt(document.getElementById('evDispGen').value) || 0;
             const dispGradaVal = parseInt(document.getElementById('evDispGrada').value) || 0;
 
-            if (dispGenVal > 112) {
-                return alert('La cantidad máxima de asientos en General es 112.');
-            }
-            if (dispGradaVal > 24) {
-                return alert('La cantidad máxima de asientos en Gradas es 24.');
-            }
+            if (dispGenVal > 112) return alert('La cantidad máxima de asientos en General es 112.');
+            if (dispGradaVal > 24) return alert('La cantidad máxima de asientos en Gradas es 24.');
 
             const body = {
                 id: document.getElementById('evId').value.trim(),
@@ -904,9 +914,111 @@
                 alert(data.mensaje);
                 if(data.exito) {
                     cargarEventosEnSelect();
+                    cargarListaGestionEventos();
                 }
             } catch(e) {
                 alert('Error al guardar evento.');
+            }
+        }
+
+        async function cargarListaGestionEventos() {
+            const tbody = document.getElementById('tbodyGestionEventos');
+            if (!tbody) return;
+
+            try {
+                const res = await fetch('/api/eventos');
+                const eventos = await res.json();
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(eventos) || eventos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#94a3b8;">No hay eventos registrados.</td></tr>';
+                    return;
+                }
+
+                eventos.forEach(e => {
+                    tbody.innerHTML += `
+                        <tr style="border-bottom: 1px solid #334155;">
+                            <td style="padding: 8px;"><strong>${e.id}</strong></td>
+                            <td style="padding: 8px;">${e.nombre}</td>
+                            <td style="padding: 8px;">${e.fecha} ${e.hora || ''}</td>
+                            <td style="padding: 8px; text-align: center;">
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;"
+                                    onclick="abrirModalEditarEvento('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${e.fecha}', '${e.hora || ''}', ${e.precioGeneral || 0}, ${e.precioGradas || 0})">
+                                    ✏️ Editar
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
+                                    onclick="eliminarEvento('${e.id}')">
+                                    🗑️ Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#ef4444;">Error al cargar lista de eventos.</td></tr>';
+            }
+        }
+
+        function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas) {
+            document.getElementById('editEvId').value = id;
+            document.getElementById('editEvNombre').value = nombre;
+            document.getElementById('editEvFecha').value = fecha;
+            document.getElementById('editEvHora').value = hora;
+            document.getElementById('editEvPrecioGeneral').value = precioGen;
+            document.getElementById('editEvPrecioGradas').value = precioGradas;
+            document.getElementById('modalEditarEvento').style.display = 'flex';
+        }
+
+        function cerrarModalEditarEvento() {
+            document.getElementById('modalEditarEvento').style.display = 'none';
+        }
+
+        async function guardarEdicionEvento() {
+            const id = document.getElementById('editEvId').value;
+            const body = {
+                nombre: document.getElementById('editEvNombre').value.trim(),
+                fecha: document.getElementById('editEvFecha').value,
+                hora: document.getElementById('editEvHora').value,
+                precioGeneral: parseFloat(document.getElementById('editEvPrecioGeneral').value) || 0,
+                precioGradas: parseFloat(document.getElementById('editEvPrecioGradas').value) || 0,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
+            };
+
+            try {
+                const res = await fetch(`/api/eventos/editar/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                alert(data.mensaje || 'Evento actualizado correctamente');
+                if (data.exito) {
+                    cerrarModalEditarEvento();
+                    cargarListaGestionEventos();
+                    cargarEventosEnSelect();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error al intentar guardar los cambios del evento.');
+            }
+        }
+
+        async function eliminarEvento(id) {
+            if (!confirm(`¿Seguro que deseas eliminar el evento ${id}? Se borrarán también sus ventas y asientos asociados.`)) return;
+
+            const rol = usuarioSesion ? usuarioSesion.tipo : '';
+            try {
+                const res = await fetch(`/api/eventos/eliminar/${id}?rol=${rol}`, { method: 'DELETE' });
+                const data = await res.json();
+                alert(data.mensaje || 'Evento eliminado');
+                if (data.exito) {
+                    cargarListaGestionEventos();
+                    cargarEventosEnSelect();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error al eliminar evento.');
             }
         }
 
@@ -932,7 +1044,7 @@
                     document.getElementById('usrNombre').value = '';
                     document.getElementById('usrIdentificacion').value = '';
                     document.getElementById('usrClave').value = '';
-                    if(usuarioSesion && (usuarioSesion.tipo === 'super' || usuarioSesion.tipo === 'admin')) cargarUsuariosSuper();
+                    if(usuarioSesion && ['super', 'admin'].includes(usuarioSesion.tipo)) cargarUsuariosSuper();
                 }
             } catch(e) {
                 alert('Error al crear usuario.');
@@ -1041,38 +1153,17 @@
             window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
         }
 
-        /* LÓGICA DEL REPORTE CONSOLIDADO DE EVENTOS */
-        async function cargarReporteConsolidado() {
-    try {
-        const res = await fetch('/api/reportes/consolidado');
-        const reportes = await res.json();
-        const tbody = document.getElementById('tbodyReporteConsolidado');
-        if (!tbody) return;
-
-        tbody.innerHTML = '';
-        if (Array.isArray(reportes)) {
-            reportes.forEach(r => {
-                const vendidas = r.vendidas ?? 0;
-                const asistentes = r.asistentes ?? 0;
-                const recaudado = r.recaudado ?? 0;
-                const descuento = r.descuento ?? 0;
-
-                tbody.innerHTML += `
-                    <tr>
-                        <td><strong>${r.nombre || r.evento_nombre}</strong></td>
-                        <td>${r.fecha}</td>
-                        <td>${vendidas}</td>
-                        <td style="color:#10b981; font-weight:bold;">${asistentes}</td>
-                        <td style="color:#f59e0b; font-weight:bold;">$${Number(recaudado).toFixed(2)}</td>
-                        <td style="color:#3b82f6;">$${Number(descuento).toFixed(2)}</td>
-                    </tr>
-                `;
-            });
+        async function cargarReportesConsolidados() {
+            try {
+                const res = await fetch('/api/reportes/consolidado');
+                if (!res.ok) return;
+                const data = await res.json();
+                listaGlobalReportes = Array.isArray(data) ? data : [];
+                filtrarReporteConsolidado();
+            } catch (e) {
+                console.error("Error al cargar reporte consolidado:", e);
+            }
         }
-    } catch (e) {
-        console.error("Error al cargar reporte consolidado:", e);
-    }
-}
 
         function filtrarReporteConsolidado() {
             const filtro = document.getElementById('selFiltroReporteEvento').value;
@@ -1093,10 +1184,10 @@
             let totVen = 0, totAsis = 0, totRec = 0, totDesc = 0;
 
             listado.forEach(r => {
-                const vendidas = parseInt(r.vendidas || r.vendidas_cantidad || 0);
-                const asistentes = parseInt(r.asistentes || r.asistentes_cantidad || 0);
-                const recaudado = parseFloat(r.recaudado || r.total_recaudado || 0);
-                const descuentos = parseFloat(r.descuento_total || r.monto_descuento || 0);
+                const vendidas = parseInt(r.vendidas || 0);
+                const asistentes = parseInt(r.asistentes || 0);
+                const recaudado = parseFloat(r.recaudado || 0);
+                const descuentos = parseFloat(r.descuento || 0);
 
                 totVen += vendidas;
                 totAsis += asistentes;
@@ -1105,7 +1196,7 @@
 
                 tbody.innerHTML += `
                     <tr style="border-bottom: 1px solid #334155;">
-                        <td style="padding: 10px;"><strong>${r.nombre}</strong></td>
+                        <td style="padding: 10px;"><strong>${r.nombre || r.evento_nombre}</strong></td>
                         <td style="padding: 10px;">${r.fecha || 'N/A'}</td>
                         <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${vendidas}</td>
                         <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${asistentes}</td>
@@ -1138,11 +1229,11 @@
             let msj = `📊 *REPORTE DE EVENTOS*\n----------------------------------\n`;
             
             listado.forEach(r => {
-                msj += `🎭 *${r.nombre}* (${r.fecha || 'S/D'})\n`;
+                msj += `🎭 *${r.nombre || r.evento_nombre}* (${r.fecha || 'S/D'})\n`;
                 msj += `🎟️ Vendidas: ${r.vendidas || 0}\n`;
                 msj += `👥 Asistentes: ${r.asistentes || 0}\n`;
                 msj += `💰 Recaudado: $${(parseFloat(r.recaudado) || 0).toFixed(2)}\n`;
-                msj += `🏷️ Descuentos: $${(parseFloat(r.descuento_total) || 0).toFixed(2)}\n`;
+                msj += `🏷️ Descuentos: $${(parseFloat(r.descuento) || 0).toFixed(2)}\n`;
                 msj += `----------------------------------\n`;
             });
 
@@ -1159,8 +1250,7 @@
 
             try {
                 let res = await fetch(`/api/ventas/detalle/${eventoId}`);
-                if (!res.ok) res = await fetch(`/api/eventos/${eventoId}/ventas`);
-                if (!res.ok) throw new Error('No se pudo conectar con el endpoint de ventas.');
+                if (!res.ok) throw new Error('No se pudo obtener el detalle de ventas.');
                 
                 const ventas = await res.json();
                 tbody.innerHTML = '';
@@ -1171,19 +1261,19 @@
                 }
 
                 ventas.forEach(v => {
-                    const nombre = v.nombre || v.cliente_nombre || '';
-                    const apellido = v.apellido || v.cliente_apellido || '';
+                    const nombre = v.nombre || '';
+                    const apellido = v.apellido || '';
                     const nombreCompleto = `${nombre} ${apellido}`.trim() || 'Comprador';
-                    const mail = v.email || v.correo || '';
-                    const tel = v.telefono || v.contacto || v.celular || '';
-                    const asiento = v.codigoAsiento || v.codigo_asiento || v.asiento || 'General';
-                    const ventaId = v.id || v.venta_id || v.id_entrada;
+                    const mail = v.email || '';
+                    const tel = v.telefono || v.contacto || '';
+                    const asiento = v.codigoAsiento || 'General';
+                    const ventaId = v.id;
                     const sig = v.sig || '';
 
                     const rol = (usuarioSesion?.tipo || '').toLowerCase();
-                    const esAdminOSuper = (rol === 'adm' || rol === 'super' || rol === 'admin');
+                    const esAdminOSuper = ['adm', 'super', 'admin'].includes(rol);
                     
-                    const fechaVenta = v.fecha_creacion || v.created_at || v.fecha ? new Date(v.fecha_creacion || v.created_at || v.fecha) : new Date();
+                    const fechaVenta = v.fechaCompra ? new Date(v.fechaCompra) : new Date();
                     const minutosTranscurridos = (new Date() - fechaVenta) / (1000 * 60);
                     
                     const puedeCancelar = esAdminOSuper || (minutosTranscurridos <= 15);
@@ -1223,7 +1313,7 @@
                                     💬 WA
                                 </button>
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; margin-right: 4px;" 
-                                    onclick="enviarEmailTicket('${mail}', '${nombreCompleto}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
+                                    onclick="enviarEmailTicket('${mail}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
                                     ✉️ Email
                                 </button>
                                 ${botonCancelar}
@@ -1240,8 +1330,9 @@
         async function cancelarVenta(ventaId, eventoId) {
             if (!confirm('¿Estás seguro de que deseas cancelar esta compra? El asiento volverá a estar disponible.')) return;
 
+            const rol = usuarioSesion ? usuarioSesion.tipo : '';
             try {
-                const res = await fetch(`/api/ventas/cancelar/${ventaId}`, { method: 'DELETE' });
+                const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${rol}`, { method: 'DELETE' });
                 const data = await res.json();
                 alert(data.mensaje || 'Venta cancelada correctamente.');
 
@@ -1343,199 +1434,42 @@
 
         function enviarWhatsApp(telefono, cliente, asiento, ventaId, sig) {
             if (!telefono) return alert('El cliente no tiene registrado número de teléfono.');
-            
+
             let numLimpio = telefono.replace(/\D/g, '');
 
             if (numLimpio.startsWith('0')) {
                 numLimpio = numLimpio.substring(1);
             }
-
-            if (!numLimpio.startsWith('549')) {
-                if (numLimpio.startsWith('54')) {
-                    numLimpio = '549' + numLimpio.substring(2);
-                } else {
-                    numLimpio = '549' + numLimpio;
-                }
+            if (!numLimpio.startsWith('54')) {
+                numLimpio = '54' + numLimpio;
             }
 
-            const urlEntrada = `${window.location.origin}/entrada.html?id=${ventaId}&sig=${sig}`;
-            const mensaje = encodeURIComponent(
-                `Hola ${cliente}, ¡gracias por tu compra!\n\n` +
-                `🎫 *Tu Entrada Digital*\n` +
-                `📍 Asiento: *${asiento}*\n\n` +
-                `Accede a tu código QR con este enlace seguro:\n${urlEntrada}`
-            );
+            const origin = window.location.origin;
+            const ticketUrl = `${origin}/entrada.html?id=${ventaId}&sig=${sig}`;
+            const mensaje = encodeURIComponent(`Hola ${cliente}, aquí tienes tu entrada para el evento.\nUbicación/Asiento: ${asiento}\nAccede a tu ticket digital aquí: ${ticketUrl}`);
 
-            window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+            window.open(`https://api.whatsapp.com/send?phone=${numLimpio}&text=${mensaje}`, '_blank');
         }
 
-        async function enviarEmailTicket(email, cliente, ventaId) {
-            if (!email) return alert('El cliente no tiene registrado un correo electrónico.');
+        async function enviarEmailTicket(email, ventaId) {
+            if (!email) return alert('El cliente no posee una dirección de correo válida.');
 
             try {
-                const respuesta = await fetch('/api/entradas/enviar-email', {
+                const res = await fetch('/api/entradas/enviar-email', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ventaId, hostOrigin: window.location.origin })
+                    body: JSON.stringify({
+                        ventaId: ventaId,
+                        hostOrigin: window.location.origin
+                    })
                 });
-
-                const data = await respuesta.json();
-
-                if (respuesta.ok && data.exito) {
-                    alert(`✅ ${data.mensaje}`);
-                } else {
-                    alert(`⚠️ Error al enviar correo: ${data.mensaje || 'Respuesta no válida del servidor'}`);
-                }
+                const data = await res.json();
+                alert(data.mensaje || (data.exito ? 'Correo enviado con éxito' : 'Error al enviar el correo'));
             } catch (err) {
-                console.error('Error enviando email:', err);
-                alert('❌ Error de conexión al intentar enviar el correo.');
+                console.error(err);
+                alert('Error al conectar con el servidor para enviar el correo.');
             }
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const sesionExistente = JSON.parse(sessionStorage.getItem('usuarioLogueado') || '{}');
-            if (sesionExistente && sesionExistente.usuario) {
-                establecerSesion(sesionExistente.usuario, sesionExistente.tipo);
-            }
-        });
-
-        // Función para cancelar una venta de entrada
-async function cancelarVenta(ventaId, eventoId) {
-    if (!confirm("¿Seguro que deseas cancelar esta venta? El asiento quedará liberado.")) return;
-
-    try {
-        const rolActual = usuarioSesion ? usuarioSesion.tipo : 'vendedor';
-        const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${encodeURIComponent(rolActual)}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rol: rolActual })
-        });
-
-        const data = await res.json();
-        alert(data.mensaje);
-
-        if (data.exito) {
-            cargarTablaDetalleVentas(eventoId);
-            cargarDetalleInforme();
-        }
-    } catch (err) {
-        alert("Error al intentar cancelar la entrada.");
-    }
-};
-
-// Función para eliminar un evento completo
-async function eliminarEvento(eventoId) {
-    if (!confirm("¿ATENCIÓN: Estás seguro de eliminar este evento? Se borrarán sus asientos y ventas asociadas.")) return;
-
-    try {
-        const rolActual = usuarioSesion ? usuarioSesion.tipo : '';
-        const res = await fetch(`/api/eventos/eliminar/${eventoId}?rol=${encodeURIComponent(rolActual)}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rol: rolActual })
-        });
-
-        const data = await res.json();
-        alert(data.mensaje);
-
-        if (data.exito) {
-            cargarEventosEnSelect();
-            if (typeof cargarListaGestionEventos === 'function') cargarListaGestionEventos();
-        }
-    } catch (e) {
-        alert("Error al eliminar el evento.");
-    }
-};
-        async function cargarListaGestionEventos() {
-    try {
-        const res = await fetch('/api/eventos');
-        const eventos = await res.json();
-        
-        // Ajusta la ID del tbody según como esté nombrada en tu HTML (ej: tbodyGestionEventos o tablaEventos)
-        const tbody = document.getElementById('tbodyGestionEventos') || document.querySelector('#tablaEventos tbody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-
-        if (Array.isArray(eventos)) {
-            eventos.forEach(ev => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${ev.id}</td>
-                        <td><strong>${ev.nombre}</strong></td>
-                        <td>${ev.fecha} ${ev.hora || ''}hs</td>
-                        <td>
-                            <button class="btn-primary" style="background:#f59e0b; padding:4px 10px; width:auto; margin-right:5px; border-radius:4px; cursor:pointer;" onclick="editarEvento('${ev.id}')">✏️ Editar</button>
-                            <button class="btn-primary" style="background:#ef4444; padding:4px 10px; width:auto; border-radius:4px; cursor:pointer;" onclick="eliminarEvento('${ev.id}')">❌ Eliminar</button>
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-    } catch (e) {
-        console.error("Error al cargar lista de eventos:", e);
-    }
-};
-
-        
-        // Abrir el modal con los datos cargados del evento
-async function editarEvento(eventoId) {
-    try {
-        const res = await fetch(`/api/eventos/${eventoId}`);
-        if (!res.ok) throw new Error("No se pudo obtener la información del evento");
-        const ev = await res.json();
-
-        document.getElementById('editEventoId').value = ev.id;
-        document.getElementById('editNombre').value = ev.nombre;
-        document.getElementById('editFecha').value = ev.fecha;
-        document.getElementById('editHora').value = ev.hora;
-        document.getElementById('editPrecioGeneral').value = ev.precioGeneral || ev.preciogeneral || 0;
-        document.getElementById('editPrecioGradas').value = ev.precioGradas || ev.preciogradas || 0;
-
-        document.getElementById('modalEditarEvento').style.display = 'flex';
-    } catch (e) {
-        alert("Error al cargar datos del evento: " + e.message);
-    }
-}
-
-function cerrarModalEditar() {
-    document.getElementById('modalEditarEvento').style.display = 'none';
-}
-
-// Enviar los cambios guardados al backend
-async function guardarEdicionEvento() {
-    const id = document.getElementById('editEventoId').value;
-    const rolActual = usuarioSesion ? usuarioSesion.tipo : '';
-
-    const payload = {
-        nombre: document.getElementById('editNombre').value,
-        fecha: document.getElementById('editFecha').value,
-        hora: document.getElementById('editHora').value,
-        precioGeneral: parseFloat(document.getElementById('editPrecioGeneral').value) || 0,
-        precioGradas: parseFloat(document.getElementById('editPrecioGradas').value) || 0,
-        rol: rolActual
-    };
-
-    try {
-        const res = await fetch(`/api/eventos/editar/${id}?rol=${encodeURIComponent(rolActual)}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        const data = await res.json();
-        alert(data.mensaje);
-
-        if (data.exito) {
-            cerrarModalEditar();
-            if (typeof cargarListaGestionEventos === 'function') cargarListaGestionEventos();
-            if (typeof cargarEventosEnSelect === 'function') cargarEventosEnSelect();
-        }
-    } catch (e) {
-        alert("Error al intentar guardar los cambios del evento.");
-    }
-}
-        
     </script>
 </body>
 </html>
-
