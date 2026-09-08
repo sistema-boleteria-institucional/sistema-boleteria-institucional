@@ -152,6 +152,9 @@
                 <select id="selNuevoAsiento">
                     <option value="">-- Mantener Asiento Actual --</option>
                 </select>
+                <small style="color: #38bdf8; display: block; margin-top: 6px; font-size: 0.8em; line-height: 1.3;">
+                    ⚠️ <strong>Restricción:</strong> Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.
+                </small>
             </div>
 
             <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -1345,7 +1348,8 @@
                         nombre: nombre,
                         apellido: apellido,
                         contacto: tel,
-                        email: mail
+                        email: mail,
+                        codigoAsiento: asiento
                     }).replace(/"/g, '&quot;');
 
                     const botonCancelar = puedeCancelar 
@@ -1417,7 +1421,7 @@
             document.getElementById('editContacto').value = v.contacto;
             document.getElementById('editEmail').value = v.email;
 
-            await cargarAsientosDisponiblesSelect(v.eventoId);
+            await cargarAsientosDisponiblesSelect(v.eventoId, v.codigoAsiento);
             document.getElementById('modalEditarVenta').style.display = 'block';
         }
 
@@ -1425,7 +1429,7 @@
             document.getElementById('modalEditarVenta').style.display = 'none';
         }
 
-        async function cargarAsientosDisponiblesSelect(eventoId) {
+        async function cargarAsientosDisponiblesSelect(eventoId, codigoAsientoActual = '') {
             const sel = document.getElementById('selNuevoAsiento');
             sel.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
 
@@ -1435,10 +1439,29 @@
                 const asientos = await res.json();
 
                 if (Array.isArray(asientos)) {
+                    // Identificar el tipo de zona del asiento actual
+                    const esActualGen = codigoAsientoActual.startsWith('GEN') || codigoAsientoActual.toLowerCase().includes('general');
+                    const esActualGrada = codigoAsientoActual.startsWith('G1') || codigoAsientoActual.startsWith('G2') || codigoAsientoActual.startsWith('G') || codigoAsientoActual.toLowerCase().includes('grada');
+
                     const disponibles = asientos.filter(a => a.vendido === 0 && a.habilitado !== 0);
-                    disponibles.forEach(a => {
-                        sel.innerHTML += `<option value="${a.id}">${a.codigoAsiento} ($${a.precio})</option>`;
+
+                    // Filtrar para mostrar ÚNICAMENTE los asientos de la misma categoría
+                    const disponiblesMismaZona = disponibles.filter(a => {
+                        const esNuevoGen = a.codigoAsiento.startsWith('GEN') || a.tipoZona === 'General';
+                        const esNuevoGrada = a.codigoAsiento.startsWith('G1') || a.codigoAsiento.startsWith('G2') || a.codigoAsiento.startsWith('G') || a.tipoZona === 'Grada';
+
+                        if (esActualGen) return esNuevoGen;
+                        if (esActualGrada) return esNuevoGrada;
+                        return true;
                     });
+
+                    if (disponiblesMismaZona.length === 0) {
+                        sel.innerHTML += `<option value="" disabled>-- No hay otros asientos disponibles en esta sección (${esActualGen ? 'General' : 'Gradas'}) --</option>`;
+                    } else {
+                        disponiblesMismaZona.forEach(a => {
+                            sel.innerHTML += `<option value="${a.id}">${a.codigoAsiento} ($${a.precio})</option>`;
+                        });
+                    }
                 }
             } catch (e) {
                 console.error("Error al cargar asientos disponibles:", e);
@@ -1532,61 +1555,7 @@
                 console.error(err);
                 alert('Error al conectar con el servidor para enviar el correo.');
             }
-        };
-        // index (4).html - Reemplazar la función truncada al final del archivo
-        function filtrarReporteConsolidado() {
-            const filtro = document.getElementById('selFiltroReporteEvento').value;
-            const tbody = document.getElementById('tbodyReporteEventos');
-            tbody.innerHTML = '';
-
-            let listado = listaGlobalReportes;
-            if (filtro !== 'TODOS') {
-                listado = listado.filter(item => (item.id || item.evento_id) == filtro);
-            }
-
-            if (!Array.isArray(listado) || listado.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No hay datos para mostrar.</td></tr>';
-                document.getElementById('totVendidas').innerText = '0';
-                document.getElementById('totAsistentes').innerText = '0';
-                document.getElementById('totRecaudado').innerText = '$0.00';
-                document.getElementById('totDescuentos').innerText = '$0.00';
-                return;
-            }
-
-            let totVendidas = 0;
-            let totAsistentes = 0;
-            let totRecaudado = 0;
-            let totDescuentos = 0;
-
-            listado.forEach(item => {
-                const vendidas = Number(item.vendidas || 0);
-                const asistentes = Number(item.asistentes || 0);
-                const recaudado = Number(item.recaudado || 0);
-                const descuento = Number(item.descuento || 0);
-
-                totVendidas += vendidas;
-                totAsistentes += asistentes;
-                totRecaudado += recaudado;
-                totDescuentos += descuento;
-
-                tbody.innerHTML += `
-                    <tr style="border-bottom: 1px solid #334155;">
-                        <td style="padding: 8px;"><strong>${item.nombre || item.evento_nombre || 'Sin nombre'}</strong></td>
-                        <td style="padding: 8px;">${item.fecha || ''}</td>
-                        <td style="text-align: center; padding: 8px;">${vendidas}</td>
-                        <td style="text-align: center; padding: 8px;">${asistentes}</td>
-                        <td style="text-align: right; padding: 8px;">$${recaudado.toFixed(2)}</td>
-                        <td style="text-align: right; padding: 8px;">$${descuento.toFixed(2)}</td>
-                    </tr>
-                `;
-            });
-
-            document.getElementById('totVendidas').innerText = totVendidas;
-            document.getElementById('totAsistentes').innerText = totAsistentes;
-            document.getElementById('totRecaudado').innerText = `$${totRecaudado.toFixed(2)}`;
-            document.getElementById('totDescuentos').innerText = `$${totDescuentos.toFixed(2)}`;
         }
-
     </script>
 </body>
 </html>
