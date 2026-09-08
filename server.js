@@ -491,24 +491,23 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                     COALESCE(v.vendidas, 0) as vendidas,
                     COALESCE(v.recaudado, 0) as recaudado,
                     COALESCE(v.descuento, 0) as descuento,
-                    (COALESCE(a.asistentes_asientos, 0) + COALESCE(v.asistentes_ventas, 0)) as asistentes
+                    COALESCE(a.asistentes, 0) as asistentes
                 FROM eventos e
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
                         COUNT(id) as vendidas, 
-                        SUM(monto_total) as recaudado, 
-                        SUM(COALESCE(descuento, 0)) as descuento,
-                        SUM(CASE WHEN asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado' THEN 1 ELSE 0 END) as asistentes_ventas
+                        SUM(monto_total) as recaudado,
+                        SUM(0) as descuento
                     FROM ventas 
                     GROUP BY evento_id
                 ) v ON e.id = v.evento_id
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
-                        COUNT(id) as asistentes_asientos 
+                        COUNT(id) as asistentes 
                     FROM asientos 
-                    WHERE asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado'
+                    WHERE asistio = 1
                     GROUP BY evento_id
                 ) a ON e.id = a.evento_id
                 ORDER BY e.fecha DESC
@@ -524,10 +523,7 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
             
-            const asistVentas = ventas.filter(v => v.asistio == 1 || v.asistio === true || v.estado === 'usado').length;
-            const asistAsientos = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true || a.estado === 'usado').length;
-            const totalAsistentes = asistVentas + asistAsientos;
-
+            const totalAsistentes = listaAsientos.filter(a => a.asistio == 1).length;
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
             const totalDescuento = ventas.reduce((acc, v) => acc + Number(v.descuento || 0), 0);
 
