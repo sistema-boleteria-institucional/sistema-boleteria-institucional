@@ -762,9 +762,6 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     }
 });
 
-const { createCanvas, loadImage } = require('canvas');
-const QRCode = require('qrcode');
-const path = require('path');
 
 // =========================================================================
 // 1. FUNCIÓN PARA GENERAR QR CON LOGO EN EL CENTRO
