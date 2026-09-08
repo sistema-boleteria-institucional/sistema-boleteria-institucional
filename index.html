@@ -90,7 +90,6 @@
             color: #fff !important;
         }
 
-        /* Estilos generales para imprimir PDF */
         @media print {
             body * {
                 visibility: hidden;
@@ -128,7 +127,6 @@
             
             <div id="loginError" style="color: #ef4444; font-size: 0.85em; margin-top: 10px;"></div>
 
-            <!-- Botón de emergencia -->
             <button id="btnModoForzado" class="btn-primary" style="background: #475569; margin-top: 15px; display: none;" onclick="ingresoModoEmergencia()">
                 Ingresar en Modo Sin Servidor (Demo)
             </button>
@@ -587,26 +585,26 @@
         }
 
         function establecerSesion(nombre, tipo) {
-            const rol = (tipo || '').toLowerCase();
+            const rol = (tipo || '').trim().toLowerCase();
 
             if (rol === 'puerta') {
                 window.location.href = 'puerta.html';
                 return;
             }
 
-            usuarioSesion = { usuario: nombre, tipo: tipo };
+            usuarioSesion = { usuario: nombre, tipo: rol };
             document.getElementById('lblOperario').innerText = nombre;
-            document.getElementById('lblTipo').innerText = tipo.toUpperCase();
+            document.getElementById('lblTipo').innerText = rol.toUpperCase();
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('appContainer').style.display = 'block';
 
-            if (['adm', 'super', 'admin'].includes(rol)) {
+            if (['adm', 'super', 'admin', 'administrador'].includes(rol)) {
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
                 document.getElementById('btnTabCupones').style.display = 'block';
                 document.getElementById('btnTabReporteEventos').style.display = 'block';
             }
-            if (['super', 'admin'].includes(rol)) {
+            if (['super', 'admin', 'administrador'].includes(rol)) {
                 document.getElementById('btnTabSuper').style.display = 'block';
                 cargarUsuariosSuper();
             }
@@ -625,7 +623,7 @@
             const btnPuerta = document.getElementById('btnIrPuerta');
 
             if (sesion && sesion.usuario) {
-                const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta', 'adm'];
+                const rolesPuerta = ['super', 'admin', 'vendedor', 'puerta', 'adm', 'administrador'];
                 if (rolesPuerta.includes((sesion.tipo || '').toLowerCase())) {
                     btnPuerta.style.display = 'block';
                 }
@@ -665,11 +663,12 @@
 
                 if(Array.isArray(eventos)){
                     eventos.forEach(ev => {
-                        const opt = `<option value="${ev.id}">${ev.nombre} (${ev.fecha})</option>`;
+                        const evId = ev.id || ev.evento_id;
+                        const opt = `<option value="${evId}">${ev.nombre} (${ev.fecha})</option>`;
                         selVenta.innerHTML += opt;
                         selInf.innerHTML += opt;
                         if (selCup) selCup.innerHTML += opt;
-                        if (selReporte) selReporte.innerHTML += `<option value="${ev.id}">${ev.nombre}</option>`;
+                        if (selReporte) selReporte.innerHTML += `<option value="${evId}">${ev.nombre}</option>`;
                     });
                 }
             } catch (err) {
@@ -772,7 +771,8 @@
                 contacto: document.getElementById('txtContacto').value.trim(),
                 email: document.getElementById('txtEmail').value.trim(),
                 metodo_pago: document.getElementById('selMetodoPago').value,
-                monto_total: montoCalculado
+                monto_total: montoCalculado,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             if(!body.nombre || !body.apellido || !body.contacto) return alert('Por favor completa todos los campos obligatorios (*)');
@@ -857,7 +857,8 @@
                 evento_id: document.getElementById('cupEventoId').value,
                 codigo: document.getElementById('cupCodigo').value.trim(),
                 porcentaje: tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0,
-                monto_fijo: tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0
+                monto_fijo: tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             if (!body.evento_id || !body.codigo) {
@@ -897,7 +898,8 @@
                 precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
                 dispGen: dispGenVal,
                 precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0,
-                dispGrada: dispGradaVal
+                dispGrada: dispGradaVal,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             if(!body.id || !body.nombre || !body.fecha || !body.hora) {
@@ -936,18 +938,19 @@
                 }
 
                 eventos.forEach(e => {
+                    const evId = e.id || e.evento_id;
                     tbody.innerHTML += `
                         <tr style="border-bottom: 1px solid #334155;">
-                            <td style="padding: 8px;"><strong>${e.id}</strong></td>
+                            <td style="padding: 8px;"><strong>${evId}</strong></td>
                             <td style="padding: 8px;">${e.nombre}</td>
                             <td style="padding: 8px;">${e.fecha} ${e.hora || ''}</td>
                             <td style="padding: 8px; text-align: center;">
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;"
-                                    onclick="abrirModalEditarEvento('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${e.fecha}', '${e.hora || ''}', ${e.precioGeneral || 0}, ${e.precioGradas || 0})">
+                                    onclick="abrirModalEditarEvento('${evId}', '${(e.nombre || '').replace(/'/g, "\\'")}', '${e.fecha}', '${e.hora || ''}', ${e.precioGeneral || 0}, ${e.precioGradas || 0})">
                                     ✏️ Editar
                                 </button>
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
-                                    onclick="eliminarEvento('${e.id}')">
+                                    onclick="eliminarEvento('${evId}')">
                                     🗑️ Eliminar
                                 </button>
                             </td>
@@ -993,7 +996,7 @@
                 });
                 const data = await res.json();
                 alert(data.mensaje || 'Evento actualizado correctamente');
-                if (data.exito) {
+                if (res.ok || data.exito) {
                     cerrarModalEditarEvento();
                     cargarListaGestionEventos();
                     cargarEventosEnSelect();
@@ -1027,7 +1030,8 @@
                 usuario: document.getElementById('usrNombre').value.trim(),
                 identificacion: document.getElementById('usrIdentificacion').value.trim(),
                 clave: document.getElementById('usrClave').value,
-                tipo: document.getElementById('usrTipo').value
+                tipo: document.getElementById('usrTipo').value,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             if(!body.usuario || !body.identificacion || !body.clave) return alert('Por favor completa todos los campos del usuario.');
@@ -1044,7 +1048,7 @@
                     document.getElementById('usrNombre').value = '';
                     document.getElementById('usrIdentificacion').value = '';
                     document.getElementById('usrClave').value = '';
-                    if(usuarioSesion && ['super', 'admin'].includes(usuarioSesion.tipo)) cargarUsuariosSuper();
+                    if(usuarioSesion && ['super', 'admin', 'adm', 'administrador'].includes(usuarioSesion.tipo)) cargarUsuariosSuper();
                 }
             } catch(e) {
                 alert('Error al crear usuario.');
@@ -1088,7 +1092,7 @@
                 const res = await fetch('/api/super/revelar-clave', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ claveSuper, usuarioIdTarget: userId })
+                    body: JSON.stringify({ claveSuper, usuarioIdTarget: userId, rol: usuarioSesion ? usuarioSesion.tipo : '' })
                 });
                 const data = await res.json();
                 if(data.exito) {
@@ -1104,7 +1108,8 @@
         async function eliminarUsuario(userId) {
             if(!confirm("¿Seguro que deseas eliminar este usuario?")) return;
             try {
-                await fetch(`/api/super/usuarios/${userId}`, { method: 'DELETE' });
+                const rol = usuarioSesion ? usuarioSesion.tipo : '';
+                await fetch(`/api/super/usuarios/${userId}?rol=${rol}`, { method: 'DELETE' });
                 cargarUsuariosSuper();
             } catch(e) {
                 alert('Error al eliminar usuario.');
@@ -1119,7 +1124,7 @@
                 const res = await fetch('/api/config/email-informe', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, rol: usuarioSesion ? usuarioSesion.tipo : '' })
                 });
                 const data = await res.json();
                 alert(data.mensaje);
@@ -1136,9 +1141,11 @@
                 const res = await fetch(`/api/informe/${eventoId}`);
                 if(!res.ok) return;
                 const data = await res.json();
-                document.getElementById('infVendidas').innerText = data.vendidas || 0;
-                document.getElementById('infAsistentes').innerText = data.asistentes || 0;
-                document.getElementById('infRecaudado').innerText = `$${(data.recaudado || 0).toFixed(2)}`;
+                document.getElementById('infVendidas').innerText = data.vendidas || data.entradas_vendidas || 0;
+                document.getElementById('infAsistentes').innerText = data.asistentes || data.asistentes_reales || 0;
+                
+                const rec = parseFloat(data.recaudado || data.monto_recaudado || data.total_recaudado || 0);
+                document.getElementById('infRecaudado').innerText = `$${rec.toFixed(2)}`;
 
                 cargarTablaDetalleVentas(eventoId);
             } catch(e) {
@@ -1156,13 +1163,51 @@
         async function cargarReportesConsolidados() {
             try {
                 const res = await fetch('/api/reportes/consolidado');
-                if (!res.ok) return;
+                if (!res.ok) throw new Error('No se pudo obtener la información de los reportes.');
+                
                 const data = await res.json();
-                listaGlobalReportes = Array.isArray(data) ? data : [];
+                
+                if (Array.isArray(data)) {
+                    listaGlobalReportes = data;
+                } else if (data && Array.isArray(data.reportes)) {
+                    listaGlobalReportes = data.reportes;
+                } else if (data && Array.isArray(data.datos)) {
+                    listaGlobalReportes = data.datos;
+                } else if (data && Array.isArray(data.data)) {
+                    listaGlobalReportes = data.data;
+                } else if (data && Array.isArray(data.eventos)) {
+                    listaGlobalReportes = data.eventos;
+                } else {
+                    listaGlobalReportes = [];
+                }
+
+                poblarSelectFiltroReportes();
                 filtrarReporteConsolidado();
             } catch (e) {
                 console.error("Error al cargar reporte consolidado:", e);
+                listaGlobalReportes = [];
+                filtrarReporteConsolidado();
             }
+        }
+
+        function poblarSelectFiltroReportes() {
+            const selReporte = document.getElementById('selFiltroReporteEvento');
+            if (!selReporte) return;
+            const valorPrevio = selReporte.value;
+            
+            selReporte.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
+            
+            if (Array.isArray(listaGlobalReportes)) {
+                listaGlobalReportes.forEach(r => {
+                    const evId = r.id || r.evento_id || r.id_evento || r.eventoId;
+                    const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || r.evento || `Evento ${evId}`;
+                    if (evId) {
+                        selReporte.innerHTML += `<option value="${evId}">${evNombre}</option>`;
+                    }
+                });
+            }
+
+            if (valorPrevio) selReporte.value = valorPrevio;
         }
 
         function filtrarReporteConsolidado() {
@@ -1172,11 +1217,14 @@
 
             let listado = listaGlobalReportes;
             if (filtro !== 'TODOS') {
-                listado = listado.filter(item => String(item.id) === String(filtro));
+                listado = listado.filter(item => {
+                    const itemId = item.id || item.evento_id || item.id_evento || item.eventoId;
+                    return String(itemId) === String(filtro);
+                });
             }
 
-            if (listado.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No se encontraron eventos para mostrar.</td></tr>';
+            if (!listado || listado.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px;">No se encontraron eventos para mostrar.</td></tr>';
                 actualizarTotalesConsolidados(0, 0, 0, 0);
                 return;
             }
@@ -1184,10 +1232,13 @@
             let totVen = 0, totAsis = 0, totRec = 0, totDesc = 0;
 
             listado.forEach(r => {
-                const vendidas = parseInt(r.vendidas || 0);
-                const asistentes = parseInt(r.asistentes || 0);
-                const recaudado = parseFloat(r.recaudado || 0);
-                const descuentos = parseFloat(r.descuento || 0);
+                const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || r.evento || 'Evento sin nombre';
+                const evFecha = r.fecha || r.fecha_evento || 'N/A';
+                
+                const vendidas = parseInt(r.vendidas || r.entradas_vendidas || r.cant_vendidas || r.total_vendidas || r.cantidad_vendida || 0);
+                const asistentes = parseInt(r.asistentes || r.asistentes_reales || r.cant_asistentes || r.total_asistentes || 0);
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || r.monto_recaudado || r.monto_total || 0);
+                const descuentos = parseFloat(r.descuento || r.descuentos || r.total_descuentos || r.monto_descuento || 0);
 
                 totVen += vendidas;
                 totAsis += asistentes;
@@ -1196,8 +1247,8 @@
 
                 tbody.innerHTML += `
                     <tr style="border-bottom: 1px solid #334155;">
-                        <td style="padding: 10px;"><strong>${r.nombre || r.evento_nombre}</strong></td>
-                        <td style="padding: 10px;">${r.fecha || 'N/A'}</td>
+                        <td style="padding: 10px;"><strong>${evNombre}</strong></td>
+                        <td style="padding: 10px;">${evFecha}</td>
                         <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${vendidas}</td>
                         <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${asistentes}</td>
                         <td style="padding: 10px; text-align: right; color: #eab308; font-weight: bold;">$${recaudado.toFixed(2)}</td>
@@ -1221,7 +1272,10 @@
             let listado = listaGlobalReportes;
             
             if (filtro !== 'TODOS') {
-                listado = listado.filter(item => String(item.id) === String(filtro));
+                listado = listado.filter(item => {
+                    const itemId = item.id || item.evento_id || item.id_evento || item.eventoId;
+                    return String(itemId) === String(filtro);
+                });
             }
 
             if (listado.length === 0) return alert('No hay información cargada para compartir.');
@@ -1229,11 +1283,18 @@
             let msj = `📊 *REPORTE DE EVENTOS*\n----------------------------------\n`;
             
             listado.forEach(r => {
-                msj += `🎭 *${r.nombre || r.evento_nombre}* (${r.fecha || 'S/D'})\n`;
-                msj += `🎟️ Vendidas: ${r.vendidas || 0}\n`;
-                msj += `👥 Asistentes: ${r.asistentes || 0}\n`;
-                msj += `💰 Recaudado: $${(parseFloat(r.recaudado) || 0).toFixed(2)}\n`;
-                msj += `🏷️ Descuentos: $${(parseFloat(r.descuento) || 0).toFixed(2)}\n`;
+                const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || 'Evento';
+                const evFecha = r.fecha || r.fecha_evento || 'S/D';
+                const vendidas = r.vendidas || r.entradas_vendidas || 0;
+                const asistentes = r.asistentes || r.asistentes_reales || 0;
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || r.monto_recaudado || 0);
+                const descuentos = parseFloat(r.descuento || r.descuentos || r.total_descuentos || 0);
+
+                msj += `🎭 *${evNombre}* (${evFecha})\n`;
+                msj += `🎟️ Vendidas: ${vendidas}\n`;
+                msj += `👥 Asistentes: ${asistentes}\n`;
+                msj += `💰 Recaudado: $${recaudado.toFixed(2)}\n`;
+                msj += `🏷️ Descuentos: $${descuentos.toFixed(2)}\n`;
                 msj += `----------------------------------\n`;
             });
 
@@ -1267,11 +1328,11 @@
                     const mail = v.email || '';
                     const tel = v.telefono || v.contacto || '';
                     const asiento = v.codigoAsiento || 'General';
-                    const ventaId = v.id;
+                    const ventaId = v.id || v.venta_id;
                     const sig = v.sig || '';
 
                     const rol = (usuarioSesion?.tipo || '').toLowerCase();
-                    const esAdminOSuper = ['adm', 'super', 'admin'].includes(rol);
+                    const esAdminOSuper = ['adm', 'super', 'admin', 'administrador'].includes(rol);
                     
                     const fechaVenta = v.fechaCompra ? new Date(v.fechaCompra) : new Date();
                     const minutosTranscurridos = (new Date() - fechaVenta) / (1000 * 60);
@@ -1395,7 +1456,8 @@
                 apellido: document.getElementById('editApellido').value.trim(),
                 contacto: document.getElementById('editContacto').value.trim(),
                 email: document.getElementById('editEmail').value.trim(),
-                nuevoAsientoId: nuevoAsientoId || null
+                nuevoAsientoId: nuevoAsientoId || null,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             if (!body.nombre || !body.apellido || !body.contacto) {
@@ -1460,7 +1522,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         ventaId: ventaId,
-                        hostOrigin: window.location.origin
+                        hostOrigin: window.location.origin,
+                        rol: usuarioSesion ? usuarioSesion.tipo : ''
                     })
                 });
                 const data = await res.json();
@@ -1473,3 +1536,4 @@
     </script>
 </body>
 </html>
+
