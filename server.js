@@ -762,63 +762,95 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
     }
 });
 
-app.post('/api/entradas/enviar-email', async (req, res) => {
-    const { ventaId, hostOrigin } = req.body;
+const { createCanvas, loadImage } = require('canvas');
+const QRCode = require('qrcode');
+const path = require('path');
 
+// =========================================================================
+// 1. FUNCIÓN PARA GENERAR QR CON LOGO EN EL CENTRO
+// =========================================================================
+async function generarQRConLogo(textoQR, rutaLogo, tamano = 300) {
+    const canvas = createCanvas(tamano, tamano);
+    const ctx = canvas.getContext('2d');
+
+    // Generar el QR básico con corrección de errores ALTA ('H') para soportar el logo
+    await QRCode.toCanvas(canvas, textoQR, {
+        errorCorrectionLevel: 'H',
+        margin: 2,
+        width: tamano,
+        color: {
+            dark: '#000000',
+            light: '#ffffff'
+        }
+    });
+
+    // Intentar superponer el logo en el centro
     try {
-        let ticketData;
-        if (db) {
-            const vRes = await db.execute({
-                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
-                      FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?`,
-                args: [ventaId]
-            });
-            if (vRes.rows.length > 0) ticketData = vRes.rows[0];
-        } else {
-            const v = ventasMemoria.find(x => x.id == ventaId);
-            const e = eventosMemoria.find(x => x.id === (v ? v.evento_id : ''));
-            if (v) ticketData = { ...v, evento_nombre: e ? e.nombre : 'Evento', evento_fecha: e ? e.fecha : '', evento_hora: e ? e.hora : '' };
-        }
+        const logo = await loadImage(rutaLogo);
+        const tamanoLogo = tamano * 0.22;
+        const x = (tamano - tamanoLogo) / 2;
+        const y = (tamano - tamanoLogo) / 2;
+        const padding = 8;
 
-        if (!ticketData || !ticketData.email) {
-            return res.json({ exito: false, mensaje: 'El cliente no posee una dirección de correo válida' });
-        }
+        // Fondo blanco para aislar los módulos del QR detrás del logo
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - padding / 2, y - padding / 2, tamanoLogo + padding, tamanoLogo + padding);
 
-        const sig = generarFirma(ticketData.id, ticketData.codigoAsiento);
-        const baseUrl = hostOrigin || 'https://sistema-boleteria-institucional.onrender.com';
-        const ticketUrl = `${baseUrl}/entrada.html?id=${ventaId}&sig=${sig}`;
+        // Dibujar el logo
+        ctx.drawImage(logo, x, y, tamanoLogo, tamanoLogo);
+    } catch (err) {
+        console.warn('Advertencia: No se pudo cargar el logo, generando QR limpio:', err.message);
+    }
 
-        const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
-        const qrDataUrl = await QRCode.toDataURL(qrPayload);
+    return canvas.toDataURL('image/png');
+}
 
-        // =========================================================================
-// 🎨 INICIO DE CÓDIGO CANVAS (Generación de la imagen del ticket)
 // =========================================================================
-// 1. Crear el lienzo con las dimensiones de tu diseño de Canva (ej. 800x400 px)
-const canvas = createCanvas(800, 400);
-const ctx = canvas.getContext('2d');
-
-// 2. Cargar tu plantilla base descargada de Canva
-const fondoCanva = await loadImage(path.join(__dirname, 'plantilla_entrada.png'));
-ctx.drawImage(fondoCanva, 0, 0, 800, 400);
-
-// 3. Estilo y dibujo del Texto (Nombre, Asiento, Evento, etc.)
-ctx.fillStyle = '#ffffff'; // Color del texto
-ctx.font = 'bold 22px Arial';
-ctx.fillText(`${ticketData.nombre} ${ticketData.apellido}`, 50, 180);
-
-ctx.font = '20px Arial';
-ctx.fillText(`Evento: ${ticketData.evento_nombre}`, 50, 220);
-ctx.fillText(`Asiento: ${ticketData.codigoAsiento}`, 50, 260);
-
-// 4. Dibujar el código QR sobre el ticket (en las coordenadas X=550, Y=100)
-const imgQR = await loadImage(qrDataUrl);
-ctx.drawImage(imgQR, 550, 100, 180, 180);
-
-// 5. Convertir el ticket final a Base64 para el correo
-const ticketImagenBase64 = canvas.toDataURL('image/png');
+// 2. ENDPOINT EN server (10)_2.js
 // =========================================================================
+app.post('/api/entradas/enviar-email', async (req, res) => {
+    try {
+        const { ticketData, sig } = req.body;
 
+        // Carga útil que leerá el validador al escanear
+        const qrPayload = JSON.stringify({ 
+            ticket_id: ticketData.id, 
+            asiento: ticketData.codigoAsiento, 
+            sig 
+        });
+
+        // Archivos locales del servidor
+        const rutaLogo = path.join(__dirname, 'logo.png');
+        const rutaPlantilla = path.join(__dirname, 'plantilla_entrada.png');
+
+        // Generar QR con el logo
+        const qrConLogoBase64 = await generarQRConLogo(qrPayload, rutaLogo, 300);
+
+        // Crear lienzo principal para la entrada combinada
+        const canvasTicket = createCanvas(800, 400);
+        const ctx = canvasTicket.getContext('2d');
+
+        // Cargar plantilla exportada de Canva
+        const fondoCanva = await loadImage(rutaPlantilla);
+        ctx.drawImage(fondoCanva, 0, 0, 800, 400);
+
+        // Dibujar datos dinámicos del comprador
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText(`${ticketData.nombre} ${ticketData.apellido}`, 50, 180);
+
+        ctx.font = '20px Arial';
+        ctx.fillText(`Evento: ${ticketData.evento_nombre}`, 50, 220);
+        ctx.fillText(`Asiento: ${ticketData.codigoAsiento}`, 50, 260);
+
+        // Estampar el QR generado con el logo sobre la imagen
+        const imgQR = await loadImage(qrConLogoBase64);
+        ctx.drawImage(imgQR, 550, 100, 180, 180);
+
+        // Convertir la imagen completa a Base64 para el mail
+        const ticketImagenFinal = canvasTicket.toDataURL('image/png');
+
+        // Envío del correo vía Brevo SMTP
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
             method: 'POST',
             headers: {
@@ -831,40 +863,24 @@ const ticketImagenBase64 = canvas.toDataURL('image/png');
                 to: [{ email: ticketData.email, name: `${ticketData.nombre} ${ticketData.apellido}` }],
                 subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
                 htmlContent: `
-                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-                        <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
-                        <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
-                        <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
-                        
-                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                            <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
-                            <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
-                            <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
-                        </div>
-
-                        <div style="text-align: center; margin: 20px 0;">
-                            <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
-                            <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
-                        </div>
-
-                        <div style="text-align: center; margin-top: 25px;">
-                            <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
-                        </div>
+                    <div style="font-family: Arial, sans-serif; text-align: center;">
+                        <h2>¡Hola ${ticketData.nombre}! Aquí tienes tu entrada oficial:</h2>
+                        <br/>
+                        <img src="${ticketImagenFinal}" alt="Entrada Digital" style="max-width: 100%; border-radius: 10px;" />
                     </div>
                 `
             })
         });
 
-        const resData = await response.json();
-        if (!response.ok) {
-            return res.status(500).json({ exito: false, mensaje: resData.message || 'Error al enviar por Brevo' });
-        }
+        const data = await response.json();
+        return res.json({ success: true, data });
 
-        res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
-    } catch (e) {
-        res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
+    } catch (error) {
+        console.error('Error generando entrada:', error);
+        return res.status(500).json({ error: 'No se pudo generar ni enviar la entrada' });
     }
 });
+
 
 // Endpoints Superusuario
 app.post('/api/usuarios/crear', async (req, res) => {
