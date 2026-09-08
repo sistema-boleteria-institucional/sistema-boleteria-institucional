@@ -1532,7 +1532,61 @@
                 console.error(err);
                 alert('Error al conectar con el servidor para enviar el correo.');
             }
+        };
+        // index (4).html - Reemplazar la función truncada al final del archivo
+        function filtrarReporteConsolidado() {
+            const filtro = document.getElementById('selFiltroReporteEvento').value;
+            const tbody = document.getElementById('tbodyReporteEventos');
+            tbody.innerHTML = '';
+
+            let listado = listaGlobalReportes;
+            if (filtro !== 'TODOS') {
+                listado = listado.filter(item => (item.id || item.evento_id) == filtro);
+            }
+
+            if (!Array.isArray(listado) || listado.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No hay datos para mostrar.</td></tr>';
+                document.getElementById('totVendidas').innerText = '0';
+                document.getElementById('totAsistentes').innerText = '0';
+                document.getElementById('totRecaudado').innerText = '$0.00';
+                document.getElementById('totDescuentos').innerText = '$0.00';
+                return;
+            }
+
+            let totVendidas = 0;
+            let totAsistentes = 0;
+            let totRecaudado = 0;
+            let totDescuentos = 0;
+
+            listado.forEach(item => {
+                const vendidas = Number(item.vendidas || 0);
+                const asistentes = Number(item.asistentes || 0);
+                const recaudado = Number(item.recaudado || 0);
+                const descuento = Number(item.descuento || 0);
+
+                totVendidas += vendidas;
+                totAsistentes += asistentes;
+                totRecaudado += recaudado;
+                totDescuentos += descuento;
+
+                tbody.innerHTML += `
+                    <tr style="border-bottom: 1px solid #334155;">
+                        <td style="padding: 8px;"><strong>${item.nombre || item.evento_nombre || 'Sin nombre'}</strong></td>
+                        <td style="padding: 8px;">${item.fecha || ''}</td>
+                        <td style="text-align: center; padding: 8px;">${vendidas}</td>
+                        <td style="text-align: center; padding: 8px;">${asistentes}</td>
+                        <td style="text-align: right; padding: 8px;">$${recaudado.toFixed(2)}</td>
+                        <td style="text-align: right; padding: 8px;">$${descuento.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('totVendidas').innerText = totVendidas;
+            document.getElementById('totAsistentes').innerText = totAsistentes;
+            document.getElementById('totRecaudado').innerText = `$${totRecaudado.toFixed(2)}`;
+            document.getElementById('totDescuentos').innerText = `$${totDescuentos.toFixed(2)}`;
         }
+
     </script>
 </body>
 </html>
