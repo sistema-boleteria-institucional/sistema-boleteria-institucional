@@ -4,7 +4,6 @@ const path = require('path');
 const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 const QRCode = require('qrcode');
-const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
@@ -67,7 +66,7 @@ if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
         url: process.env.TURSO_DATABASE_URL,
         authToken: process.env.TURSO_AUTH_TOKEN
     });
-    console.log('Conectado exitosamente a la base de datos de Turso.');
+    console.log(' Conectado exitosamente a la base de datos de Turso.');
 } else {
     console.warn('⚠️ No se encontraron las credenciales de Turso. Usando almacenamiento temporal en memoria.');
 }
@@ -148,7 +147,7 @@ async function inicializarTablasDB() {
                 args: ['operario1', '1234', 'vendedor', 'VEN-01']
             });
         }
-        console.log('Tablas creadas/verificadas en Turso.');
+        console.log(' Tablas creadas/verificadas en Turso.');
     } catch (e) {
         console.error('Error al inicializar las tablas de Turso:', e);
     }
@@ -335,6 +334,7 @@ app.get('/api/cupones', async (req, res) => {
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
     
+    // Función auxiliar para verificar si el evento ya superó las 5 hs
     const validarTiempoVenta = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -344,6 +344,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
     if (db) {
         try {
+            // Verificar tiempo del evento
             const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
             if (evRes.rows.length > 0) {
                 const { fecha, hora } = evRes.rows[0];
@@ -391,99 +392,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
     }
 });
 
-// EDITAR VENTA (Con restricción de cambio entre General y Gradas)
-app.put('/api/ventas/editar', async (req, res) => {
-    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
-
-    if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido.' });
-
-    if (db) {
-        try {
-            const vRes = await db.execute({ 
-                sql: "SELECT v.*, a.tipoZona as zonaActual, a.codigoAsiento as codigoActual FROM ventas v JOIN asientos a ON v.asiento_id = a.id WHERE v.id = ?", 
-                args: [ventaId] 
-            });
-
-            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
-
-            const ventaActual = vRes.rows[0];
-
-            if (nuevoAsientoId && nuevoAsientoId != ventaActual.asiento_id) {
-                const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
-                if (nAsientoRes.rows.length === 0) return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento no existe.' });
-                const nuevoAsiento = nAsientoRes.rows[0];
-
-                if (nuevoAsiento.vendido === 1) return res.status(400).json({ exito: false, mensaje: 'El asiento seleccionado ya está vendido.' });
-
-                // Validar que no se pueda cambiar entre General y Gradas
-                const esActualGen = ventaActual.zonaActual === 'General' || (ventaActual.codigoActual && ventaActual.codigoActual.startsWith('GEN'));
-                const esNuevoGen = nuevoAsiento.tipoZona === 'General' || (nuevoAsiento.codigoAsiento && nuevoAsiento.codigoAsiento.startsWith('GEN'));
-
-                if (esActualGen !== esNuevoGen) {
-                    return res.status(400).json({ 
-                        exito: false, 
-                        mensaje: 'No está permitido cambiar de categoría (General a Grada o viceversa). Debe cancelar la venta y registrar una nueva.' 
-                    });
-                }
-
-                // Liberar asiento viejo y ocupar el nuevo
-                await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [ventaActual.asiento_id] });
-                await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
-
-                await db.execute({
-                    sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ?, asiento_id = ?, codigoAsiento = ? WHERE id = ?",
-                    args: [nombre, apellido, contacto, email || '', nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
-                });
-            } else {
-                await db.execute({
-                    sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
-                    args: [nombre, apellido, contacto, email || '', ventaId]
-                });
-            }
-
-            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente.' });
-        } catch (e) {
-            console.error("Error al editar venta:", e);
-            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta en base de datos.' });
-        }
-    } else {
-        const venta = ventasMemoria.find(v => v.id == ventaId);
-        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
-
-        const listaAsientos = asientosMemoria[venta.evento_id] || [];
-        const asientoActual = listaAsientos.find(a => a.id == venta.asiento_id);
-
-        if (nuevoAsientoId && nuevoAsientoId != venta.asiento_id) {
-            const nuevoAsiento = listaAsientos.find(a => a.id == nuevoAsientoId);
-            if (!nuevoAsiento) return res.status(400).json({ exito: false, mensaje: 'Asiento no existe.' });
-            if (nuevoAsiento.vendido === 1) return res.status(400).json({ exito: false, mensaje: 'El asiento ya está vendido.' });
-
-            const esActualGen = asientoActual ? (asientoActual.tipoZona === 'General' || asientoActual.codigoAsiento.startsWith('GEN')) : true;
-            const esNuevoGen = nuevoAsiento.tipoZona === 'General' || nuevoAsiento.codigoAsiento.startsWith('GEN');
-
-            if (esActualGen !== esNuevoGen) {
-                return res.status(400).json({ 
-                    exito: false, 
-                    mensaje: 'No está permitido cambiar de categoría (General a Grada o viceversa). Debe cancelar la venta y registrar una nueva.' 
-                });
-            }
-
-            if (asientoActual) { asientoActual.vendido = 0; asientoActual.asistio = 0; }
-            nuevoAsiento.vendido = 1;
-            venta.asiento_id = nuevoAsiento.id;
-            venta.codigoAsiento = nuevoAsiento.codigoAsiento;
-        }
-
-        venta.nombre = nombre;
-        venta.apellido = apellido;
-        venta.contacto = contacto;
-        venta.email = email || '';
-
-        return res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria).' });
-    }
-});
-
-// CANCELAR VENTA/ENTRADA
+// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
     const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
@@ -567,7 +476,7 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// REPORTE CONSOLIDADO POR EVENTOS
+// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
 app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
     if (db) {
         try {
@@ -582,23 +491,24 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                     COALESCE(v.vendidas, 0) as vendidas,
                     COALESCE(v.recaudado, 0) as recaudado,
                     COALESCE(v.descuento, 0) as descuento,
-                    COALESCE(a.asistentes, 0) as asistentes
+                    (COALESCE(a.asistentes_asientos, 0) + COALESCE(v.asistentes_ventas, 0)) as asistentes
                 FROM eventos e
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
                         COUNT(id) as vendidas, 
-                        SUM(monto_total) as recaudado,
-                        SUM(0) as descuento
+                        SUM(monto_total) as recaudado, 
+                        SUM(COALESCE(descuento, 0)) as descuento,
+                        SUM(CASE WHEN asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado' THEN 1 ELSE 0 END) as asistentes_ventas
                     FROM ventas 
                     GROUP BY evento_id
                 ) v ON e.id = v.evento_id
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
-                        COUNT(id) as asistentes 
+                        COUNT(id) as asistentes_asientos 
                     FROM asientos 
-                    WHERE asistio = 1
+                    WHERE asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado'
                     GROUP BY evento_id
                 ) a ON e.id = a.evento_id
                 ORDER BY e.fecha DESC
@@ -609,11 +519,15 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
         }
     } else {
+        // Modo Memoria
         const reportes = eventosMemoria.map(e => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
             
-            const totalAsistentes = listaAsientos.filter(a => a.asistio == 1).length;
+            const asistVentas = ventas.filter(v => v.asistio == 1 || v.asistio === true || v.estado === 'usado').length;
+            const asistAsientos = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true || a.estado === 'usado').length;
+            const totalAsistentes = asistVentas + asistAsientos;
+
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
             const totalDescuento = ventas.reduce((acc, v) => acc + Number(v.descuento || 0), 0);
 
@@ -632,7 +546,6 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
         return res.json(reportes);
     }
 });
-
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -675,15 +588,17 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     }
 });
 
-// EDITAR EVENTO
+// 3. EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
 
+    // Control opcional de permisos por rol
     const rolConsulta = req.query.rol || rol;
-    if (rolConsulta && !['super', 'admin', 'adm', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
+    if (rolConsulta && !['admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
+
     if (db) {
         try {
             await db.execute({
@@ -698,58 +613,251 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
         }
     } else {
-        const ev = eventosMemoria.find(e => e.id === id);
-        if (ev) {
-            ev.nombre = nombre; ev.fecha = fecha; ev.hora = hora;
-            ev.precioGeneral = precioGeneral; ev.precioGradas = precioGradas;
-            return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Memoria)." });
+        // Modo Memoria
+        const idx = eventosMemoria.findIndex(e => e.id === id);
+        if (idx === -1) {
+            return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
         }
-        return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
+
+        eventosMemoria[idx] = {
+            ...eventosMemoria[idx],
+            nombre: nombre || eventosMemoria[idx].nombre,
+            fecha: fecha || eventosMemoria[idx].fecha,
+            hora: hora || eventosMemoria[idx].hora,
+            precioGeneral: precioGeneral !== undefined ? precioGeneral : eventosMemoria[idx].precioGeneral,
+            precioGradas: precioGradas !== undefined ? precioGradas : eventosMemoria[idx].precioGradas
+        };
+
+        return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Modo Memoria)." });
     }
 });
-
-// ELIMINAR EVENTO
+// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
-    const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
-    if (!['super', 'admin', 'adm', 'administrador'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: "Permiso denegado." });
+    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
+
+    if (!['super', 'admin', 'adm'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para eliminar eventos.' });
     }
+
     if (db) {
         try {
             await db.execute({ sql: "DELETE FROM ventas WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM cupones WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM eventos WHERE id = ?", args: [id] });
-            return res.json({ exito: true, mensaje: "Evento eliminado correctamente." });
+            return res.json({ exito: true, mensaje: 'Evento eliminado correctamente' });
         } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: "Error al eliminar evento." });
+            return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el evento' });
         }
     } else {
         eventosMemoria = eventosMemoria.filter(e => e.id !== id);
         delete asientosMemoria[id];
         ventasMemoria = ventasMemoria.filter(v => v.evento_id !== id);
-        return res.json({ exito: true, mensaje: "Evento eliminado (Memoria)." });
+        return res.json({ exito: true, mensaje: 'Evento eliminado (Memoria)' });
     }
 });
 
-// GESTIÓN DE USUARIOS
+app.put('/api/ventas/editar', async (req, res) => {
+    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
+
+    if (db) {
+        try {
+            await db.execute({
+                sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
+                args: [nombre, apellido, contacto, email || '', ventaId]
+            });
+
+            if (nuevoAsientoId) {
+                const vRes = await db.execute({ sql: "SELECT asiento_id, evento_id FROM ventas WHERE id = ?", args: [ventaId] });
+                if (vRes.rows.length > 0) {
+                    const asientoViejoId = vRes.rows[0].asiento_id;
+
+                    const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
+                    if (nAsientoRes.rows.length > 0) {
+                        const nuevoAsiento = nAsientoRes.rows[0];
+
+                        if (asientoViejoId) {
+                            await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejoId] });
+                        }
+
+                        await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
+                        await db.execute({
+                            sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
+                            args: [nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
+                        });
+                    }
+                }
+            }
+
+            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
+        }
+    } else {
+        const v = ventasMemoria.find(x => x.id == ventaId);
+        if (!v) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+
+        v.nombre = nombre;
+        v.apellido = apellido;
+        v.contacto = contacto;
+        v.email = email || '';
+
+        if (nuevoAsientoId) {
+            const lista = asientosMemoria[v.evento_id] || [];
+            const asientoViejo = lista.find(a => a.id === v.asiento_id);
+            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
+
+            if (asientoViejo) asientoViejo.vendido = 0;
+            if (asientoNuevo) {
+                asientoNuevo.vendido = 1;
+                v.asiento_id = asientoNuevo.id;
+                v.codigoAsiento = asientoNuevo.codigoAsiento;
+            }
+        }
+
+        res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
+    }
+});
+
+app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
+    const { id } = req.params;
+    const { sig } = req.query;
+
+    if (db) {
+        try {
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
+                      FROM ventas v
+                      JOIN eventos e ON v.evento_id = e.id
+                      WHERE v.id = ?`,
+                args: [id]
+            });
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+
+            const venta = vRes.rows[0];
+            const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+            const qrCodeUrl = await QRCode.toDataURL(qrPayload);
+
+            return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl, sig } });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
+        }
+    } else {
+        const venta = ventasMemoria.find(v => v.id == id);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id) || {};
+        const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+        const qrCodeUrl = await QRCode.toDataURL(qrPayload);
+
+        res.json({
+            exito: true,
+            ticket: {
+                ...venta,
+                evento_nombre: evento.nombre || 'Evento',
+                evento_fecha: evento.fecha || '',
+                evento_hora: evento.hora || '',
+                qr: qrCodeUrl,
+                sig
+            }
+        });
+    }
+});
+
+app.post('/api/entradas/enviar-email', async (req, res) => {
+    const { ventaId, hostOrigin } = req.body;
+
+    try {
+        let ticketData;
+        if (db) {
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
+                      FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?`,
+                args: [ventaId]
+            });
+            if (vRes.rows.length > 0) ticketData = vRes.rows[0];
+        } else {
+            const v = ventasMemoria.find(x => x.id == ventaId);
+            const e = eventosMemoria.find(x => x.id === (v ? v.evento_id : ''));
+            if (v) ticketData = { ...v, evento_nombre: e ? e.nombre : 'Evento', evento_fecha: e ? e.fecha : '', evento_hora: e ? e.hora : '' };
+        }
+
+        if (!ticketData || !ticketData.email) {
+            return res.json({ exito: false, mensaje: 'El cliente no posee una dirección de correo válida' });
+        }
+
+        const sig = generarFirma(ticketData.id, ticketData.codigoAsiento);
+        const baseUrl = hostOrigin || 'https://sistema-boleteria-institucional.onrender.com';
+        const ticketUrl = `${baseUrl}/entrada.html?id=${ventaId}&sig=${sig}`;
+
+        const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
+        const qrDataUrl = await QRCode.toDataURL(qrPayload);
+
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: 'Boletería Institucional', email: 'gonzalog2019@gmail.com' },
+                to: [{ email: ticketData.email, name: `${ticketData.nombre} ${ticketData.apellido}` }],
+                subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
+                htmlContent: `
+                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                        <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
+                        <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
+                        <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
+                        
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
+                            <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
+                            <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
+                        </div>
+
+                        <div style="text-align: center; margin: 20px 0;">
+                            <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
+                            <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
+                        </div>
+
+                        <div style="text-align: center; margin-top: 25px;">
+                            <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
+                        </div>
+                    </div>
+                `
+            })
+        });
+
+        const resData = await response.json();
+        if (!response.ok) {
+            return res.status(500).json({ exito: false, mensaje: resData.message || 'Error al enviar por Brevo' });
+        }
+
+        res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
+    } catch (e) {
+        res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
+    }
+});
+
+// Endpoints Superusuario
 app.post('/api/usuarios/crear', async (req, res) => {
-    const { usuario, clave, tipo, identificacion } = req.body;
-    if (!usuario || !clave) return res.status(400).json({ exito: false, mensaje: 'Usuario y clave requeridos.' });
+    const nuevoUsr = req.body;
     if (db) {
         try {
             await db.execute({
                 sql: "INSERT INTO usuarios (usuario, clave, tipo, identificacion) VALUES (?, ?, ?, ?)",
-                args: [usuario, clave, tipo || 'vendedor', identificacion || '']
+                args: [nuevoUsr.usuario, nuevoUsr.clave, nuevoUsr.tipo, nuevoUsr.identificacion]
             });
-            return res.json({ exito: true, mensaje: 'Usuario creado exitosamente.' });
-        } catch (e) {
-            return res.status(500).json({ exito: false, mensaje: 'Error al crear usuario.' });
-        }
+            return res.json({ exito: true, mensaje: 'Usuario guardado' });
+        } catch (e) { return res.json({ exito: false, mensaje: 'El usuario ya existe' }); }
     } else {
-        usuariosMemoria.push({ id: usuariosMemoria.length + 1, usuario, clave, tipo: tipo || 'vendedor', identificacion: identificacion || '' });
-        return res.json({ exito: true, mensaje: 'Usuario creado (Memoria).' });
+        if (usuariosMemoria.some(u => u.usuario.toLowerCase() === nuevoUsr.usuario.toLowerCase())) return res.json({ exito: false, mensaje: 'El usuario ya existe' });
+        nuevoUsr.id = usuariosMemoria.length + 1;
+        usuariosMemoria.push(nuevoUsr);
+        res.json({ exito: true, mensaje: 'Usuario creado (Memoria)' });
     }
 });
 
@@ -758,78 +866,191 @@ app.get('/api/super/usuarios', async (req, res) => {
         try {
             const result = await db.execute("SELECT id, usuario, tipo, identificacion FROM usuarios");
             return res.json(result.rows);
-        } catch (e) { return res.status(500).json({ exito: false, mensaje: "Error al consultar usuarios." }); }
+        } catch (e) { console.error(e); }
     }
-    res.json(usuariosMemoria.map(u => ({ id: u.id, usuario: u.usuario, tipo: u.tipo, identificacion: u.identificacion })));
+    res.json(usuariosMemoria);
 });
 
 app.post('/api/super/revelar-clave', async (req, res) => {
     const { claveSuper, usuarioIdTarget } = req.body;
     if (db) {
         try {
-            const sRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
-            if (sRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Clave de superusuario incorrecta.' });
+            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
+            if (superRes.rows.length === 0) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
 
-            const uRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
-            if (uRes.rows.length > 0) return res.json({ exito: true, clave: uRes.rows[0].clave });
-            return res.json({ exito: false, mensaje: 'Usuario no encontrado.' });
-        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al consultar clave.' }); }
+            const targetRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
+            if (targetRes.rows.length > 0) return res.json({ exito: true, clave: targetRes.rows[0].clave });
+        } catch (e) { console.error(e); }
     } else {
-        const superUsr = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
-        if (!superUsr) return res.json({ exito: false, mensaje: 'Clave de superusuario incorrecta.' });
-        const target = usuariosMemoria.find(u => u.id == usuarioIdTarget);
+        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
+        if (!superAdmin) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
+
+        const target = usuariosMemoria.find(u => u.id === usuarioIdTarget);
         if (target) return res.json({ exito: true, clave: target.clave });
-        return res.json({ exito: false, mensaje: 'Usuario no encontrado.' });
     }
+    res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
 });
 
 app.delete('/api/super/usuarios/:id', async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
     if (db) {
         try {
             await db.execute({ sql: "DELETE FROM usuarios WHERE id = ?", args: [id] });
-            return res.json({ exito: true, mensaje: 'Usuario eliminado.' });
-        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al eliminar usuario.' }); }
-    } else {
-        usuariosMemoria = usuariosMemoria.filter(u => u.id != id);
-        return res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria).' });
+            return res.json({ exito: true, mensaje: 'Usuario eliminado' });
+        } catch (e) { console.error(e); }
+    }
+    usuariosMemoria = usuariosMemoria.filter(u => u.id !== id);
+    res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
+});
+
+// Puerta Escaneo
+app.post('/api/puerta/validar', async (req, res) => {
+    try {
+        const { id, sig } = req.body;
+        if (!id) return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
+
+        let ventaId = id;
+        let sigRecibida = sig || null;
+
+        if (typeof id === 'string' && id.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(id);
+                ventaId = parsed.ticket_id || parsed.id || id;
+                sigRecibida = parsed.sig || sigRecibida;
+            } catch (e) {}
+        }
+
+        if (db) {
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora 
+                      FROM ventas v 
+                      LEFT JOIN eventos e ON v.evento_id = e.id 
+                      WHERE v.id = ? OR v.codigoAsiento = ?`,
+                args: [ventaId, ventaId]
+            });
+
+            if (vRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+
+            const venta = vRes.rows[0];
+
+            if (venta.evento_fecha && venta.evento_hora) {
+                const fechaHoraEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${venta.evento_fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${venta.evento_nombre}</strong><br>El ingreso habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Esta entrada correspondía al evento del <strong>${venta.evento_fecha}</strong>.` 
+                    });
+                }
+            }
+
+            if (sigRecibida && typeof generarFirma === 'function') {
+                const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
+                if (sigRecibida !== firmaEsperada) {
+                    return res.json({ exito: false, mensaje: '¡ALERTA! Entrada falsificada o firma inválida.' });
+                }
+            }
+
+            const asientoRes = await db.execute({
+                sql: "SELECT asistio FROM asientos WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            if (asientoRes.rows.length > 0 && asientoRes.rows[0].asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                });
+            }
+
+            await db.execute({
+                sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+
+        } else {
+            const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
+            if (!venta) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+
+            const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+            if (evento && evento.fecha && evento.hora) {
+                const fechaHoraEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${evento.fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${evento.nombre}</strong><br>Habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Pertenecía al evento del <strong>${evento.fecha}</strong>.` 
+                    });
+                }
+            }
+
+            const lista = asientosMemoria[venta.evento_id] || [];
+            const asiento = lista.find(a => a.id === venta.asiento_id);
+
+            if (asiento && asiento.asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido}` 
+                });
+            }
+
+            if (asiento) asiento.asistio = 1;
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+        }
+    } catch (error) {
+        return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
     }
 });
 
-// ENVIAR ENTRADA POR EMAIL
-app.post('/api/entradas/enviar-email', async (req, res) => {
-    const { ventaId, hostOrigin } = req.body;
-    let venta = null;
-    if (db) {
-        try {
-            const resV = await db.execute({ sql: "SELECT * FROM ventas WHERE id = ?", args: [ventaId] });
-            if (resV.rows.length > 0) venta = resV.rows[0];
-        } catch (e) {}
-    } else {
-        venta = ventasMemoria.find(v => v.id == ventaId);
-    }
-    if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada.' });
-    if (!venta.email) return res.status(400).json({ exito: false, mensaje: 'La venta no tiene un email registrado.' });
+app.get('/puerta.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'puerta.html'));
+});
 
-    const sig = generarFirma(venta.id, venta.codigoAsiento);
-    const link = `${hostOrigin || 'http://localhost:3000'}/entrada.html?id=${venta.id}&sig=${sig}`;
-
-    try {
-        await transporter.sendMail({
-            from: '"Boletería Institucional" <gonzalog2019@gmail.com>',
-            to: venta.email,
-            subject: 'Tu Entrada Digital - Boletería Institucional',
-            html: `<h3>Hola ${venta.nombre} ${venta.apellido}</h3><p>Tu entrada para el asiento <strong>${venta.codigoAsiento}</strong> ha sido confirmada.</p><p><a href="${link}">Haz clic aquí para ver tu ticket digital</a></p>`
-        });
-        return res.json({ exito: true, mensaje: 'Email enviado correctamente.' });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico.' });
-    }
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en el puerto ${PORT}`);
+    console.log(`===========================================`);
+    console.log(`Servidor iniciado en http://localhost:${PORT}`);
+    console.log(`===========================================`);
 });
+
+
 
