@@ -490,25 +490,23 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                     e.hora,
                     COALESCE(v.vendidas, 0) as vendidas,
                     COALESCE(v.recaudado, 0) as recaudado,
-                    COALESCE(v.descuento, 0) as descuento,
-                    (COALESCE(a.asistentes_asientos, 0) + COALESCE(v.asistentes_ventas, 0)) as asistentes
+                    0 as descuento,
+                    COALESCE(a.asistentes, 0) as asistentes
                 FROM eventos e
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
                         COUNT(id) as vendidas, 
-                        SUM(monto_total) as recaudado, 
-                        SUM(COALESCE(descuento, 0)) as descuento,
-                        SUM(CASE WHEN asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado' THEN 1 ELSE 0 END) as asistentes_ventas
+                        SUM(monto_total) as recaudado
                     FROM ventas 
                     GROUP BY evento_id
                 ) v ON e.id = v.evento_id
                 LEFT JOIN (
                     SELECT 
                         evento_id, 
-                        COUNT(id) as asistentes_asientos 
+                        COUNT(id) as asistentes 
                     FROM asientos 
-                    WHERE asistio = 1 OR asistio = '1' OR asistio = true OR estado = 'usado'
+                    WHERE asistio = 1 OR asistio = '1'
                     GROUP BY evento_id
                 ) a ON e.id = a.evento_id
                 ORDER BY e.fecha DESC
@@ -524,12 +522,8 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
             
-            const asistVentas = ventas.filter(v => v.asistio == 1 || v.asistio === true || v.estado === 'usado').length;
-            const asistAsientos = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true || a.estado === 'usado').length;
-            const totalAsistentes = asistVentas + asistAsientos;
-
+            const totalAsistentes = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true).length;
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
-            const totalDescuento = ventas.reduce((acc, v) => acc + Number(v.descuento || 0), 0);
 
             return {
                 id: e.id,
@@ -539,7 +533,7 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                 hora: e.hora,
                 vendidas: ventas.length,
                 recaudado: totalRecaudado,
-                descuento: totalDescuento,
+                descuento: 0,
                 asistentes: totalAsistentes
             };
         });
@@ -661,63 +655,129 @@ app.delete('/api/eventos/eliminar/:id', async (req, res) => {
 app.put('/api/ventas/editar', async (req, res) => {
     const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
 
+    // Función auxiliar para verificar límite de 2hs desde el inicio del evento
+    const validarLimite2Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteEdicion = new Date(inicioEvento.getTime() + (2 * 60 * 60 * 1000));
+        return new Date() <= limiteEdicion;
+    };
+
     if (db) {
         try {
+            // 1. Obtener la venta y los datos del evento asociado
+            const vRes = await db.execute({ 
+                sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
+                args: [ventaId] 
+            });
+
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+            const venta = vRes.rows[0];
+
+            // 2. Validar que no hayan transcurrido más de 2 horas desde el inicio del evento
+            if (!validarLimite2Hs(venta.fecha, venta.hora)) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: 'No es posible editar la venta: Han transcurrido más de 2 horas desde el inicio del evento.' 
+                });
+            }
+
+            // 3. Validar cambio de asiento si se especificó un nuevo asiento
+            if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
+                const aViejoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [venta.asiento_id] });
+                const aNuevoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
+
+                if (aNuevoRes.rows.length === 0) {
+                    return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado no existe.' });
+                }
+
+                const asientoNuevo = aNuevoRes.rows[0];
+
+                if (asientoNuevo.vendido === 1) {
+                    return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado ya está ocupado.' });
+                }
+
+                if (aViejoRes.rows.length > 0) {
+                    const asientoViejo = aViejoRes.rows[0];
+                    
+                    // Restricción: Solo se permite dentro de la misma categoría (tipoZona)
+                    if (asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
+                        return res.status(400).json({ 
+                            exito: false, 
+                            mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
+                        });
+                    }
+
+                    // Liberar asiento anterior
+                    await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejo.id] });
+                }
+
+                // Ocupar nuevo asiento
+                await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
+                // Actualizar registro en ventas
+                await db.execute({
+                    sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
+                    args: [nuevoAsientoId, asientoNuevo.codigoAsiento, ventaId]
+                });
+            }
+
+            // 4. Actualizar información del comprador
             await db.execute({
                 sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
                 args: [nombre, apellido, contacto, email || '', ventaId]
             });
 
-            if (nuevoAsientoId) {
-                const vRes = await db.execute({ sql: "SELECT asiento_id, evento_id FROM ventas WHERE id = ?", args: [ventaId] });
-                if (vRes.rows.length > 0) {
-                    const asientoViejoId = vRes.rows[0].asiento_id;
-
-                    const nAsientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
-                    if (nAsientoRes.rows.length > 0) {
-                        const nuevoAsiento = nAsientoRes.rows[0];
-
-                        if (asientoViejoId) {
-                            await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejoId] });
-                        }
-
-                        await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
-
-                        await db.execute({
-                            sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
-                            args: [nuevoAsientoId, nuevoAsiento.codigoAsiento, ventaId]
-                        });
-                    }
-                }
-            }
-
             return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
         } catch (e) {
+            console.error("Error al actualizar la venta:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
         }
     } else {
-        const v = ventasMemoria.find(x => x.id == ventaId);
-        if (!v) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+        // Modo Memoria
+        const venta = ventasMemoria.find(x => x.id == ventaId);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
-        v.nombre = nombre;
-        v.apellido = apellido;
-        v.contacto = contacto;
-        v.email = email || '';
-
-        if (nuevoAsientoId) {
-            const lista = asientosMemoria[v.evento_id] || [];
-            const asientoViejo = lista.find(a => a.id === v.asiento_id);
-            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
-
-            if (asientoViejo) asientoViejo.vendido = 0;
-            if (asientoNuevo) {
-                asientoNuevo.vendido = 1;
-                v.asiento_id = asientoNuevo.id;
-                v.codigoAsiento = asientoNuevo.codigoAsiento;
-            }
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+        if (evento && !validarLimite2Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ 
+                exito: false, 
+                mensaje: 'No es posible editar la venta: Han transcurrido más de 2 horas desde el inicio del evento.' 
+            });
         }
 
-        res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
+        if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
+            const lista = asientosMemoria[venta.evento_id] || [];
+            const asientoViejo = lista.find(a => a.id === venta.asiento_id);
+            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
+
+            if (!asientoNuevo) {
+                return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado no existe.' });
+            }
+
+            if (asientoNuevo.vendido === 1) {
+                return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado ya está ocupado.' });
+            }
+
+            if (asientoViejo && asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
+                return res.status(400).json({ 
+                    exito: false, 
+                    mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
+                });
+            }
+
+            if (asientoViejo) asientoViejo.vendido = 0;
+            asientoNuevo.vendido = 1;
+            venta.asiento_id = asientoNuevo.id;
+            venta.codigoAsiento = asientoNuevo.codigoAsiento;
+        }
+
+        venta.nombre = nombre;
+        venta.apellido = apellido;
+        venta.contacto = contacto;
+        venta.email = email || '';
+
+        return res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
     }
 });
 
