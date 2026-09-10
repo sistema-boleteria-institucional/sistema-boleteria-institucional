@@ -90,17 +90,6 @@
             color: #fff !important;
         }
 
-        .tag-desglose {
-            display: inline-block;
-            background: #1e293b;
-            color: #38bdf8;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            margin: 2px 0;
-            border: 1px solid #334155;
-        }
-
         @media print {
             body * {
                 visibility: hidden;
@@ -185,12 +174,13 @@
         <!-- MENÚ NAVEGACIÓN DESPLEGABLE -->
         <div class="navbar-container">
             <div class="dropdown">
-                <button class="dropbtn">☰ Menú</button>
+                <button class="dropbtn">☰</button>
                 <div class="dropdown-content">
                     <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
                     <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
                     <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
-                    <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reporte Consolidado (ADM/SUPER)</button>
+                    <!-- Visibilidad restringida para rol adm y super -->
+                    <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reportes por Evento</button>
                     <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
                     <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
                     <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
@@ -296,34 +286,33 @@
                 </div>
             </div>
 
-            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS -->
+            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS CON MÉTODO DE PAGO Y VENDEDOR -->
             <div id="seccionEntradasVendidas" class="card mt-4" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h4 style="margin: 0;">📋 Listado de Entradas Vendidas</h4>
-                    <button class="btn-primary" style="width: auto; padding: 5px 12px;" onclick="cargarDetalleInforme()">🔄 Actualizar</button>
+                    <button class="btn-primary" style="width: auto; padding: 5px 12px;" onclick="actualizarListaVentas()">🔄 Actualizar</button>
                 </div>
                 <div style="overflow-x: auto;">
                     <table class="tabla-admin" style="width: 100%;">
                         <thead>
                             <tr>
                                 <th>Cliente</th>
-                                <th>Email</th>
-                                <th>Teléfono</th>
+                                <th>Email / Teléfono</th>
                                 <th>Asiento</th>
-                                <th>Método Pago</th>
+                                <th>Método de Pago</th>
                                 <th>Vendedor</th>
                                 <th style="text-align: center;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="tablaDetalleVentas">
-                            <tr><td colspan="7" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
+                            <tr><td colspan="6" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO (ADM/SUPER) -->
+        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO (Exclusiva para ADM / SUPER) -->
         <div id="tabReporteEventos" class="tab-content">
             <h3>📈 Reporte Consolidado por Eventos</h3>
             <div class="no-print" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
@@ -345,8 +334,8 @@
                             <th>Evento</th>
                             <th>Fecha</th>
                             <th style="text-align: center;">Cant. Vendida</th>
-                            <th>Ventas por Descuento</th>
-                            <th>Ventas por Ubicación</th>
+                            <th style="text-align: center;">Por Ubicación</th>
+                            <th style="text-align: center;">Por Tipo Descuento</th>
                             <th style="text-align: center;">Asistentes</th>
                             <th style="text-align: right;">Monto Recaudado</th>
                         </tr>
@@ -358,7 +347,8 @@
                         <tr>
                             <td colspan="2" style="text-align: right;">TOTALES GENERALES:</td>
                             <td id="totVendidas" style="text-align: center;">0</td>
-                            <td colspan="2"></td>
+                            <td id="totUbicacion" style="text-align: center; font-size:0.85em;">-</td>
+                            <td id="totDescuentos" style="text-align: center; font-size:0.85em;">-</td>
                             <td id="totAsistentes" style="text-align: center;">0</td>
                             <td id="totRecaudado" style="text-align: right;">$0.00</td>
                         </tr>
@@ -615,20 +605,17 @@
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('appContainer').style.display = 'block';
 
-            // Ocultar por defecto secciones restringidas
-            document.getElementById('btnTabCrear').style.display = 'none';
-            document.getElementById('btnTabUsuarios').style.display = 'none';
-            document.getElementById('btnTabCupones').style.display = 'none';
-            document.getElementById('btnTabReporteEventos').style.display = 'none';
-            document.getElementById('btnTabSuper').style.display = 'none';
+            const esAdminOSuper = ['adm', 'super', 'admin', 'administrador'].includes(rol);
 
-            // Mostrar secciones según rol (Reporte consolidado exclusivo adm/super)
-            if (['adm', 'super', 'admin', 'administrador'].includes(rol)) {
+            if (esAdminOSuper) {
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
                 document.getElementById('btnTabCupones').style.display = 'block';
                 document.getElementById('btnTabReporteEventos').style.display = 'block';
+            } else {
+                document.getElementById('btnTabReporteEventos').style.display = 'none';
             }
+
             if (['super', 'admin', 'administrador'].includes(rol)) {
                 document.getElementById('btnTabSuper').style.display = 'block';
                 cargarUsuariosSuper();
@@ -662,6 +649,15 @@
         }
 
         function mostrarTab(tabId, btn) {
+            // Verificación de seguridad para la pestaña de Reporte Consolidado
+            if (tabId === 'tabReporteEventos') {
+                const rol = (usuarioSesion ? usuarioSesion.tipo : '').toLowerCase();
+                if (!['adm', 'super', 'admin', 'administrador'].includes(rol)) {
+                    alert('Acceso restringido. Solo los usuarios con rol ADM o SUPER pueden ver el reporte consolidado.');
+                    return;
+                }
+            }
+
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
 
@@ -788,11 +784,11 @@
             if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
             const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
 
-            let cupTexto = 'Sin Descuento';
-            const selCupIdx = parseInt(document.getElementById('selCuponVenta').value);
-            if (selCupIdx >= 0 && cuponesEventoActual[selCupIdx]) {
-                const c = cuponesEventoActual[selCupIdx];
-                cupTexto = c.codigo + (c.porcentaje > 0 ? ` (${c.porcentaje}% OFF)` : ` ($${c.monto_fijo} OFF)`);
+            let tipoDescStr = 'Sin Descuento';
+            if (descuentoAplicado.porcentaje > 0) {
+                tipoDescStr = `Porcentaje (${descuentoAplicado.porcentaje}%)`;
+            } else if (descuentoAplicado.monto_fijo > 0) {
+                tipoDescStr = `Monto Fijo ($${descuentoAplicado.monto_fijo})`;
             }
 
             const body = {
@@ -804,8 +800,8 @@
                 email: document.getElementById('txtEmail').value.trim(),
                 metodo_pago: document.getElementById('selMetodoPago').value,
                 monto_total: montoCalculado,
-                vendedor: usuarioSesion ? usuarioSesion.usuario : 'Sistema',
-                descuento_tipo: cupTexto,
+                usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : 'admin',
+                tipo_descuento: tipoDescStr,
                 rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
@@ -1073,200 +1069,215 @@
             try {
                 const res = await fetch('/api/usuarios/crear', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(body)
                 });
                 const data = await res.json();
-                alert(data.mensaje || 'Usuario registrado');
-                if (data.exito) {
+                alert(data.mensaje);
+                if(data.exito) {
                     document.getElementById('usrNombre').value = '';
                     document.getElementById('usrIdentificacion').value = '';
                     document.getElementById('usrClave').value = '';
-                    if (['super', 'admin'].includes(usuarioSesion.tipo)) cargarUsuariosSuper();
+                    if(usuarioSesion && ['super', 'admin', 'adm', 'administrador'].includes(usuarioSesion.tipo)) cargarUsuariosSuper();
                 }
-            } catch (err) {
+            } catch(e) {
                 alert('Error al crear usuario.');
             }
         }
 
         async function cargarUsuariosSuper() {
-            const tbody = document.getElementById('tbodyUsuarios');
-            if (!tbody) return;
-
             try {
                 const res = await fetch('/api/super/usuarios');
-                const usrs = await res.json();
+                if(!res.ok) return;
+                const usuarios = await res.json();
+                const tbody = document.getElementById('tbodyUsuarios');
                 tbody.innerHTML = '';
 
-                if (Array.isArray(usrs)) {
-                    usrs.forEach(u => {
+                if(Array.isArray(usuarios)){
+                    usuarios.forEach(u => {
                         tbody.innerHTML += `
                             <tr>
                                 <td>${u.usuario}</td>
                                 <td>${u.identificacion}</td>
                                 <td>${u.tipo}</td>
-                                <td id="clave-${u.id}">••••••</td>
+                                <td id="pass-${u.id}">••••••••</td>
                                 <td>
-                                    <button class="btn-primary" style="padding:4px 8px; width:auto; font-size:0.8em; background:#0284c7;" onclick="revelarClave(${u.id})">👁️ Ver Clave</button>
-                                    <button class="btn-primary" style="padding:4px 8px; width:auto; font-size:0.8em; background:#ef4444;" onclick="eliminarUsuario(${u.id})">🗑️ Eliminar</button>
+                                    <button class="btn-primary" style="padding:5px; width:auto;" onclick="revelarClave(${u.id})">Ver Clave</button>
+                                    <button class="btn-primary" style="padding:5px; width:auto; background:var(--ocupado);" onclick="eliminarUsuario(${u.id})">Eliminar</button>
                                 </td>
                             </tr>
                         `;
                     });
                 }
-            } catch (e) {
+            } catch(e) {
                 console.error(e);
             }
         }
 
-        async function revelarClave(usuarioId) {
-            const claveSuper = prompt('Ingresa tu contraseña de Superusuario / Admin para revelar:');
-            if (!claveSuper) return;
+        async function revelarClave(userId) {
+            const claveSuper = prompt("Ingresa tu clave de Superusuario para revelar la contraseña:");
+            if(!claveSuper) return;
 
             try {
                 const res = await fetch('/api/super/revelar-clave', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ claveSuper, usuarioIdTarget: usuarioId })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ claveSuper, usuarioIdTarget: userId, rol: usuarioSesion ? usuarioSesion.tipo : '' })
                 });
                 const data = await res.json();
-                if (data.exito) {
-                    document.getElementById(`clave-${usuarioId}`).innerText = data.clave;
+                if(data.exito) {
+                    document.getElementById(`pass-${userId}`).innerText = data.clave;
                 } else {
-                    alert(data.mensaje || 'Error al obtener contraseña');
+                    alert(data.mensaje);
                 }
-            } catch (e) {
-                alert('Error en la verificación.');
+            } catch(e) {
+                alert('Error al revelar clave.');
             }
         }
 
-        async function eliminarUsuario(usuarioId) {
-            if (!confirm('¿Seguro que deseas eliminar este usuario?')) return;
+        async function eliminarUsuario(userId) {
+            if(!confirm("¿Seguro que deseas eliminar este usuario?")) return;
             try {
-                const res = await fetch(`/api/super/usuarios/${usuarioId}`, { method: 'DELETE' });
-                const data = await res.json();
-                alert(data.mensaje);
-                if (data.exito) cargarUsuariosSuper();
-            } catch (e) {
-                alert('Error al eliminar usuario');
+                const rol = usuarioSesion ? usuarioSesion.tipo : '';
+                await fetch(`/api/super/usuarios/${userId}?rol=${rol}`, { method: 'DELETE' });
+                cargarUsuariosSuper();
+            } catch(e) {
+                alert('Error al eliminar usuario.');
             }
         }
 
         async function guardarEmailInforme() {
             const email = document.getElementById('txtEmailInforme').value.trim();
-            if (!email) return alert('Ingresa un correo válido.');
+            if(!email) return alert('Ingresa un correo electrónico válido');
+
             try {
                 const res = await fetch('/api/config/email-informe', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email, rol: usuarioSesion ? usuarioSesion.tipo : '' })
                 });
                 const data = await res.json();
                 alert(data.mensaje);
-            } catch (e) {
-                alert('Error al guardar email.');
+            } catch(e) {
+                alert('Error al guardar configuración.');
             }
         }
 
-        // CARGAR DETALLE DE INFORMES (INCLUYE MÉTODO DE PAGO Y VENDEDOR)
         async function cargarDetalleInforme() {
             const eventoId = document.getElementById('selEventoInforme').value;
+            if(!eventoId) return;
+
+            try {
+                const res = await fetch(`/api/informe/${eventoId}`);
+                if(!res.ok) return;
+                const data = await res.json();
+                document.getElementById('infVendidas').innerText = data.vendidas || data.entradas_vendidas || 0;
+                document.getElementById('infAsistentes').innerText = data.asistentes || data.asistentes_reales || 0;
+                
+                const rec = parseFloat(data.recaudado || data.monto_recaudado || data.total_recaudado || 0);
+                document.getElementById('infRecaudado').innerText = `$${rec.toFixed(2)}`;
+
+                cargarTablaDetalleVentas(eventoId);
+            } catch(e) {
+                console.error(e);
+            }
+        }
+
+        // CARGAR TABLA DETALLADA CON MÉTODO DE PAGO Y VENDEDOR
+        async function cargarTablaDetalleVentas(eventoId) {
             const tbody = document.getElementById('tablaDetalleVentas');
+            if (!tbody) return;
 
             if (!eventoId) {
-                document.getElementById('infVendidas').innerText = '0';
-                document.getElementById('infAsistentes').innerText = '0';
-                document.getElementById('infRecaudado').innerText = '$0';
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>';
                 return;
             }
 
             try {
-                const resInf = await fetch(`/api/informe/${eventoId}`);
-                if (resInf.ok) {
-                    const dataInf = await resInf.json();
-                    document.getElementById('infVendidas').innerText = dataInf.vendidas || 0;
-                    document.getElementById('infAsistentes').innerText = dataInf.asistentes || 0;
-                    document.getElementById('infRecaudado').innerText = `$${(dataInf.recaudado || 0).toFixed(2)}`;
+                const res = await fetch(`/api/ventas/detalle/${eventoId}`);
+                if (!res.ok) throw new Error('Error al consultar ventas');
+                const ventas = await res.json();
+
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(ventas) || ventas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No hay entradas vendidas registradas para este evento.</td></tr>';
+                    return;
                 }
 
-                const resVentas = await fetch(`/api/ventas/detalle/${eventoId}`);
-                if (resVentas.ok) {
-                    const ventas = await resVentas.json();
-                    tbody.innerHTML = '';
+                ventas.forEach(v => {
+                    const cliente = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'Anónimo';
+                    const contacto = [v.email, v.telefono].filter(Boolean).join(' / ') || '-';
+                    const metodo = (v.metodo_pago || 'efectivo').toLowerCase();
+                    
+                    const metodoBadge = (metodo === 'mercadopago' || metodo === 'mercado pago')
+                        ? '<span style="background:#009ee3; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Mercado Pago</span>'
+                        : '<span style="background:#16a34a; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Efectivo</span>';
+                    
+                    const vendedor = v.usuario_vendedor || 'admin';
 
-                    if (!Array.isArray(ventas) || ventas.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8;">No se registraron ventas para este evento.</td></tr>';
-                        return;
-                    }
-
-                    ventas.forEach(v => {
-                        const metodoTexto = (v.metodo_pago === 'mercadopago') ? '💳 Mercado Pago' : '💵 Efectivo';
-                        const vendedorTexto = v.vendedor || 'Sistema';
-
-                        tbody.innerHTML += `
-                            <tr style="border-bottom: 1px solid #334155;">
-                                <td style="padding: 8px;"><strong>${v.nombre} ${v.apellido}</strong></td>
-                                <td style="padding: 8px;">${v.email || '-'}</td>
-                                <td style="padding: 8px;">${v.telefono || '-'}</td>
-                                <td style="padding: 8px;"><span style="color: #38bdf8; font-weight: bold;">${v.codigoAsiento}</span></td>
-                                <td style="padding: 8px;">${metodoTexto}</td>
-                                <td style="padding: 8px; color: #e2e8f0;">${vendedorTexto}</td>
-                                <td style="padding: 8px; text-align: center;">
-                                    <button class="btn-primary" style="padding: 3px 6px; font-size: 0.75em; width: auto; background: #0284c7;" onclick="reimprimirTicket(${v.id}, '${v.sig}')">🎫 Entrada</button>
-                                    <button class="btn-primary" style="padding: 3px 6px; font-size: 0.75em; width: auto; background: #eab308;" onclick="abrirModalEditarVenta(${v.id}, '${v.nombre}', '${v.apellido}', '${v.telefono || ''}', '${v.email || ''}', ${v.asiento_id}, '${v.evento_id}')">✏️ Editar</button>
-                                    <button class="btn-primary" style="padding: 3px 6px; font-size: 0.75em; width: auto; background: #ef4444;" onclick="cancelarVenta(${v.id})">🗑️ Cancelar</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                }
+                    tbody.innerHTML += `
+                        <tr style="border-bottom: 1px solid #334155;">
+                            <td style="padding: 10px;"><strong>${cliente}</strong></td>
+                            <td style="padding: 10px; font-size: 0.9em; color: #cbd5e1;">${contacto}</td>
+                            <td style="padding: 10px; font-weight: bold; color: #38bdf8;">${v.codigoAsiento}</td>
+                            <td style="padding: 10px;">${metodoBadge}</td>
+                            <td style="padding: 10px;"><span style="color: #cbd5e1; font-weight: 500;">👤 ${vendedor}</span></td>
+                            <td style="padding: 10px; text-align: center;">
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #0284c7; margin-right: 4px;"
+                                    onclick="abrirModalEditarVenta('${v.id}', '${v.evento_id}', '${(v.nombre||'').replace(/'/g, "\\'")}', '${(v.apellido||'').replace(/'/g, "\\'")}', '${v.telefono||''}', '${v.email||''}', '${v.asiento_id}')">
+                                    ✏️ Editar
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
+                                    onclick="cancelarVenta('${v.id}')">
+                                    🗑️ Cancelar
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
             } catch (err) {
-                console.error("Error al cargar detalle de informe:", err);
+                console.error(err);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444;">Error al cargar detalle de ventas.</td></tr>';
             }
         }
 
-        function reimprimirTicket(id, sig) {
-            window.open(`/entrada.html?id=${id}&sig=${sig}`, '_blank');
+        function actualizarListaVentas() {
+            const eventoId = document.getElementById('selEventoInforme').value;
+            if (eventoId) {
+                cargarTablaDetalleVentas(eventoId);
+            } else {
+                alert('Selecciona un evento primero.');
+            }
         }
 
         async function cancelarVenta(ventaId) {
-            if (!confirm('¿Seguro que deseas cancelar esta entrada y liberar el asiento?')) return;
+            if (!confirm('¿Seguro que deseas cancelar esta venta y liberar el asiento?')) return;
             const rol = usuarioSesion ? usuarioSesion.tipo : '';
 
             try {
-                const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${rol}`, { method: 'DELETE' });
+                const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${encodeURIComponent(rol)}`, { method: 'DELETE' });
                 const data = await res.json();
                 alert(data.mensaje);
-                if (data.exito) cargarDetalleInforme();
-            } catch (e) {
-                alert('Error al cancelar venta');
+                if (data.exito) {
+                    actualizarListaVentas();
+                    cargarDetalleInforme();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error al cancelar la venta.');
             }
         }
 
-        async function abrirModalEditarVenta(ventaId, nombre, apellido, contacto, email, asientoId, eventoId) {
-            document.getElementById('editVentaId').value = ventaId;
+        function abrirModalEditarVenta(id, eventoId, nombre, apellido, contacto, email, asientoId) {
+            document.getElementById('editVentaId').value = id;
             document.getElementById('editEventoId').value = eventoId;
             document.getElementById('editNombre').value = nombre;
             document.getElementById('editApellido').value = apellido;
             document.getElementById('editContacto').value = contacto;
             document.getElementById('editEmail').value = email;
-
-            const selectAsiento = document.getElementById('selNuevoAsiento');
-            selectAsiento.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
-
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                const asientos = await res.json();
-                if (Array.isArray(asientos)) {
-                    asientos.filter(a => a.vendido === 0).forEach(a => {
-                        selectAsiento.innerHTML += `<option value="${a.id}">${a.codigoAsiento} (${a.tipoZona}) - $${a.precio}</option>`;
-                    });
-                }
-            } catch (e) {
-                console.error(e);
-            }
-
+            
+            cargarAsientosParaEdicion(eventoId, asientoId);
             document.getElementById('modalEditarVenta').style.display = 'block';
         }
 
@@ -1274,14 +1285,40 @@
             document.getElementById('modalEditarVenta').style.display = 'none';
         }
 
+        async function cargarAsientosParaEdicion(eventoId, asientoActualId) {
+            const select = document.getElementById('selNuevoAsiento');
+            select.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
+
+            try {
+                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+                if (!res.ok) return;
+                const asientos = await res.json();
+
+                if (Array.isArray(asientos)) {
+                    asientos.filter(a => a.vendido === 0 || a.id == asientoActualId).forEach(a => {
+                        const opt = document.createElement('option');
+                        opt.value = a.id;
+                        opt.textContent = `${a.codigoAsiento} (${a.tipoZona}) - $${a.precio}`;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.error("Error al cargar asientos para edición:", e);
+            }
+        }
+
         async function guardarCambiosVenta() {
+            const ventaId = document.getElementById('editVentaId').value;
+            const nuevoAsientoId = document.getElementById('selNuevoAsiento').value;
+
             const body = {
-                ventaId: document.getElementById('editVentaId').value,
+                ventaId,
                 nombre: document.getElementById('editNombre').value.trim(),
                 apellido: document.getElementById('editApellido').value.trim(),
                 contacto: document.getElementById('editContacto').value.trim(),
                 email: document.getElementById('editEmail').value.trim(),
-                nuevoAsientoId: document.getElementById('selNuevoAsiento').value || null
+                nuevoAsientoId: nuevoAsientoId ? parseInt(nuevoAsientoId) : null,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
             try {
@@ -1294,38 +1331,69 @@
                 alert(data.mensaje);
                 if (data.exito) {
                     cerrarModalEditar();
-                    cargarDetalleInforme();
+                    actualizarListaVentas();
                 }
             } catch (e) {
-                alert('Error al actualizar venta.');
+                alert('Error al actualizar la venta.');
             }
         }
 
-        // REPORTE CONSOLIDADO SOLO PARA ADM/SUPER
+        function compartirWhatsApp() {
+            const vendidas = document.getElementById('infVendidas').innerText;
+            const recaudado = document.getElementById('infRecaudado').innerText;
+            const texto = encodeURIComponent(`*Informe de Evento*\nEntradas Vendidas: ${vendidas}\nTotal Recaudado: ${recaudado}`);
+            window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
+        }
+
         async function cargarReportesConsolidados() {
-            const rolActual = usuarioSesion ? usuarioSesion.tipo : '';
-            const tbody = document.getElementById('tbodyReporteEventos');
-
-            if (!['adm', 'super', 'admin', 'administrador'].includes(rolActual)) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444; font-weight: bold;">⛔ Acceso denegado: El reporte consolidado solo puede ser visto por usuarios adm o super.</td></tr>';
-                return;
-            }
-
             try {
-                const res = await fetch(`/api/reportes/consolidado?rol=${rolActual}`);
+                const rol = usuarioSesion ? usuarioSesion.tipo : '';
+                const res = await fetch(`/api/reportes/consolidado?rol=${encodeURIComponent(rol)}`);
+                if (!res.ok) {
+                    if (res.status === 403) {
+                        alert('Acceso restringido: Se requiere rol ADM o SUPER para ver el reporte consolidado.');
+                        return;
+                    }
+                    throw new Error('No se pudo obtener la información de los reportes.');
+                }
+                
                 const data = await res.json();
-
-                if (!res.ok || data.exito === false) {
-                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #ef4444;">${data.mensaje || 'Error al obtener reporte.'}</td></tr>`;
-                    return;
+                
+                if (Array.isArray(data)) {
+                    listaGlobalReportes = data;
+                } else if (data && Array.isArray(data.reportes)) {
+                    listaGlobalReportes = data.reportes;
+                } else {
+                    listaGlobalReportes = [];
                 }
 
-                listaGlobalReportes = Array.isArray(data) ? data : [];
+                poblarSelectFiltroReportes();
                 filtrarReporteConsolidado();
             } catch (e) {
-                console.error("Error al cargar reportes:", e);
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #ef4444;">Error de comunicación con el servidor.</td></tr>';
+                console.error("Error al cargar reporte consolidado:", e);
+                listaGlobalReportes = [];
+                filtrarReporteConsolidado();
             }
+        }
+
+        function poblarSelectFiltroReportes() {
+            const selReporte = document.getElementById('selFiltroReporteEvento');
+            if (!selReporte) return;
+            const valorPrevio = selReporte.value;
+            
+            selReporte.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
+            
+            if (Array.isArray(listaGlobalReportes)) {
+                listaGlobalReportes.forEach(r => {
+                    const evId = r.id || r.evento_id || r.id_evento || r.eventoId;
+                    const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || r.evento || `Evento ${evId}`;
+                    if (evId) {
+                        selReporte.innerHTML += `<option value="${evId}">${evNombre}</option>`;
+                    }
+                });
+            }
+
+            if (valorPrevio) selReporte.value = valorPrevio;
         }
 
         function filtrarReporteConsolidado() {
@@ -1333,74 +1401,90 @@
             const tbody = document.getElementById('tbodyReporteEventos');
             tbody.innerHTML = '';
 
-            let lista = listaGlobalReportes;
+            let listado = listaGlobalReportes;
             if (filtro !== 'TODOS') {
-                lista = listaGlobalReportes.filter(r => (r.id === filtro || r.evento_id === filtro));
+                listado = listado.filter(item => {
+                    const itemId = item.id || item.evento_id || item.id_evento || item.eventoId;
+                    return String(itemId) === String(filtro);
+                });
             }
 
-            if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8;">No se encontraron registros de eventos.</td></tr>';
-                document.getElementById('totVendidas').innerText = '0';
-                document.getElementById('totAsistentes').innerText = '0';
-                document.getElementById('totRecaudado').innerText = '$0.00';
+            if (!listado || listado.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 15px;">No se encontraron eventos para mostrar.</td></tr>';
+                actualizarTotalesConsolidados(0, 0, 0);
                 return;
             }
 
-            let tVendidas = 0, tAsistentes = 0, tRecaudado = 0;
+            let totVen = 0, totAsis = 0, totRec = 0;
 
-            lista.forEach(r => {
-                tVendidas += Number(r.vendidas || 0);
-                tAsistentes += Number(r.asistentes || 0);
-                tRecaudado += Number(r.recaudado || 0);
+            listado.forEach(r => {
+                const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || r.evento || 'Evento sin nombre';
+                const evFecha = r.fecha || r.fecha_evento || 'N/A';
+                
+                const vendidas = parseInt(r.vendidas || r.entradas_vendidas || 0);
+                const asistentes = parseInt(r.asistentes || r.asistentes_reales || 0);
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || 0);
 
-                // Renderizar desglose de Descuentos
-                let htmlDescuentos = '<span style="color:#94a3b8;">Sin ventas</span>';
-                if (Array.isArray(r.descuentos_desglose) && r.descuentos_desglose.length > 0) {
-                    htmlDescuentos = r.descuentos_desglose.map(d => `<div class="tag-desglose">🏷️ ${d.tipo}: <strong>${d.cant}</strong></div>`).join('<br>');
-                }
+                const gen = r.ubicacion ? r.ubicacion.general : 0;
+                const grad = r.ubicacion ? r.ubicacion.gradas : 0;
 
-                // Renderizar desglose de Ubicaciones
-                let htmlUbicaciones = '<span style="color:#94a3b8;">Sin ventas</span>';
-                if (Array.isArray(r.ubicaciones_desglose) && r.ubicaciones_desglose.length > 0) {
-                    htmlUbicaciones = r.ubicaciones_desglose.map(u => `<div class="tag-desglose">📍 ${u.zona}: <strong>${u.cant}</strong></div>`).join('<br>');
-                }
+                const sinDesc = r.descuentos_tipo ? r.descuentos_tipo.sin_descuento : 0;
+                const porcDesc = r.descuentos_tipo ? r.descuentos_tipo.porcentaje : 0;
+                const montoDesc = r.descuentos_tipo ? r.descuentos_tipo.monto_fijo : 0;
+
+                totVen += vendidas;
+                totAsis += asistentes;
+                totRec += recaudado;
 
                 tbody.innerHTML += `
                     <tr style="border-bottom: 1px solid #334155;">
-                        <td style="padding: 10px;"><strong>${r.nombre}</strong></td>
-                        <td style="padding: 10px;">${r.fecha} ${r.hora || ''}</td>
-                        <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${r.vendidas}</td>
-                        <td style="padding: 10px;">${htmlDescuentos}</td>
-                        <td style="padding: 10px;">${htmlUbicaciones}</td>
-                        <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${r.asistentes}</td>
-                        <td style="padding: 10px; text-align: right; color: #eab308; font-weight: bold;">$${Number(r.recaudado || 0).toFixed(2)}</td>
+                        <td style="padding: 10px;"><strong>${evNombre}</strong></td>
+                        <td style="padding: 10px;">${evFecha}</td>
+                        <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${vendidas}</td>
+                        <td style="padding: 10px; text-align: center;">
+                            <span style="background:#0284c7; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:4px;">Gen: ${gen}</span>
+                            <span style="background:#8b5cf6; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em;">Grada: ${grad}</span>
+                        </td>
+                        <td style="padding: 10px; text-align: center;">
+                            <span style="background:#475569; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:2px;" title="Sin Descuento">Sin Desc: ${sinDesc}</span>
+                            <span style="background:#16a34a; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:2px;" title="Porcentaje">%: ${porcDesc}</span>
+                            <span style="background:#d97706; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em;" title="Monto Fijo">Fijo: ${montoDesc}</span>
+                        </td>
+                        <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${asistentes}</td>
+                        <td style="padding: 10px; text-align: right; color: #eab308; font-weight: bold;">$${recaudado.toFixed(2)}</td>
                     </tr>
                 `;
             });
 
-            document.getElementById('totVendidas').innerText = tVendidas;
-            document.getElementById('totAsistentes').innerText = tAsistentes;
-            document.getElementById('totRecaudado').innerText = `$${tRecaudado.toFixed(2)}`;
+            actualizarTotalesConsolidados(totVen, totAsis, totRec);
         }
 
-        function compartirWhatsApp() {
-            const eventoSel = document.getElementById('selEventoInforme');
-            const textoEvento = eventoSel.options[eventoSel.selectedIndex]?.text || 'Evento';
-            const vendidas = document.getElementById('infVendidas').innerText;
-            const asistentes = document.getElementById('infAsistentes').innerText;
-            const recaudado = document.getElementById('infRecaudado').innerText;
-
-            const msg = `📊 *REPORTE DE VENTAS*\n*Evento:* ${textoEvento}\n🎫 *Entradas Vendidas:* ${vendidas}\n👥 *Asistentes Reales:* ${asistentes}\n💰 *Total Recaudado:* ${recaudado}`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        function actualizarTotalesConsolidados(ven, asis, rec) {
+            document.getElementById('totVendidas').innerText = ven;
+            document.getElementById('totAsistentes').innerText = asis;
+            document.getElementById('totRecaudado').innerText = `$${rec.toFixed(2)}`;
         }
 
         function compartirWhatsAppReporteGlobal() {
-            const tVendidas = document.getElementById('totVendidas').innerText;
-            const tAsistentes = document.getElementById('totAsistentes').innerText;
-            const tRecaudado = document.getElementById('totRecaudado').innerText;
+            const filtro = document.getElementById('selFiltroReporteEvento').value;
+            let listado = listaGlobalReportes;
+            
+            if (filtro !== 'TODOS') {
+                listado = listado.filter(item => String(item.id || item.evento_id) === String(filtro));
+            }
 
-            const msg = `📈 *REPORTE CONSOLIDADO DE EVENTOS*\n🎫 *Total Vendidas:* ${tVendidas}\n👥 *Total Asistentes:* ${tAsistentes}\n💰 *Recaudación Total:* ${tRecaudado}`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+            if (listado.length === 0) return alert('No hay información cargada para compartir.');
+
+            let msj = `📊 *REPORTE CONSOLIDADO DE EVENTOS*\n----------------------------------\n`;
+            listado.forEach(r => {
+                msj += `\n📌 *${r.nombre}*\n`;
+                msj += `• Vendidas: ${r.vendidas}\n`;
+                msj += `• Ubicación: Gen(${r.ubicacion?.general || 0}) / Grada(${r.ubicacion?.gradas || 0})\n`;
+                msj += `• Descuentos: Sin Desc(${r.descuentos_tipo?.sin_descuento || 0}) / Porc(${r.descuentos_tipo?.porcentaje || 0}) / Fijo(${r.descuentos_tipo?.monto_fijo || 0})\n`;
+                msj += `• Recaudado: $${Number(r.recaudado || 0).toFixed(2)}\n`;
+            });
+
+            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`, '_blank');
         }
     </script>
 </body>
