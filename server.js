@@ -132,9 +132,15 @@ async function inicializarTablasDB() {
                 email TEXT,
                 metodo_pago TEXT,
                 monto_total REAL,
-                fechaCompra TEXT
+                fechaCompra TEXT,
+                vendedor TEXT,
+                descuento_tipo TEXT
             );
         `);
+
+        // Migraciones preventivas para agregar columnas en bases existentes
+        try { await db.execute("ALTER TABLE ventas ADD COLUMN vendedor TEXT"); } catch (e) {}
+        try { await db.execute("ALTER TABLE ventas ADD COLUMN descuento_tipo TEXT"); } catch (e) {}
 
         const resUser = await db.execute("SELECT COUNT(*) as cant FROM usuarios");
         if (resUser.rows[0].cant === 0) {
@@ -333,8 +339,9 @@ app.get('/api/cupones', async (req, res) => {
 
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
-    
-    // Función auxiliar para verificar si el evento ya superó las 5 hs
+    const vendedor = venta.vendedor || 'Sistema';
+    const descuento_tipo = venta.descuento_tipo || 'Sin Descuento';
+
     const validarTiempoVenta = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -344,7 +351,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
     if (db) {
         try {
-            // Verificar tiempo del evento
             const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
             if (evRes.rows.length > 0) {
                 const { fecha, hora } = evRes.rows[0];
@@ -362,8 +368,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
             const insRes = await db.execute({
-                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString()]
+                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra, vendedor, descuento_tipo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString(), vendedor, descuento_tipo]
             });
 
             const nuevaVentaId = insRes.rows[0].id;
@@ -371,6 +377,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
         } catch (e) {
+            console.error("Error al procesar venta:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
         }
     } else {
@@ -385,14 +392,21 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
         asiento.vendido = 1;
         const nuevaVentaId = ventasMemoria.length + 1;
-        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date().toISOString() });
+        ventasMemoria.push({
+            ...venta,
+            id: nuevaVentaId,
+            codigoAsiento: asiento.codigoAsiento,
+            fechaCompra: new Date().toISOString(),
+            vendedor,
+            descuento_tipo
+        });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
         res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
     }
 });
 
-// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
+// CANCELAR VENTA
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
     const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
@@ -476,42 +490,69 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
+// 1. REPORTE CONSOLIDADO POR EVENTOS (Solo visible para rol adm o super)
 app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
+    const rol = (req.query.rol || req.headers['x-user-role'] || '').toLowerCase();
+
+    // Verificación estricta de rol: Solo adm o super
+    if (!['super', 'adm', 'admin', 'administrador'].includes(rol)) {
+        return res.status(403).json({
+            exito: false,
+            mensaje: 'Acceso restringido: Solo los usuarios con rol "adm" o "super" pueden acceder al Reporte Consolidado.'
+        });
+    }
+
     if (db) {
         try {
-            const result = await db.execute(`
-                SELECT 
-                    e.id as id,
-                    e.id as evento_id,
-                    e.nombre as nombre,
-                    e.nombre as evento_nombre,
-                    e.fecha,
-                    e.hora,
-                    COALESCE(v.vendidas, 0) as vendidas,
-                    COALESCE(v.recaudado, 0) as recaudado,
-                    0 as descuento,
-                    COALESCE(a.asistentes, 0) as asistentes
-                FROM eventos e
-                LEFT JOIN (
-                    SELECT 
-                        evento_id, 
-                        COUNT(id) as vendidas, 
-                        SUM(monto_total) as recaudado
-                    FROM ventas 
-                    GROUP BY evento_id
-                ) v ON e.id = v.evento_id
-                LEFT JOIN (
-                    SELECT 
-                        evento_id, 
-                        COUNT(id) as asistentes 
-                    FROM asientos 
-                    WHERE asistio = 1 OR asistio = '1'
-                    GROUP BY evento_id
-                ) a ON e.id = a.evento_id
-                ORDER BY e.fecha DESC
-            `);
-            return res.json(result.rows);
+            const eventosRes = await db.execute("SELECT * FROM eventos ORDER BY fecha DESC");
+            const reportes = [];
+
+            for (const e of eventosRes.rows) {
+                const ventasRes = await db.execute({
+                    sql: "SELECT * FROM ventas WHERE evento_id = ?",
+                    args: [e.id]
+                });
+                const asientosRes = await db.execute({
+                    sql: "SELECT * FROM asientos WHERE evento_id = ?",
+                    args: [e.id]
+                });
+
+                const vendidas = ventasRes.rows.length;
+                const recaudado = ventasRes.rows.reduce((acc, curr) => acc + Number(curr.monto_total || 0), 0);
+                const asistentes = asientosRes.rows.filter(a => a.vendido === 1 && (a.asistio === 1 || a.asistio === '1')).length;
+
+                // Desglose por Tipo de Descuento
+                const descMap = {};
+                ventasRes.rows.forEach(v => {
+                    const tipoDesc = v.descuento_tipo || 'Sin Descuento';
+                    descMap[tipoDesc] = (descMap[tipoDesc] || 0) + 1;
+                });
+                const descuentos_desglose = Object.keys(descMap).map(k => ({ tipo: k, cant: descMap[k] }));
+
+                // Desglose por Ubicación (tipoZona)
+                const ubicMap = {};
+                ventasRes.rows.forEach(v => {
+                    const asiento = asientosRes.rows.find(a => a.id === v.asiento_id);
+                    const zona = asiento ? (asiento.tipoZona || 'General') : 'General';
+                    ubicMap[zona] = (ubicMap[zona] || 0) + 1;
+                });
+                const ubicaciones_desglose = Object.keys(ubicMap).map(k => ({ zona: k, cant: ubicMap[k] }));
+
+                reportes.push({
+                    id: e.id,
+                    evento_id: e.id,
+                    nombre: e.nombre,
+                    fecha: e.fecha,
+                    hora: e.hora,
+                    vendidas,
+                    recaudado,
+                    asistentes,
+                    descuentos_desglose,
+                    ubicaciones_desglose
+                });
+            }
+
+            return res.json(reportes);
         } catch (e) {
             console.error("Error reporte consolidado:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
@@ -521,9 +562,26 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
         const reportes = eventosMemoria.map(e => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
-            
+
             const totalAsistentes = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true).length;
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
+
+            // Desglose por Tipo de Descuento
+            const descMap = {};
+            ventas.forEach(v => {
+                const tipoDesc = v.descuento_tipo || 'Sin Descuento';
+                descMap[tipoDesc] = (descMap[tipoDesc] || 0) + 1;
+            });
+            const descuentos_desglose = Object.keys(descMap).map(k => ({ tipo: k, cant: descMap[k] }));
+
+            // Desglose por Ubicación
+            const ubicMap = {};
+            ventas.forEach(v => {
+                const asiento = listaAsientos.find(a => a.id === v.asiento_id);
+                const zona = asiento ? (asiento.tipoZona || 'General') : 'General';
+                ubicMap[zona] = (ubicMap[zona] || 0) + 1;
+            });
+            const ubicaciones_desglose = Object.keys(ubicMap).map(k => ({ zona: k, cant: ubicMap[k] }));
 
             return {
                 id: e.id,
@@ -533,20 +591,24 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                 hora: e.hora,
                 vendidas: ventas.length,
                 recaudado: totalRecaudado,
-                descuento: 0,
-                asistentes: totalAsistentes
+                asistentes: totalAsistentes,
+                descuentos_desglose,
+                ubicaciones_desglose
             };
         });
         return res.json(reportes);
     }
 });
+
+// 2. DETALLE DE VENTAS POR EVENTO (Incluye metodo_pago y vendedor)
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
         try {
             const result = await db.execute({
                 sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
-                             v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id, v.asiento_id
+                             v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id, v.asiento_id,
+                             v.metodo_pago, v.vendedor, v.descuento_tipo
                       FROM ventas v
                       WHERE v.evento_id = ?
                       ORDER BY v.id DESC`,
@@ -576,18 +638,20 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
                 asiento_id: v.asiento_id,
+                metodo_pago: v.metodo_pago,
+                vendedor: v.vendedor || 'Sistema',
+                descuento_tipo: v.descuento_tipo || 'Sin Descuento',
                 sig: generarFirma(v.id, v.codigoAsiento)
             }));
         res.json(lista);
     }
 });
 
-// 3. EDITAR / ACTUALIZAR EVENTO
+// EDITAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
 
-    // Control de permisos por rol (Se agregaron 'super' y 'adm')
     const rolConsulta = req.query.rol || rol;
     if (rolConsulta && !['super', 'adm', 'admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
@@ -607,7 +671,6 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
         }
     } else {
-        // Modo Memoria
         const idx = eventosMemoria.findIndex(e => e.id === id);
         if (idx === -1) {
             return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
@@ -625,7 +688,8 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
         return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Modo Memoria)." });
     }
 });
-// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
+
+// ELIMINAR EVENTO
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
     const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
@@ -652,10 +716,10 @@ app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     }
 });
 
+// EDITAR VENTA
 app.put('/api/ventas/editar', async (req, res) => {
     const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
 
-    // Función auxiliar para verificar límite de 2hs desde el inicio del evento
     const validarLimite2Hs = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -665,7 +729,6 @@ app.put('/api/ventas/editar', async (req, res) => {
 
     if (db) {
         try {
-            // 1. Obtener la venta y los datos del evento asociado
             const vRes = await db.execute({ 
                 sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
                 args: [ventaId] 
@@ -674,7 +737,6 @@ app.put('/api/ventas/editar', async (req, res) => {
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
             const venta = vRes.rows[0];
 
-            // 2. Validar que no hayan transcurrido más de 2 horas desde el inicio del evento
             if (!validarLimite2Hs(venta.fecha, venta.hora)) {
                 return res.status(403).json({ 
                     exito: false, 
@@ -682,7 +744,6 @@ app.put('/api/ventas/editar', async (req, res) => {
                 });
             }
 
-            // 3. Validar cambio de asiento si se especificó un nuevo asiento
             if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
                 const aViejoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [venta.asiento_id] });
                 const aNuevoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
@@ -699,30 +760,22 @@ app.put('/api/ventas/editar', async (req, res) => {
 
                 if (aViejoRes.rows.length > 0) {
                     const asientoViejo = aViejoRes.rows[0];
-                    
-                    // Restricción: Solo se permite dentro de la misma categoría (tipoZona)
                     if (asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
                         return res.status(400).json({ 
                             exito: false, 
                             mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
                         });
                     }
-
-                    // Liberar asiento anterior
                     await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejo.id] });
                 }
 
-                // Ocupar nuevo asiento
                 await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
-
-                // Actualizar registro en ventas
                 await db.execute({
                     sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
                     args: [nuevoAsientoId, asientoNuevo.codigoAsiento, ventaId]
                 });
             }
 
-            // 4. Actualizar información del comprador
             await db.execute({
                 sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
                 args: [nombre, apellido, contacto, email || '', ventaId]
@@ -734,7 +787,6 @@ app.put('/api/ventas/editar', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
         }
     } else {
-        // Modo Memoria
         const venta = ventasMemoria.find(x => x.id == ventaId);
         if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
@@ -762,7 +814,7 @@ app.put('/api/ventas/editar', async (req, res) => {
             if (asientoViejo && asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
                 return res.status(400).json({ 
                     exito: false, 
-                    mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
+                    mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada).' 
                 });
             }
 
@@ -935,14 +987,14 @@ app.post('/api/super/revelar-clave', async (req, res) => {
     const { claveSuper, usuarioIdTarget } = req.body;
     if (db) {
         try {
-            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
+            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin' OR tipo = 'adm') AND clave = ?", args: [claveSuper] });
             if (superRes.rows.length === 0) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
 
             const targetRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
             if (targetRes.rows.length > 0) return res.json({ exito: true, clave: targetRes.rows[0].clave });
         } catch (e) { console.error(e); }
     } else {
-        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
+        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin' || u.tipo === 'adm') && u.clave === claveSuper);
         if (!superAdmin) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
 
         const target = usuariosMemoria.find(u => u.id === usuarioIdTarget);
@@ -1111,6 +1163,4 @@ app.listen(PORT, () => {
     console.log(`Servidor iniciado en http://localhost:${PORT}`);
     console.log(`===========================================`);
 });
-
-
 
