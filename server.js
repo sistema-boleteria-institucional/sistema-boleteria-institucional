@@ -133,13 +133,13 @@ async function inicializarTablasDB() {
                 metodo_pago TEXT,
                 monto_total REAL,
                 fechaCompra TEXT,
-                usuario_vendedor TEXT,
+                vendedor TEXT,
                 tipo_descuento TEXT
             );
         `);
 
-        // Migración retrocompatible para agregar columnas si no existen
-        try { await db.execute("ALTER TABLE ventas ADD COLUMN usuario_vendedor TEXT;"); } catch (e) {}
+        // Migración progresiva de columnas si la tabla ya existía
+        try { await db.execute("ALTER TABLE ventas ADD COLUMN vendedor TEXT;"); } catch (e) {}
         try { await db.execute("ALTER TABLE ventas ADD COLUMN tipo_descuento TEXT;"); } catch (e) {}
 
         const resUser = await db.execute("SELECT COUNT(*) as cant FROM usuarios");
@@ -347,8 +347,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
         return new Date() <= limiteVenta;
     };
 
-    const usuario_vendedor = venta.usuario_vendedor || venta.vendedor || venta.usuario || 'admin';
-    const tipo_descuento = venta.tipo_descuento || 'Sin Descuento';
+    const vendedor = venta.vendedor || 'admin';
+    const tipoDescuento = venta.tipo_descuento || 'Sin Descuento';
 
     if (db) {
         try {
@@ -369,23 +369,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
             const insRes = await db.execute({
-                sql: `INSERT INTO ventas 
-                      (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra, usuario_vendedor, tipo_descuento) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-                args: [
-                    venta.evento_id, 
-                    venta.asiento_id, 
-                    asiento.codigoAsiento, 
-                    venta.nombre, 
-                    venta.apellido, 
-                    venta.contacto, 
-                    venta.email || '', 
-                    venta.metodo_pago || 'efectivo', 
-                    venta.monto_total, 
-                    new Date().toISOString(),
-                    usuario_vendedor,
-                    tipo_descuento
-                ]
+                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra, vendedor, tipo_descuento) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString(), vendedor, tipoDescuento]
             });
 
             const nuevaVentaId = insRes.rows[0].id;
@@ -393,7 +378,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
         } catch (e) {
-            console.error("Error al procesar venta:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
         }
     } else {
@@ -413,8 +397,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
             id: nuevaVentaId, 
             codigoAsiento: asiento.codigoAsiento, 
             fechaCompra: new Date().toISOString(),
-            usuario_vendedor,
-            tipo_descuento
+            vendedor,
+            tipo_descuento: tipoDescuento
         });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
@@ -506,90 +490,65 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// REPORTE CONSOLIDADO POR EVENTOS (Solo accesible para rol ADM o SUPER)
+// 1. REPORTE CONSOLIDADO POR EVENTO (Restringido a rol ADM o SUPER)
 app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
-    const rol = (req.query.rol || req.headers['x-user-role'] || '').toString().toLowerCase();
-
-    if (rol && !['super', 'admin', 'adm', 'administrador'].includes(rol)) {
-        return res.status(403).json({ exito: false, mensaje: 'Acceso denegado. Se requiere rol adm o super para ver el reporte consolidado.' });
+    const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
+    
+    if (rol && !['super', 'adm', 'admin', 'administrador'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Acceso restringido. Solo disponible para rol adm o super.' });
     }
 
     if (db) {
         try {
-            const eventosRes = await db.execute("SELECT * FROM eventos ORDER BY fecha DESC");
-            const reportes = [];
-
-            for (const ev of eventosRes.rows) {
-                const ventasRes = await db.execute({
-                    sql: `SELECT v.*, a.tipoZona 
-                          FROM ventas v 
-                          LEFT JOIN asientos a ON v.asiento_id = a.id 
-                          WHERE v.evento_id = ?`,
-                    args: [ev.id]
-                });
-
-                const asistentesRes = await db.execute({
-                    sql: "SELECT COUNT(*) as cant FROM asientos WHERE evento_id = ? AND (asistio = 1 OR asistio = '1')",
-                    args: [ev.id]
-                });
-
-                const ventas = ventasRes.rows;
-                const totalVendidas = ventas.length;
-                const totalRecaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || 0), 0);
-                const totalAsistentes = asistentesRes.rows[0]?.cant || 0;
-
-                let genCount = 0;
-                let gradaCount = 0;
-                let descNinguno = 0;
-                let descPorcentaje = 0;
-                let descMontoFijo = 0;
-
-                ventas.forEach(v => {
-                    const zona = (v.tipoZona || '').toLowerCase();
-                    const cod = (v.codigoAsiento || '').toLowerCase();
-                    if (zona.includes('grada') || cod.startsWith('g1') || cod.startsWith('g2')) {
-                        gradaCount++;
-                    } else {
-                        genCount++;
-                    }
-
-                    const td = (v.tipo_descuento || '').toLowerCase();
-                    if (td.includes('porcentaje')) {
-                        descPorcentaje++;
-                    } else if (td.includes('monto') || td.includes('fijo')) {
-                        descMontoFijo++;
-                    } else {
-                        descNinguno++;
-                    }
-                });
-
-                reportes.push({
-                    id: ev.id,
-                    evento_id: ev.id,
-                    nombre: ev.nombre,
-                    fecha: ev.fecha,
-                    hora: ev.hora,
-                    vendidas: totalVendidas,
-                    recaudado: totalRecaudado,
-                    asistentes: totalAsistentes,
-                    ubicacion: {
-                        general: genCount,
-                        gradas: gradaCount
-                    },
-                    descuentos_tipo: {
-                        sin_descuento: descNinguno,
-                        porcentaje: descPorcentaje,
-                        monto_fijo: descMontoFijo
-                    }
-                });
-            }
-
-            return res.json(reportes);
+            const result = await db.execute(`
+                SELECT 
+                    e.id as id,
+                    e.id as evento_id,
+                    e.nombre as nombre,
+                    e.nombre as evento_nombre,
+                    e.fecha,
+                    e.hora,
+                    COALESCE(v.vendidas, 0) as vendidas,
+                    COALESCE(v.recaudado, 0) as recaudado,
+                    0 as descuento,
+                    COALESCE(a.asistentes, 0) as asistentes,
+                    COALESCE(v.desc_sin, 0) as desc_sin,
+                    COALESCE(v.desc_pct, 0) as desc_pct,
+                    COALESCE(v.desc_fijo, 0) as desc_fijo,
+                    COALESCE(v.loc_general, 0) as loc_general,
+                    COALESCE(v.loc_grada, 0) as loc_grada
+                FROM eventos e
+                LEFT JOIN (
+                    SELECT 
+                        v_sub.evento_id, 
+                        COUNT(v_sub.id) as vendidas, 
+                        SUM(v_sub.monto_total) as recaudado,
+                        SUM(CASE WHEN LOWER(COALESCE(v_sub.tipo_descuento, '')) LIKE '%porcentaje%' THEN 1 ELSE 0 END) as desc_pct,
+                        SUM(CASE WHEN LOWER(COALESCE(v_sub.tipo_descuento, '')) LIKE '%monto%' OR LOWER(COALESCE(v_sub.tipo_descuento, '')) LIKE '%fijo%' THEN 1 ELSE 0 END) as desc_fijo,
+                        SUM(CASE WHEN COALESCE(v_sub.tipo_descuento, 'Sin Descuento') = 'Sin Descuento' OR v_sub.tipo_descuento IS NULL OR v_sub.tipo_descuento = '' THEN 1 ELSE 0 END) as desc_sin,
+                        SUM(CASE WHEN LOWER(COALESCE(a_sub.tipoZona, '')) LIKE '%general%' OR v_sub.codigoAsiento LIKE 'GEN-%' THEN 1 ELSE 0 END) as loc_general,
+                        SUM(CASE WHEN LOWER(COALESCE(a_sub.tipoZona, '')) LIKE '%grada%' OR v_sub.codigoAsiento LIKE 'G1-%' OR v_sub.codigoAsiento LIKE 'G2-%' THEN 1 ELSE 0 END) as loc_grada
+                    FROM ventas v_sub
+                    LEFT JOIN asientos a_sub ON v_sub.asiento_id = a_sub.id
+                    GROUP BY v_sub.evento_id
+                ) v ON e.id = v.evento_id
+                LEFT JOIN (
+                    SELECT 
+                        evento_id, 
+                        COUNT(id) as asistentes 
+                    FROM asientos 
+                    WHERE asistio = 1 OR asistio = '1'
+                    GROUP BY evento_id
+                ) a ON e.id = a.evento_id
+                ORDER BY e.fecha DESC
+            `);
+            return res.json(result.rows);
         } catch (e) {
             console.error("Error reporte consolidado:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
         }
     } else {
+        // Modo Memoria
         const reportes = eventosMemoria.map(e => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
@@ -597,31 +556,21 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             const totalAsistentes = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true).length;
             const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
 
-            let genCount = 0;
-            let gradaCount = 0;
-            let descNinguno = 0;
-            let descPorcentaje = 0;
-            let descMontoFijo = 0;
+            let descSin = 0, descPct = 0, descFijo = 0;
+            let locGen = 0, locGra = 0;
 
             ventas.forEach(v => {
-                const as = listaAsientos.find(a => a.id === v.asiento_id);
-                const zona = (as ? as.tipoZona : '').toLowerCase();
-                const cod = (v.codigoAsiento || '').toLowerCase();
+                const tipoD = (v.tipo_descuento || 'Sin Descuento').toLowerCase();
+                if (tipoD.includes('porcentaje')) descPct++;
+                else if (tipoD.includes('monto') || tipoD.includes('fijo')) descFijo++;
+                else descSin++;
 
-                if (zona.includes('grada') || cod.startsWith('g1') || cod.startsWith('g2')) {
-                    gradaCount++;
-                } else {
-                    genCount++;
-                }
+                const seat = listaAsientos.find(a => a.id === v.asiento_id);
+                const zona = seat ? (seat.tipoZona || '') : '';
+                const cod = v.codigoAsiento || '';
 
-                const td = (v.tipo_descuento || '').toLowerCase();
-                if (td.includes('porcentaje')) {
-                    descPorcentaje++;
-                } else if (td.includes('monto') || td.includes('fijo')) {
-                    descMontoFijo++;
-                } else {
-                    descNinguno++;
-                }
+                if (zona.toLowerCase().includes('general') || cod.startsWith('GEN-')) locGen++;
+                else locGra++;
             });
 
             return {
@@ -632,23 +581,20 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
                 hora: e.hora,
                 vendidas: ventas.length,
                 recaudado: totalRecaudado,
+                descuento: 0,
                 asistentes: totalAsistentes,
-                ubicacion: {
-                    general: genCount,
-                    gradas: gradaCount
-                },
-                descuentos_tipo: {
-                    sin_descuento: descNinguno,
-                    porcentaje: descPorcentaje,
-                    monto_fijo: descMontoFijo
-                }
+                desc_sin: descSin,
+                desc_pct: descPct,
+                desc_fijo: descFijo,
+                loc_general: locGen,
+                loc_grada: locGra
             };
         });
         return res.json(reportes);
     }
 });
 
-// DETALLE DE VENTAS CON MÉTODO DE PAGO Y VENDEDOR
+// 2. DETALLE DE VENTAS (Incluye método de pago y usuario vendedor)
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -656,8 +602,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
             const result = await db.execute({
                 sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
                              v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id, v.asiento_id,
-                             v.metodo_pago, COALESCE(v.usuario_vendedor, 'admin') as usuario_vendedor,
-                             COALESCE(v.tipo_descuento, 'Sin Descuento') as tipo_descuento
+                             v.metodo_pago, v.vendedor, v.tipo_descuento
                       FROM ventas v
                       WHERE v.evento_id = ?
                       ORDER BY v.id DESC`,
@@ -687,9 +632,9 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
                 asiento_id: v.asiento_id,
-                metodo_pago: v.metodo_pago || 'efectivo',
-                usuario_vendedor: v.usuario_vendedor || 'admin',
-                tipo_descuento: v.tipo_descuento || 'Sin Descuento',
+                metodo_pago: v.metodo_pago,
+                vendedor: v.vendedor,
+                tipo_descuento: v.tipo_descuento,
                 sig: generarFirma(v.id, v.codigoAsiento)
             }));
         res.json(lista);
@@ -814,10 +759,12 @@ app.put('/api/ventas/editar', async (req, res) => {
                             mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
                         });
                     }
+
                     await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejo.id] });
                 }
 
                 await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
                 await db.execute({
                     sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
                     args: [nuevoAsientoId, asientoNuevo.codigoAsiento, ventaId]
