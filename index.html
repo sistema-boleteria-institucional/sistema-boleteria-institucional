@@ -1311,7 +1311,7 @@
             window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`, '_blank');
         }
 
-async function cargarTablaDetalleVentas(eventoId) {
+         async function cargarTablaDetalleVentas(eventoId) {
             const tbody = document.getElementById('tablaDetalleVentas');
             if (!tbody) return;
 
@@ -1379,9 +1379,10 @@ async function cargarTablaDetalleVentas(eventoId) {
                     tbody.innerHTML += `
                         <tr style="border-bottom: 1px solid #334155;">
                             <td style="padding: 8px;"><strong>${nombreCompleto}</strong></td>
-                            <td style="padding: 8px;">${mail || '<span style="color:#64748b;">N/A</span>'}</td>
-                            <td style="padding: 8px;">${tel || '<span style="color:#64748b;">N/A</span>'}</td>
+                            <td style="padding: 8px;">${contactoInfo}</td>
                             <td style="padding: 8px;"><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #fff;">${asiento}</span></td>
+                            <td style="padding: 8px;">${metodoPago}</td>
+                            <td style="padding: 8px;">${vendedor}</td>
                             <td style="padding: 8px; text-align: center;">
                                 <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;" 
                                     onclick="abrirModalEditar('${ventaJson}')">
@@ -1402,7 +1403,7 @@ async function cargarTablaDetalleVentas(eventoId) {
                 });
             } catch (err) {
                 console.error("Error al obtener detalle de ventas:", err);
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
             }
         }
 
