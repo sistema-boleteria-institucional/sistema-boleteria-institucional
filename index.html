@@ -179,7 +179,6 @@
                     <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
                     <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
                     <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
-                    <!-- Visibilidad restringida para rol adm y super -->
                     <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reportes por Evento</button>
                     <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
                     <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
@@ -286,7 +285,7 @@
                 </div>
             </div>
 
-            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS CON MÉTODO DE PAGO Y VENDEDOR -->
+            <!-- TABLA DETALLADA DE ENTRADAS VENDIDAS -->
             <div id="seccionEntradasVendidas" class="card mt-4" style="margin-top:25px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h4 style="margin: 0;">📋 Listado de Entradas Vendidas</h4>
@@ -294,25 +293,25 @@
                 </div>
                 <div style="overflow-x: auto;">
                     <table class="tabla-admin" style="width: 100%;">
-                        <thead>
-                            <tr>
-                                <th>Cliente</th>
-                                <th>Email / Teléfono</th>
-                                <th>Asiento</th>
-                                <th>Método de Pago</th>
-                                <th>Vendedor</th>
-                                <th style="text-align: center;">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaDetalleVentas">
-                            <tr><td colspan="6" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
+						<thead>
+							<tr>
+								<th>Cliente</th>
+								<th>Email / Teléfono</th>
+								<th>Asiento</th>
+								<th>Método de Pago</th>
+								<th>Vendedor</th>
+								<th style="text-align: center;">Acciones</th>
+							</tr>
+						</thead>
+						<tbody id="tablaDetalleVentas">
+                            <tr><td colspan="5" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO (Exclusiva para ADM / SUPER) -->
+        <!-- PESTAÑA REPORTE CONSOLIDADO POR EVENTO -->
         <div id="tabReporteEventos" class="tab-content">
             <h3>📈 Reporte Consolidado por Eventos</h3>
             <div class="no-print" style="margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
@@ -334,23 +333,21 @@
                             <th>Evento</th>
                             <th>Fecha</th>
                             <th style="text-align: center;">Cant. Vendida</th>
-                            <th style="text-align: center;">Por Ubicación</th>
-                            <th style="text-align: center;">Por Tipo Descuento</th>
                             <th style="text-align: center;">Asistentes</th>
                             <th style="text-align: right;">Monto Recaudado</th>
+                            <th style="text-align: right;">Total Descuentos</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyReporteEventos">
-                        <tr><td colspan="7" style="text-align: center; color: #94a3b8;">Cargando datos del reporte...</td></tr>
+                        <tr><td colspan="6" style="text-align: center; color: #94a3b8;">Cargando datos del reporte...</td></tr>
                     </tbody>
                     <tfoot id="tfootReporteEventos" style="font-weight: bold; background: #1e293b; color: #38bdf8;">
                         <tr>
                             <td colspan="2" style="text-align: right;">TOTALES GENERALES:</td>
                             <td id="totVendidas" style="text-align: center;">0</td>
-                            <td id="totUbicacion" style="text-align: center; font-size:0.85em;">-</td>
-                            <td id="totDescuentos" style="text-align: center; font-size:0.85em;">-</td>
                             <td id="totAsistentes" style="text-align: center;">0</td>
                             <td id="totRecaudado" style="text-align: right;">$0.00</td>
+                            <td id="totDescuentos" style="text-align: right;">$0.00</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -605,17 +602,12 @@
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('appContainer').style.display = 'block';
 
-            const esAdminOSuper = ['adm', 'super', 'admin', 'administrador'].includes(rol);
-
-            if (esAdminOSuper) {
+            if (['adm', 'super', 'admin', 'administrador'].includes(rol)) {
                 document.getElementById('btnTabCrear').style.display = 'block';
                 document.getElementById('btnTabUsuarios').style.display = 'block';
                 document.getElementById('btnTabCupones').style.display = 'block';
                 document.getElementById('btnTabReporteEventos').style.display = 'block';
-            } else {
-                document.getElementById('btnTabReporteEventos').style.display = 'none';
             }
-
             if (['super', 'admin', 'administrador'].includes(rol)) {
                 document.getElementById('btnTabSuper').style.display = 'block';
                 cargarUsuariosSuper();
@@ -649,15 +641,6 @@
         }
 
         function mostrarTab(tabId, btn) {
-            // Verificación de seguridad para la pestaña de Reporte Consolidado
-            if (tabId === 'tabReporteEventos') {
-                const rol = (usuarioSesion ? usuarioSesion.tipo : '').toLowerCase();
-                if (!['adm', 'super', 'admin', 'administrador'].includes(rol)) {
-                    alert('Acceso restringido. Solo los usuarios con rol ADM o SUPER pueden ver el reporte consolidado.');
-                    return;
-                }
-            }
-
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
 
@@ -784,13 +767,6 @@
             if(!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
             const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
 
-            let tipoDescStr = 'Sin Descuento';
-            if (descuentoAplicado.porcentaje > 0) {
-                tipoDescStr = `Porcentaje (${descuentoAplicado.porcentaje}%)`;
-            } else if (descuentoAplicado.monto_fijo > 0) {
-                tipoDescStr = `Monto Fijo ($${descuentoAplicado.monto_fijo})`;
-            }
-
             const body = {
                 evento_id: document.getElementById('selEventoVenta').value,
                 asiento_id: asientoSeleccionado.id,
@@ -800,7 +776,7 @@
                 email: document.getElementById('txtEmail').value.trim(),
                 metodo_pago: document.getElementById('selMetodoPago').value,
                 monto_total: montoCalculado,
-                usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : 'admin',
+				usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : '',
                 tipo_descuento: tipoDescStr,
                 rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
@@ -1183,161 +1159,6 @@
             }
         }
 
-        // CARGAR TABLA DETALLADA CON MÉTODO DE PAGO Y VENDEDOR
-        async function cargarTablaDetalleVentas(eventoId) {
-            const tbody = document.getElementById('tablaDetalleVentas');
-            if (!tbody) return;
-
-            if (!eventoId) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">Selecciona un evento para cargar el detalle.</td></tr>';
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/ventas/detalle/${eventoId}`);
-                if (!res.ok) throw new Error('Error al consultar ventas');
-                const ventas = await res.json();
-
-                tbody.innerHTML = '';
-
-                if (!Array.isArray(ventas) || ventas.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8;">No hay entradas vendidas registradas para este evento.</td></tr>';
-                    return;
-                }
-
-                ventas.forEach(v => {
-                    const cliente = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'Anónimo';
-                    const contacto = [v.email, v.telefono].filter(Boolean).join(' / ') || '-';
-                    const metodo = (v.metodo_pago || 'efectivo').toLowerCase();
-                    
-                    const metodoBadge = (metodo === 'mercadopago' || metodo === 'mercado pago')
-                        ? '<span style="background:#009ee3; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Mercado Pago</span>'
-                        : '<span style="background:#16a34a; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Efectivo</span>';
-                    
-                    const vendedor = v.usuario_vendedor || 'admin';
-
-                    tbody.innerHTML += `
-                        <tr style="border-bottom: 1px solid #334155;">
-                            <td style="padding: 10px;"><strong>${cliente}</strong></td>
-                            <td style="padding: 10px; font-size: 0.9em; color: #cbd5e1;">${contacto}</td>
-                            <td style="padding: 10px; font-weight: bold; color: #38bdf8;">${v.codigoAsiento}</td>
-                            <td style="padding: 10px;">${metodoBadge}</td>
-                            <td style="padding: 10px;"><span style="color: #cbd5e1; font-weight: 500;">👤 ${vendedor}</span></td>
-                            <td style="padding: 10px; text-align: center;">
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #0284c7; margin-right: 4px;"
-                                    onclick="abrirModalEditarVenta('${v.id}', '${v.evento_id}', '${(v.nombre||'').replace(/'/g, "\\'")}', '${(v.apellido||'').replace(/'/g, "\\'")}', '${v.telefono||''}', '${v.email||''}', '${v.asiento_id}')">
-                                    ✏️ Editar
-                                </button>
-                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
-                                    onclick="cancelarVenta('${v.id}')">
-                                    🗑️ Cancelar
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (err) {
-                console.error(err);
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444;">Error al cargar detalle de ventas.</td></tr>';
-            }
-        }
-
-        function actualizarListaVentas() {
-            const eventoId = document.getElementById('selEventoInforme').value;
-            if (eventoId) {
-                cargarTablaDetalleVentas(eventoId);
-            } else {
-                alert('Selecciona un evento primero.');
-            }
-        }
-
-        async function cancelarVenta(ventaId) {
-            if (!confirm('¿Seguro que deseas cancelar esta venta y liberar el asiento?')) return;
-            const rol = usuarioSesion ? usuarioSesion.tipo : '';
-
-            try {
-                const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${encodeURIComponent(rol)}`, { method: 'DELETE' });
-                const data = await res.json();
-                alert(data.mensaje);
-                if (data.exito) {
-                    actualizarListaVentas();
-                    cargarDetalleInforme();
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Error al cancelar la venta.');
-            }
-        }
-
-        function abrirModalEditarVenta(id, eventoId, nombre, apellido, contacto, email, asientoId) {
-            document.getElementById('editVentaId').value = id;
-            document.getElementById('editEventoId').value = eventoId;
-            document.getElementById('editNombre').value = nombre;
-            document.getElementById('editApellido').value = apellido;
-            document.getElementById('editContacto').value = contacto;
-            document.getElementById('editEmail').value = email;
-            
-            cargarAsientosParaEdicion(eventoId, asientoId);
-            document.getElementById('modalEditarVenta').style.display = 'block';
-        }
-
-        function cerrarModalEditar() {
-            document.getElementById('modalEditarVenta').style.display = 'none';
-        }
-
-        async function cargarAsientosParaEdicion(eventoId, asientoActualId) {
-            const select = document.getElementById('selNuevoAsiento');
-            select.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
-
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                if (!res.ok) return;
-                const asientos = await res.json();
-
-                if (Array.isArray(asientos)) {
-                    asientos.filter(a => a.vendido === 0 || a.id == asientoActualId).forEach(a => {
-                        const opt = document.createElement('option');
-                        opt.value = a.id;
-                        opt.textContent = `${a.codigoAsiento} (${a.tipoZona}) - $${a.precio}`;
-                        select.appendChild(opt);
-                    });
-                }
-            } catch (e) {
-                console.error("Error al cargar asientos para edición:", e);
-            }
-        }
-
-        async function guardarCambiosVenta() {
-            const ventaId = document.getElementById('editVentaId').value;
-            const nuevoAsientoId = document.getElementById('selNuevoAsiento').value;
-
-            const body = {
-                ventaId,
-                nombre: document.getElementById('editNombre').value.trim(),
-                apellido: document.getElementById('editApellido').value.trim(),
-                contacto: document.getElementById('editContacto').value.trim(),
-                email: document.getElementById('editEmail').value.trim(),
-                nuevoAsientoId: nuevoAsientoId ? parseInt(nuevoAsientoId) : null,
-                rol: usuarioSesion ? usuarioSesion.tipo : ''
-            };
-
-            try {
-                const res = await fetch('/api/ventas/editar', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-                if (data.exito) {
-                    cerrarModalEditar();
-                    actualizarListaVentas();
-                }
-            } catch (e) {
-                alert('Error al actualizar la venta.');
-            }
-        }
-
         function compartirWhatsApp() {
             const vendidas = document.getElementById('infVendidas').innerText;
             const recaudado = document.getElementById('infRecaudado').innerText;
@@ -1347,15 +1168,8 @@
 
         async function cargarReportesConsolidados() {
             try {
-                const rol = usuarioSesion ? usuarioSesion.tipo : '';
-                const res = await fetch(`/api/reportes/consolidado?rol=${encodeURIComponent(rol)}`);
-                if (!res.ok) {
-                    if (res.status === 403) {
-                        alert('Acceso restringido: Se requiere rol ADM o SUPER para ver el reporte consolidado.');
-                        return;
-                    }
-                    throw new Error('No se pudo obtener la información de los reportes.');
-                }
+                const res = await fetch('/api/reportes/consolidado');
+                if (!res.ok) throw new Error('No se pudo obtener la información de los reportes.');
                 
                 const data = await res.json();
                 
@@ -1363,6 +1177,12 @@
                     listaGlobalReportes = data;
                 } else if (data && Array.isArray(data.reportes)) {
                     listaGlobalReportes = data.reportes;
+                } else if (data && Array.isArray(data.datos)) {
+                    listaGlobalReportes = data.datos;
+                } else if (data && Array.isArray(data.data)) {
+                    listaGlobalReportes = data.data;
+                } else if (data && Array.isArray(data.eventos)) {
+                    listaGlobalReportes = data.eventos;
                 } else {
                     listaGlobalReportes = [];
                 }
@@ -1410,59 +1230,47 @@
             }
 
             if (!listado || listado.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8; padding: 15px;">No se encontraron eventos para mostrar.</td></tr>';
-                actualizarTotalesConsolidados(0, 0, 0);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 15px;">No se encontraron eventos para mostrar.</td></tr>';
+                actualizarTotalesConsolidados(0, 0, 0, 0);
                 return;
             }
 
-            let totVen = 0, totAsis = 0, totRec = 0;
+            let totVen = 0, totAsis = 0, totRec = 0, totDesc = 0;
 
             listado.forEach(r => {
                 const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || r.evento || 'Evento sin nombre';
                 const evFecha = r.fecha || r.fecha_evento || 'N/A';
                 
-                const vendidas = parseInt(r.vendidas || r.entradas_vendidas || 0);
-                const asistentes = parseInt(r.asistentes || r.asistentes_reales || 0);
-                const recaudado = parseFloat(r.recaudado || r.total_recaudado || 0);
-
-                const gen = r.ubicacion ? r.ubicacion.general : 0;
-                const grad = r.ubicacion ? r.ubicacion.gradas : 0;
-
-                const sinDesc = r.descuentos_tipo ? r.descuentos_tipo.sin_descuento : 0;
-                const porcDesc = r.descuentos_tipo ? r.descuentos_tipo.porcentaje : 0;
-                const montoDesc = r.descuentos_tipo ? r.descuentos_tipo.monto_fijo : 0;
+                const vendidas = parseInt(r.vendidas || r.entradas_vendidas || r.cant_vendidas || r.total_vendidas || r.cantidad_vendida || 0);
+                const asistentes = parseInt(r.asistentes || r.asistentes_reales || r.cant_asistentes || r.total_asistentes || 0);
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || r.monto_recaudado || r.monto_total || 0);
+                const descuentos = parseFloat(r.descuento || r.descuentos || r.total_descuentos || r.monto_descuento || 0);
 
                 totVen += vendidas;
                 totAsis += asistentes;
                 totRec += recaudado;
+                totDesc += descuentos;
 
                 tbody.innerHTML += `
                     <tr style="border-bottom: 1px solid #334155;">
                         <td style="padding: 10px;"><strong>${evNombre}</strong></td>
                         <td style="padding: 10px;">${evFecha}</td>
                         <td style="padding: 10px; text-align: center; color: #38bdf8; font-weight: bold;">${vendidas}</td>
-                        <td style="padding: 10px; text-align: center;">
-                            <span style="background:#0284c7; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:4px;">Gen: ${gen}</span>
-                            <span style="background:#8b5cf6; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em;">Grada: ${grad}</span>
-                        </td>
-                        <td style="padding: 10px; text-align: center;">
-                            <span style="background:#475569; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:2px;" title="Sin Descuento">Sin Desc: ${sinDesc}</span>
-                            <span style="background:#16a34a; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; margin-right:2px;" title="Porcentaje">%: ${porcDesc}</span>
-                            <span style="background:#d97706; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em;" title="Monto Fijo">Fijo: ${montoDesc}</span>
-                        </td>
                         <td style="padding: 10px; text-align: center; color: #22c55e; font-weight: bold;">${asistentes}</td>
                         <td style="padding: 10px; text-align: right; color: #eab308; font-weight: bold;">$${recaudado.toFixed(2)}</td>
+                        <td style="padding: 10px; text-align: right; color: #ef4444;">$${descuentos.toFixed(2)}</td>
                     </tr>
                 `;
             });
 
-            actualizarTotalesConsolidados(totVen, totAsis, totRec);
+            actualizarTotalesConsolidados(totVen, totAsis, totRec, totDesc);
         }
 
-        function actualizarTotalesConsolidados(ven, asis, rec) {
+        function actualizarTotalesConsolidados(ven, asis, rec, desc) {
             document.getElementById('totVendidas').innerText = ven;
             document.getElementById('totAsistentes').innerText = asis;
             document.getElementById('totRecaudado').innerText = `$${rec.toFixed(2)}`;
+            document.getElementById('totDescuentos').innerText = `$${desc.toFixed(2)}`;
         }
 
         function compartirWhatsAppReporteGlobal() {
@@ -1470,21 +1278,297 @@
             let listado = listaGlobalReportes;
             
             if (filtro !== 'TODOS') {
-                listado = listado.filter(item => String(item.id || item.evento_id) === String(filtro));
+                listado = listado.filter(item => {
+                    const itemId = item.id || item.evento_id || item.id_evento || item.eventoId;
+                    return String(itemId) === String(filtro);
+                });
             }
 
             if (listado.length === 0) return alert('No hay información cargada para compartir.');
 
-            let msj = `📊 *REPORTE CONSOLIDADO DE EVENTOS*\n----------------------------------\n`;
+            let msj = `📊 *REPORTE DE EVENTOS*\n----------------------------------\n`;
+            
             listado.forEach(r => {
-                msj += `\n📌 *${r.nombre}*\n`;
-                msj += `• Vendidas: ${r.vendidas}\n`;
-                msj += `• Ubicación: Gen(${r.ubicacion?.general || 0}) / Grada(${r.ubicacion?.gradas || 0})\n`;
-                msj += `• Descuentos: Sin Desc(${r.descuentos_tipo?.sin_descuento || 0}) / Porc(${r.descuentos_tipo?.porcentaje || 0}) / Fijo(${r.descuentos_tipo?.monto_fijo || 0})\n`;
-                msj += `• Recaudado: $${Number(r.recaudado || 0).toFixed(2)}\n`;
+                const evNombre = r.nombre || r.evento_nombre || r.nombre_evento || 'Evento';
+                const evFecha = r.fecha || r.fecha_evento || 'S/D';
+                const vendidas = r.vendidas || r.entradas_vendidas || 0;
+                const asistentes = r.asistentes || r.asistentes_reales || 0;
+                const recaudado = parseFloat(r.recaudado || r.total_recaudado || r.monto_recaudado || 0);
+                const descuentos = parseFloat(r.descuento || r.descuentos || r.total_descuentos || 0);
+
+                msj += `🎭 *${evNombre}* (${evFecha})\n`;
+                msj += `🎟️ Vendidas: ${vendidas}\n`;
+                msj += `👥 Asistentes: ${asistentes}\n`;
+                msj += `💰 Recaudado: $${recaudado.toFixed(2)}\n`;
+                msj += `🏷️ Descuentos: $${descuentos.toFixed(2)}\n`;
+                msj += `----------------------------------\n`;
             });
 
+            const totRec = document.getElementById('totRecaudado').innerText;
+            const totVen = document.getElementById('totVendidas').innerText;
+            msj += `*TOTAL VENDIDAS:* ${totVen}\n*TOTAL RECAUDADO:* ${totRec}`;
+
             window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msj)}`, '_blank');
+        }
+
+async function cargarTablaDetalleVentas(eventoId) {
+            const tbody = document.getElementById('tablaDetalleVentas');
+            if (!tbody) return;
+
+            try {
+                let res = await fetch(`/api/ventas/detalle/${eventoId}`);
+                if (!res.ok) throw new Error('No se pudo obtener el detalle de ventas.');
+                
+                const ventas = await res.json();
+                tbody.innerHTML = '';
+
+                if (!Array.isArray(ventas) || ventas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #94a3b8; padding: 12px;">No hay ventas registradas para este evento.</td></tr>';
+                    return;
+                }
+
+                ventas.forEach(v => {
+                    const nombre = v.nombre || '';
+                    const apellido = v.apellido || '';
+                    const nombreCompleto = `${nombre} ${apellido}`.trim() || 'Comprador';
+                    const mail = v.email || '';
+                    const tel = v.telefono || v.contacto || '';
+                    const asiento = v.codigoAsiento || 'General';
+                    const metodoPagoRaw = v.metodo_pago || v.metodoPago || 'Efectivo';
+                    const vendedor = v.vendedor || v.usuario || v.operario || 'Sistema';
+                    const ventaId = v.id || v.venta_id;
+                    const sig = v.sig || '';
+
+                    // Formatear Nombre de Método de Pago para mostrarlo más prolijo
+                    const metodoPago = metodoPagoRaw.toLowerCase() === 'mercadopago' ? 'Mercado Pago' : 'Efectivo';
+
+                    // Formatear Email y Teléfono en una sola celda
+                    const contactoInfo = `
+                        <div>${mail ? mail : '<span style="color:#64748b;">Sin Email</span>'}</div>
+                        <small style="color:#94a3b8;">${tel ? tel : 'Sin Teléfono'}</small>
+                    `;
+
+                    const rol = (usuarioSesion?.tipo || '').toLowerCase();
+                    const esAdminOSuper = ['adm', 'super', 'admin', 'administrador'].includes(rol);
+                    
+                    const fechaVenta = v.fechaCompra ? new Date(v.fechaCompra) : new Date();
+                    const minutosTranscurridos = (new Date() - fechaVenta) / (1000 * 60);
+                    
+                    const puedeCancelar = esAdminOSuper || (minutosTranscurridos <= 15);
+
+                    const ventaJson = JSON.stringify({
+                        id: ventaId,
+                        eventoId: eventoId,
+                        nombre: nombre,
+                        apellido: apellido,
+                        contacto: tel,
+                        email: mail,
+                        codigoAsiento: asiento
+                    }).replace(/"/g, '&quot;');
+
+                    const botonCancelar = puedeCancelar 
+                        ? `<button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;" 
+                                onclick="cancelarVenta('${ventaId}', '${eventoId}')">
+                                ❌ Cancelar
+                            </button>`
+                        : `<button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #64748b; cursor: not-allowed;" 
+                                disabled title="Límite de 15 min expirado">
+                                ⏳ Expirado
+                            </button>`;
+
+                    tbody.innerHTML += `
+                        <tr style="border-bottom: 1px solid #334155;">
+                            <td style="padding: 8px;"><strong>${nombreCompleto}</strong></td>
+                            <td style="padding: 8px;">${mail || '<span style="color:#64748b;">N/A</span>'}</td>
+                            <td style="padding: 8px;">${tel || '<span style="color:#64748b;">N/A</span>'}</td>
+                            <td style="padding: 8px;"><span style="background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; color: #fff;">${asiento}</span></td>
+                            <td style="padding: 8px; text-align: center;">
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;" 
+                                    onclick="abrirModalEditar('${ventaJson}')">
+                                    ✏️ Editar
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #25D366; margin-right: 4px;" 
+                                    onclick="enviarWhatsApp('${tel}', '${nombreCompleto}', '${asiento}', '${ventaId}', '${sig}')">
+                                    💬 WA
+                                </button>
+                                <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; margin-right: 4px;" 
+                                    onclick="enviarEmailTicket('${mail}', '${ventaId}')" ${!mail ? 'disabled style="opacity: 0.5;"' : ''}>
+                                    ✉️ Email
+                                </button>
+                                ${botonCancelar}
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error("Error al obtener detalle de ventas:", err);
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar las ventas desde el servidor.</td></tr>';
+            }
+        }
+
+        async function cancelarVenta(ventaId, eventoId) {
+            if (!confirm('¿Estás seguro de que deseas cancelar esta compra? El asiento volverá a estar disponible.')) return;
+
+            const rol = usuarioSesion ? usuarioSesion.tipo : '';
+            try {
+                const res = await fetch(`/api/ventas/cancelar/${ventaId}?rol=${rol}`, { method: 'DELETE' });
+                const data = await res.json();
+                alert(data.mensaje || 'Venta cancelada correctamente.');
+
+                if (res.ok || data.exito) {
+                    cargarDetalleInforme();
+                    if (typeof cargarMapaAsientos === 'function') cargarMapaAsientos();
+                }
+            } catch (err) {
+                console.error("Error al cancelar la venta:", err);
+                alert('Error de conexión al intentar cancelar la venta.');
+            }
+        }
+
+        async function abrirModalEditar(ventaDataRaw) {
+            const v = typeof ventaDataRaw === 'string' ? JSON.parse(ventaDataRaw) : ventaDataRaw;
+
+            document.getElementById('editVentaId').value = v.id;
+            document.getElementById('editEventoId').value = v.eventoId;
+            document.getElementById('editNombre').value = v.nombre;
+            document.getElementById('editApellido').value = v.apellido;
+            document.getElementById('editContacto').value = v.contacto;
+            document.getElementById('editEmail').value = v.email;
+
+            await cargarAsientosDisponiblesSelect(v.eventoId, v.codigoAsiento);
+            document.getElementById('modalEditarVenta').style.display = 'block';
+        }
+
+        function cerrarModalEditar() {
+            document.getElementById('modalEditarVenta').style.display = 'none';
+        }
+
+        async function cargarAsientosDisponiblesSelect(eventoId, codigoAsientoActual = '') {
+            const sel = document.getElementById('selNuevoAsiento');
+            sel.innerHTML = '<option value="">-- Mantener Asiento Actual --</option>';
+
+            try {
+                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+                if (!res.ok) return;
+                const asientos = await res.json();
+
+                if (Array.isArray(asientos)) {
+                    // Identificar el tipo de zona del asiento actual
+                    const esActualGen = codigoAsientoActual.startsWith('GEN') || codigoAsientoActual.toLowerCase().includes('general');
+                    const esActualGrada = codigoAsientoActual.startsWith('G1') || codigoAsientoActual.startsWith('G2') || codigoAsientoActual.startsWith('G') || codigoAsientoActual.toLowerCase().includes('grada');
+
+                    const disponibles = asientos.filter(a => a.vendido === 0 && a.habilitado !== 0);
+
+                    // Filtrar para mostrar ÚNICAMENTE los asientos de la misma categoría
+                    const disponiblesMismaZona = disponibles.filter(a => {
+                        const esNuevoGen = a.codigoAsiento.startsWith('GEN') || a.tipoZona === 'General';
+                        const esNuevoGrada = a.codigoAsiento.startsWith('G1') || a.codigoAsiento.startsWith('G2') || a.codigoAsiento.startsWith('G') || a.tipoZona === 'Grada';
+
+                        if (esActualGen) return esNuevoGen;
+                        if (esActualGrada) return esNuevoGrada;
+                        return true;
+                    });
+
+                    if (disponiblesMismaZona.length === 0) {
+                        sel.innerHTML += `<option value="" disabled>-- No hay otros asientos disponibles en esta sección (${esActualGen ? 'General' : 'Gradas'}) --</option>`;
+                    } else {
+                        disponiblesMismaZona.forEach(a => {
+                            sel.innerHTML += `<option value="${a.id}">${a.codigoAsiento} ($${a.precio})</option>`;
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Error al cargar asientos disponibles:", e);
+            }
+        }
+
+        async function guardarCambiosVenta() {
+            const ventaId = document.getElementById('editVentaId').value;
+            const eventoId = document.getElementById('editEventoId').value;
+            const nuevoAsientoId = document.getElementById('selNuevoAsiento').value;
+
+            const body = {
+                ventaId: ventaId,
+                nombre: document.getElementById('editNombre').value.trim(),
+                apellido: document.getElementById('editApellido').value.trim(),
+                contacto: document.getElementById('editContacto').value.trim(),
+                email: document.getElementById('editEmail').value.trim(),
+                nuevoAsientoId: nuevoAsientoId || null,
+                rol: usuarioSesion ? usuarioSesion.tipo : ''
+            };
+
+            if (!body.nombre || !body.apellido || !body.contacto) {
+                return alert('Nombre, Apellido y Teléfono son obligatorios.');
+            }
+
+            try {
+                const res = await fetch('/api/ventas/editar', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await res.json();
+                alert(data.mensaje || 'Venta actualizada correctamente');
+
+                if (res.ok || data.exito) {
+                    cerrarModalEditar();
+                    cargarTablaDetalleVentas(eventoId);
+                    if (typeof cargarMapaAsientos === 'function') cargarMapaAsientos();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error al intentar guardar los cambios.');
+            }
+        }
+
+        function actualizarListaVentas() {
+            const eventoId = document.getElementById('selEventoInforme').value;
+            if (eventoId) {
+                cargarTablaDetalleVentas(eventoId);
+            } else {
+                alert('Selecciona un evento primero.');
+            }
+        }
+
+        function enviarWhatsApp(telefono, cliente, asiento, ventaId, sig) {
+            if (!telefono) return alert('El cliente no tiene registrado número de teléfono.');
+
+            let numLimpio = telefono.replace(/\D/g, '');
+
+            if (numLimpio.startsWith('0')) {
+                numLimpio = numLimpio.substring(1);
+            }
+            if (!numLimpio.startsWith('54')) {
+                numLimpio = '54' + numLimpio;
+            }
+
+            const origin = window.location.origin;
+            const ticketUrl = `${origin}/entrada.html?id=${ventaId}&sig=${sig}`;
+            const mensaje = encodeURIComponent(`Hola ${cliente}, aquí tienes tu entrada para el evento.\nUbicación/Asiento: ${asiento}\nAccede a tu ticket digital aquí: ${ticketUrl}`);
+
+            window.open(`https://api.whatsapp.com/send?phone=${numLimpio}&text=${mensaje}`, '_blank');
+        }
+
+        async function enviarEmailTicket(email, ventaId) {
+            if (!email) return alert('El cliente no posee una dirección de correo válida.');
+
+            try {
+                const res = await fetch('/api/entradas/enviar-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ventaId: ventaId,
+                        hostOrigin: window.location.origin,
+                        rol: usuarioSesion ? usuarioSesion.tipo : ''
+                    })
+                });
+                const data = await res.json();
+                alert(data.mensaje || (data.exito ? 'Correo enviado con éxito' : 'Error al enviar el correo'));
+            } catch (err) {
+                console.error(err);
+                alert('Error al conectar con el servidor para enviar el correo.');
+            }
         }
     </script>
 </body>
