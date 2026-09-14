@@ -299,6 +299,8 @@
                                 <th>Email</th>
                                 <th>Teléfono</th>
                                 <th>Asiento</th>
+								<th>Método de Pago</th>
+                                <th>Vendedor</th
                                 <th style="text-align: center;">Acciones</th>
                             </tr>
                         </thead>
@@ -775,6 +777,8 @@
                 email: document.getElementById('txtEmail').value.trim(),
                 metodo_pago: document.getElementById('selMetodoPago').value,
                 monto_total: montoCalculado,
+				usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : '',
+                tipo_descuento: tipoDescStr,
                 rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
@@ -1331,6 +1335,13 @@
                     const mail = v.email || '';
                     const tel = v.telefono || v.contacto || '';
                     const asiento = v.codigoAsiento || 'General';
+					const metodo = (v.metodo_pago || 'efectivo').toLowerCase();
+                    
+                    const metodoBadge = (metodo === 'mercadopago' || metodo === 'mercado pago')
+                        ? '<span style="background:#009ee3; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Mercado Pago</span>'
+                        : '<span style="background:#16a34a; color:#fff; padding:3px 7px; border-radius:4px; font-size:0.8em; font-weight:bold;">Efectivo</span>';
+                    
+                    const vendedor = v.usuario_vendedor || 'admin';
                     const ventaId = v.id || v.venta_id;
                     const sig = v.sig || '';
 
@@ -1349,7 +1360,9 @@
                         apellido: apellido,
                         contacto: tel,
                         email: mail,
-                        codigoAsiento: asiento
+                        codigoAsiento: asiento,
+						metodo: metodo,
+						vendedor: vendedor,						
                     }).replace(/"/g, '&quot;');
 
                     const botonCancelar = puedeCancelar 
