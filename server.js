@@ -334,6 +334,7 @@ app.get('/api/cupones', async (req, res) => {
 
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
+    const vendedorNombre = venta.usuario_vendedor || venta.vendedor || 'Sistema';
     
     // Función auxiliar para verificar si el evento ya superó las 5 hs
     const validarTiempoVenta = (fechaStr, horaStr) => {
@@ -363,8 +364,9 @@ app.post('/api/ventas/procesar', async (req, res) => {
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
             const insRes = await db.execute({
-                sql: "INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, fechaCompra) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
-                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, new Date().toISOString()]
+                sql: `INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, vendedor, fechaCompra) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, vendedorNombre, new Date().toISOString()]
             });
 
             const nuevaVentaId = insRes.rows[0].id;
@@ -372,6 +374,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
         } catch (e) {
+            console.error("Error al procesar venta:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
         }
     } else {
@@ -386,13 +389,18 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
         asiento.vendido = 1;
         const nuevaVentaId = ventasMemoria.length + 1;
-        ventasMemoria.push({ ...venta, id: nuevaVentaId, codigoAsiento: asiento.codigoAsiento, fechaCompra: new Date().toISOString() });
+        ventasMemoria.push({ 
+            ...venta, 
+            id: nuevaVentaId, 
+            codigoAsiento: asiento.codigoAsiento, 
+            vendedor: vendedorNombre, 
+            fechaCompra: new Date().toISOString() 
+        });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
         res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
     }
 });
-
 // 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
@@ -547,7 +555,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
         try {
             const result = await db.execute({
                 sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
-                             v.codigoAsiento, v.monto_total, v.fechaCompra, v.evento_id, v.asiento_id
+                             v.codigoAsiento, v.monto_total, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id
                       FROM ventas v
                       WHERE v.evento_id = ?
                       ORDER BY v.id DESC`,
@@ -561,6 +569,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
 
             return res.json(ventasConFirma);
         } catch (e) {
+            console.error("Error al consultar detalles de ventas:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' });
         }
     } else {
@@ -574,6 +583,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 telefono: v.contacto,
                 codigoAsiento: v.codigoAsiento,
                 monto_total: v.monto_total,
+                vendedor: v.vendedor || v.usuario_vendedor || 'Sistema',
                 fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
                 asiento_id: v.asiento_id,
