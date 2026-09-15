@@ -762,12 +762,11 @@
 		    const precioCalculado = calcularMontoFinal(asientoData.precio);
 		    document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
 		}
-        async function procesarVenta() {
+async function procesarVenta() {
     if (!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
     
     const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
 
-    // Calcular/obtener la cadena del tipo de descuento de forma segura
     let tipoDescStr = 'Ninguno';
     if (descuentoAplicado.porcentaje > 0) {
         tipoDescStr = `${descuentoAplicado.porcentaje}%`;
@@ -808,6 +807,7 @@
             document.getElementById('txtApellido').value = '';
             document.getElementById('txtContacto').value = '';
             document.getElementById('txtEmail').value = '';
+            document.getElementById('selMetodoPago').value = 'efectivo'; // <-- AQUÍ SE AGREGA LA LÍNEA
             cargarMapaAsientos();
         }
     } catch (e) {
