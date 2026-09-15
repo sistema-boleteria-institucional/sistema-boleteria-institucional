@@ -132,6 +132,7 @@ async function inicializarTablasDB() {
                 email TEXT,
                 metodo_pago TEXT,
                 monto_total REAL,
+                vendedor TEXT,
                 fechaCompra TEXT
             );
         `);
