@@ -555,7 +555,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
         try {
             const result = await db.execute({
                 sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
-                             v.codigoAsiento, v.monto_total, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id
+                             v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id
                       FROM ventas v
                       WHERE v.evento_id = ?
                       ORDER BY v.id DESC`,
@@ -583,6 +583,7 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 telefono: v.contacto,
                 codigoAsiento: v.codigoAsiento,
                 monto_total: v.monto_total,
+                metodo_pago: v.metodo_pago || v.metodoPago || 'efectivo',
                 vendedor: v.vendedor || v.usuario_vendedor || 'Sistema',
                 fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
