@@ -854,38 +854,63 @@ async function procesarVenta() {
             }
         }
 
-        async function crearCupon() {
-            const tipo = document.getElementById('cupTipo').value;
-            const body = {
-                evento_id: document.getElementById('cupEventoId').value,
-                codigo: document.getElementById('cupCodigo').value.trim(),
-                porcentaje: tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0,
-                monto_fijo: tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0,
-                rol: usuarioSesion ? usuarioSesion.tipo : ''
-            };
+function cambiarTipoCupon() {
+    const tipo = document.getElementById('cupTipo').value;
+    const grpPorcentaje = document.getElementById('grpPorcentaje');
+    const grpMonto = document.getElementById('grpMonto');
 
-            if (!body.evento_id || !body.codigo) {
-                return alert('Selecciona un evento e ingresa un código.');
-            }
+    if (tipo === 'porcentaje') {
+        grpPorcentaje.style.display = 'block';
+        grpMonto.style.display = 'none';
+        document.getElementById('cupMontoFijo').value = '';
+    } else {
+        grpPorcentaje.style.display = 'none';
+        grpMonto.style.display = 'block';
+        document.getElementById('cupPorcentaje').value = '';
+    }
+}
 
-            try {
-                const res = await fetch('/api/cupones/crear', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje);
-                if (data.exito) {
-                    document.getElementById('cupCodigo').value = '';
-                    document.getElementById('cupPorcentaje').value = '';
-                    document.getElementById('cupMontoFijo').value = '';
-                }
-            } catch (e) {
-                alert('Error al guardar cupón.');
-            }
+async function crearCupon() {
+    const tipo = document.getElementById('cupTipo').value;
+    const eventoId = document.getElementById('cupEventoId').value;
+    const codigo = document.getElementById('cupCodigo').value.trim();
+
+    const porcentaje = tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0;
+    const montoFijo = tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0;
+
+    if (!eventoId || !codigo) {
+        return alert('Selecciona un evento e ingresa un código.');
+    }
+
+    if (porcentaje === 0 && montoFijo === 0) {
+        return alert('El cupón debe tener un valor mayor a 0.');
+    }
+
+    const body = {
+        evento_id: eventoId,
+        codigo: codigo,
+        porcentaje: porcentaje,
+        monto_fijo: montoFijo,
+        rol: usuarioSesion ? usuarioSesion.tipo : ''
+    };
+
+    try {
+        const res = await fetch('/api/cupones/crear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        alert(data.mensaje);
+        if (data.exito) {
+            document.getElementById('cupCodigo').value = '';
+            document.getElementById('cupPorcentaje').value = '';
+            document.getElementById('cupMontoFijo').value = '';
         }
-
+    } catch (e) {
+        alert('Error al guardar el cupón.');
+    }
+}
         async function crearEvento() {
             const dispGenVal = parseInt(document.getElementById('evDispGen').value) || 0;
             const dispGradaVal = parseInt(document.getElementById('evDispGrada').value) || 0;
