@@ -748,13 +748,19 @@
             return precioFinal;
         }
 
-        function seleccionarAsiento(elem, asientoData) {
-            document.querySelectorAll('.asiento.seleccionado').forEach(e => {
-                e.classList.remove('seleccionado');
-                e.classList.add('disponible');
-            });
-
-            elem.classList.remove('disponible');
+		function seleccionarAsiento(elem, asientoData) {
+		    document.querySelectorAll('.asiento.seleccionado').forEach(e => {
+		        e.classList.remove('seleccionado');
+		        e.classList.add('disponible');
+		    });
+		
+		    elem.classList.remove('disponible');
+		    elem.classList.add('seleccionado');
+		    asientoSeleccionado = asientoData;
+		
+		    document.getElementById('lblAsiento').innerText = asientoData.codigoAsiento;
+		    const precioCalculado = calcularMontoFinal(asientoData.precio);
+		    document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
 		}
         async function procesarVenta() {
     if (!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
