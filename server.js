@@ -1165,14 +1165,18 @@ app.post('/api/mp/crear-preferencia', async (req, res) => {
         }
 
         // Estructura de la preferencia para Mercado Pago
+// Definir la URL base asegurando HTTPS en servidores remotos como Render
+        const host = req.get('host');
+        const baseUrl = host.includes('localhost') ? `http://${host}` : `https://${host}`;
+
         const preferenceData = {
             items: [
                 {
                     id: String(asiento_id),
                     title: `Entrada: ${evento_nombre} - Asiento ${asiento_codigo}`,
                     quantity: 1,
-                    currency_id: 'ARS', // Cambia según tu país (e.g. MXN, BRL, CLP)
-                    unit_price: Number(monto_total)
+                    currency_id: 'ARS',
+                    unit_price: Math.round(Number(monto_total) * 100) / 100
                 }
             ],
             payer: {
@@ -1183,7 +1187,6 @@ app.post('/api/mp/crear-preferencia', async (req, res) => {
                     number: contacto
                 }
             },
-            // Metadata personalizada para identificar la reserva al recibir la confirmación de pago
             metadata: {
                 evento_id,
                 asiento_id,
@@ -1193,12 +1196,12 @@ app.post('/api/mp/crear-preferencia', async (req, res) => {
                 contacto
             },
             back_urls: {
-                success: `${req.protocol}://${req.get('host')}/entrada.html?status=success`,
-                failure: `${req.protocol}://${req.get('host')}/index.html?status=failure`,
-                pending: `${req.protocol}://${req.get('host')}/index.html?status=pending`
+                success: `${baseUrl}/entrada.html?status=success`,
+                failure: `${baseUrl}/index.html?status=failure`,
+                pending: `${baseUrl}/index.html?status=pending`
             },
             auto_return: 'approved',
-            notification_url: `${req.protocol}://${req.get('host')}/api/mp/webhook` // Servidor donde MP avisa el resultado
+            notification_url: `${baseUrl}/api/mp/webhook`
         };
 
         const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
