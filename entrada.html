@@ -14,16 +14,48 @@
             overflow: hidden;
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
             background: #fff;
+            transition: all 0.3s ease;
         }
         .ticket-header {
-            background: linear-gradient(135deg, #0d6efd, #0a58ca);
             color: #fff;
             padding: 20px;
             text-align: center;
+            transition: background 0.3s ease;
         }
+        /* Estilos por estado */
+        .estado-pendiente .ticket-header { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
+        .estado-ingresado .ticket-header { background: linear-gradient(135deg, #198754, #146c43); }
+        .estado-expirado .ticket-header { background: linear-gradient(135deg, #dc3545, #b02a37); }
+
         .ticket-body { padding: 25px; }
-        .qr-container { text-align: center; padding: 15px; background: #fafafa; border-radius: 10px; border: 1px dashed #ccc; }
+
+        .qr-container {
+            text-align: center;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 10px;
+            border: 2px dashed #ccc;
+            transition: all 0.3s ease;
+        }
+        .estado-pendiente .qr-container { border-color: #0d6efd; background: #f0f7ff; }
+        .estado-ingresado .qr-container { border-color: #198754; background: #f0fff4; }
+        .estado-expirado .qr-container { border-color: #dc3545; background: #fff0f0; opacity: 0.75; }
+
         .qr-container img { width: 180px; height: 180px; }
+
+        .estado-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        .estado-pendiente .estado-badge { background: #e7f1ff; color: #0d6efd; }
+        .estado-ingresado .estado-badge { background: #d1e7dd; color: #0f5132; }
+        .estado-expirado .estado-badge { background: #f8d7da; color: #842029; }
+
         @media print {
             body { background: #fff; }
             .no-print { display: none !important; }
@@ -33,8 +65,8 @@
 </head>
 <body>
 
-    <div class="ticket-card" id="ticketContent">
-        <div class="ticket-header">
+    <div class="ticket-card estado-pendiente" id="ticketCard">
+        <div class="ticket-header" id="headerTicket">
             <h4 class="mb-1" id="nombreEvento">Cargando...</h4>
             <small class="text-white-50">ENTRADA OFICIAL SEGURO</small>
         </div>
@@ -42,6 +74,10 @@
             <div id="contenedorError" class="alert alert-danger d-none text-center" role="alert"></div>
 
             <div id="contenedorTicket">
+                <div class="text-center">
+                    <span id="badgeEstado" class="estado-badge">Cargando estado...</span>
+                </div>
+
                 <div class="mb-3">
                     <small class="text-muted d-block">Titular</small>
                     <strong id="nombreCliente" class="fs-5">-</strong>
@@ -65,11 +101,11 @@
 
                 <div class="qr-container">
                     <img id="imgQR" src="" alt="Cargando QR...">
-                    <small class="d-block text-muted mt-2">Muestra este QR en el ingreso</small>
+                    <small id="txtMensajeQR" class="d-block mt-2 fw-bold text-muted">Muestra este QR en el ingreso</small>
                 </div>
 
                 <div class="mt-4 text-center no-print">
-                    <button class="btn btn-outline-primary btn-sm w-100" onclick="window.print()">
+                    <button id="btnImprimir" class="btn btn-outline-primary btn-sm w-100" onclick="window.print()">
                         🖨️ Imprimir / Guardar como PDF
                     </button>
                 </div>
@@ -85,6 +121,11 @@
 
             const divError = document.getElementById('contenedorError');
             const divTicket = document.getElementById('contenedorTicket');
+            const card = document.getElementById('ticketCard');
+            const badgeEstado = document.getElementById('badgeEstado');
+            const txtMensajeQR = document.getElementById('txtMensajeQR');
+            const asientoBadge = document.getElementById('asientoCliente');
+            const btnImprimir = document.getElementById('btnImprimir');
 
             if (!ventaId || !sig) {
                 divTicket.classList.add('d-none');
@@ -111,12 +152,49 @@
                 document.getElementById('horaEvento').innerText = t.evento_hora ? `${t.evento_hora} hs` : '-';
                 document.getElementById('asientoCliente').innerText = t.codigoAsiento;
                 document.getElementById('imgQR').src = t.qr;
+
+                // Aplicar estado visual (Azul, Verde o Rojo)
+                card.classList.remove('estado-pendiente', 'estado-ingresado', 'estado-expirado');
+                asientoBadge.classList.remove('bg-primary', 'bg-success', 'bg-danger');
+                btnImprimir.classList.remove('btn-outline-primary', 'btn-outline-success', 'btn-outline-danger');
+
+                if (t.estado === 'ingresado') {
+                    // VERDE: Ya escaneado / ingresó
+                    card.classList.add('estado-ingresado');
+                    asientoBadge.classList.add('bg-success');
+                    btnImprimir.classList.add('btn-outline-success');
+                    badgeEstado.innerText = '✅ ENTRADA INGRESADA';
+                    txtMensajeQR.innerText = '✅ Esta entrada ya fue utilizada en el ingreso.';
+                    txtMensajeQR.className = 'd-block mt-2 fw-bold text-success';
+                } else if (t.estado === 'expirado') {
+                    // ROJO: Pasaron más de 6 hs del inicio del evento
+                    card.classList.add('estado-expirado');
+                    asientoBadge.classList.add('bg-danger');
+                    btnImprimir.classList.add('btn-outline-danger');
+                    badgeEstado.innerText = '⛔ ENTRADA EXPIRADA';
+                    txtMensajeQR.innerText = '⛔ Esta entrada ha expirado (+6 hs del evento).';
+                    txtMensajeQR.className = 'd-block mt-2 fw-bold text-danger';
+                } else {
+                    // AZUL: Válida y pendiente de ingreso
+                    card.classList.add('estado-pendiente');
+                    asientoBadge.classList.add('bg-primary');
+                    btnImprimir.classList.add('btn-outline-primary');
+                    badgeEstado.innerText = '🎟️ ENTRADA VÁLIDA';
+                    txtMensajeQR.innerText = 'Muestra este QR en el ingreso';
+                    txtMensajeQR.className = 'd-block mt-2 text-muted';
+                }
+
             } catch (err) {
                 divTicket.classList.add('d-none');
                 divError.classList.remove('d-none');
                 divError.innerText = '❌ Error de comunicación con el servidor.';
             }
         }
+
+        cargarTicket();
+    </script>
+</body>
+</html>
 
         cargarTicket();
     </script>
