@@ -799,28 +799,62 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
 
     if (db) {
         try {
+            // Se hace LEFT JOIN con la tabla asientos para obtener la columna 'asistio'
             const vRes = await db.execute({
-                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora, a.asistio
                       FROM ventas v
                       JOIN eventos e ON v.evento_id = e.id
+                      LEFT JOIN asientos a ON v.asiento_id = a.id
                       WHERE v.id = ?`,
                 args: [id]
             });
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
 
             const venta = vRes.rows[0];
+
+            // Determinar estado visual del ticket
+            let estado = 'pendiente'; // Azul por defecto
+            const yaIngreso = Number(venta.asistio) === 1;
+
+            if (yaIngreso) {
+                estado = 'ingresado'; // Verde
+            } else if (venta.evento_fecha && venta.evento_hora) {
+                const inicioEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
+                const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
+                if (new Date() > limite6hs) {
+                    estado = 'expirado'; // Rojo
+                }
+            }
+
             const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
             const qrCodeUrl = await QRCode.toDataURL(qrPayload);
 
-            return res.json({ exito: true, ticket: { ...venta, qr: qrCodeUrl, sig } });
+            return res.json({ exito: true, ticket: { ...venta, estado, qr: qrCodeUrl, sig } });
         } catch (e) {
+            console.error("Error al obtener entrada:", e);
             return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
         }
     } else {
+        // Modo Memoria
         const venta = ventasMemoria.find(v => v.id == id);
         if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
 
         const evento = eventosMemoria.find(e => e.id === venta.evento_id) || {};
+        const listaAsientos = asientosMemoria[venta.evento_id] || [];
+        const asientoObj = listaAsientos.find(a => a.id === venta.asiento_id);
+        const yaIngreso = asientoObj ? Number(asientoObj.asistio) === 1 : false;
+
+        let estado = 'pendiente'; // Azul
+        if (yaIngreso) {
+            estado = 'ingresado'; // Verde
+        } else if (evento.fecha && evento.hora) {
+            const inicioEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
+            const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
+            if (new Date() > limite6hs) {
+                estado = 'expirado'; // Rojo
+            }
+        }
+
         const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
         const qrCodeUrl = await QRCode.toDataURL(qrPayload);
 
@@ -831,6 +865,7 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
                 evento_nombre: evento.nombre || 'Evento',
                 evento_fecha: evento.fecha || '',
                 evento_hora: evento.hora || '',
+                estado,
                 qr: qrCodeUrl,
                 sig
             }
