@@ -798,15 +798,14 @@ async function procesarVenta() {
         tipoDescStr = `$${descuentoAplicado.monto_fijo}`;
     }
 
-    // Obtener el nombre del evento para la descripción en Mercado Pago
     const selEv = document.getElementById('selEventoVenta');
     const eventoNombre = selEv.options[selEv.selectedIndex] ? selEv.options[selEv.selectedIndex].text : '';
 
     const body = {
         evento_id: selEv.value,
         asiento_id: asientoSeleccionado.id,
-        asiento_codigo: asientoSeleccionado.codigoAsiento, // Necesario para Mercado Pago
-        evento_nombre: eventoNombre,                       // Necesario para Mercado Pago
+        asiento_codigo: asientoSeleccionado.codigoAsiento,
+        evento_nombre: eventoNombre,
         nombre: document.getElementById('txtNombre').value.trim(),
         apellido: document.getElementById('txtApellido').value.trim(),
         contacto: document.getElementById('txtContacto').value.trim(),
@@ -822,13 +821,11 @@ async function procesarVenta() {
         return alert('Por favor completa todos los campos obligatorios (*)');
     }
 
-    // Validación obligatoria de correo si pagan con Mercado Pago
     if ((body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') && !body.email) {
         return alert('El correo electrónico es obligatorio para realizar pagos con Mercado Pago.');
     }
 
     try {
-        // --- 1. SI SE SELECCIONA MERCADO PAGO ---
         if (body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') {
             const res = await fetch('/api/mp/crear-preferencia', {
                 method: 'POST',
@@ -838,74 +835,12 @@ async function procesarVenta() {
             const data = await res.json();
 
             if (res.ok && data.init_point) {
-                // Redirigir al usuario a la pasarela de pagos de Mercado Pago
-async function procesarVenta() {
-    if (!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
-    
-    const montoCalculado = calcularMontoFinal(asientoSeleccionado.precio);
-
-    let tipoDescStr = 'Ninguno';
-    if (descuentoAplicado.porcentaje > 0) {
-        tipoDescStr = `${descuentoAplicado.porcentaje}%`;
-    } else if (descuentoAplicado.monto_fijo > 0) {
-        tipoDescStr = `$${descuentoAplicado.monto_fijo}`;
-    }
-
-    // Obtener el nombre del evento para la descripción en Mercado Pago
-    const selEv = document.getElementById('selEventoVenta');
-    const eventoNombre = selEv.options[selEv.selectedIndex] ? selEv.options[selEv.selectedIndex].text : '';
-
-    const body = {
-        evento_id: selEv.value,
-        asiento_id: asientoSeleccionado.id,
-        asiento_codigo: asientoSeleccionado.codigoAsiento, // Necesario para Mercado Pago
-        evento_nombre: eventoNombre,                       // Necesario para Mercado Pago
-        nombre: document.getElementById('txtNombre').value.trim(),
-        apellido: document.getElementById('txtApellido').value.trim(),
-        contacto: document.getElementById('txtContacto').value.trim(),
-        email: document.getElementById('txtEmail').value.trim(),
-        metodo_pago: document.getElementById('selMetodoPago').value,
-        monto_total: montoCalculado,
-        usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : '',
-        tipo_descuento: tipoDescStr,
-        rol: usuarioSesion ? usuarioSesion.tipo : ''
-    };
-
-    if (!body.nombre || !body.apellido || !body.contacto) {
-        return alert('Por favor completa todos los campos obligatorios (*)');
-    }
-
-    // Validación obligatoria de correo si pagan con Mercado Pago
-    if ((body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') && !body.email) {
-        return alert('El correo electrónico es obligatorio para realizar pagos con Mercado Pago.');
-    }
-
-    try {
-        // --- 1. SI SE SELECCIONA MERCADO PAGO ---
-        if (body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') {
-            const res = await fetch('/api/mp/crear-preferencia', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
-            const data = await res.json();
-
-            if (res.ok && data.init_point) {
-                // =========================================================
-                // 🚀 AQUÍ SE REMPLAZÓ window.location.href POR EL MODAL QR
-                // =========================================================
-                
-                // Generar imagen del QR con el link devuelto por Mercado Pago
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data.init_point)}`;
                 
-                // Cargar imagen y link en el modal
                 document.getElementById('imgQrPago').src = qrUrl;
                 document.getElementById('txtLinkPago').value = data.init_point;
-                
-                // Desplegar el modal en la pantalla del vendedor
                 document.getElementById('modalQRPago').style.display = 'flex';
                 
-                // Limpiar el formulario para la siguiente venta
                 descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
                 document.getElementById('selCuponVenta').value = "-1";
                 document.getElementById('txtNombre').value = '';
@@ -913,14 +848,10 @@ async function procesarVenta() {
                 document.getElementById('txtContacto').value = '';
                 document.getElementById('txtEmail').value = '';
                 document.getElementById('selMetodoPago').value = 'efectivo';
-
-                // =========================================================
             } else {
                 alert(data.mensaje || 'Error al conectar con Mercado Pago.');
             }
-        } 
-        // --- 2. VENTA NORMAL (Efectivo, Transferencia, etc.) ---
-        else {
+        } else {
             const res = await fetch('/api/ventas/procesar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -943,8 +874,6 @@ async function procesarVenta() {
         alert('Error al registrar la venta.');
     }
 }
-
-
         async function cargarCuponesEnSelectVenta(eventoId) {
             const select = document.getElementById('selCuponVenta');
             if (!select) return;
