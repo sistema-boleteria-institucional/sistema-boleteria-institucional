@@ -58,6 +58,106 @@ function verificarFirmaMiddleware(req, res, next) {
         verificar(venta.codigoAsiento);
     }
 }
+app.post('/api/mercadopago/crear-preferencia', async (req, res) => {
+    try {
+        const { asientoId, precio, titulo } = req.body;
+        
+        const preferenceData = {
+            items: [{
+                title: titulo || 'Entrada para Evento',
+                unit_price: Number(precio),
+                quantity: 1,
+                currency_id: 'ARS'
+            }],
+            external_reference: String(asientoId),
+            notification_url: `${process.env.URL_PUBLICA_SERVER}/api/mercadopago/webhook`,
+            back_urls: {
+                success: `${process.env.URL_PUBLICA_CLIENTE}/exito.html`,
+                failure: `${process.env.URL_PUBLICA_CLIENTE}/error.html`
+            },
+            auto_return: 'approved'
+        };
+
+        const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}`
+            },
+            body: JSON.stringify(preferenceData)
+        });
+
+        const data = await response.json();
+        res.json({ exito: true, init_point: data.init_point, preferenceId: data.id });
+    } catch (error) {
+        res.status(500).json({ exito: false, mensaje: 'Error al crear la preferencia de pago' });
+    }
+});
+
+app.post('/api/mercadopago/webhook', async (req, res) => {
+    try {
+        const paymentId = req.query['data.id'] || req.query.id || req.body?.data?.id;
+        const type = req.query.type || req.body?.type;
+
+        // Responder siempre 200 OK de inmediato a Mercado Pago para evitar reintentos fallidos
+        if (type !== 'payment' && !paymentId) {
+            return res.sendStatus(200);
+        }
+
+        // Consultar el estado del pago directamente en la API de Mercado Pago
+        const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+            headers: { 'Authorization': `Bearer ${process.env.MP_ACCESS_TOKEN}` }
+        });
+
+        if (!mpResponse.ok) return res.sendStatus(200);
+
+        const payment = await mpResponse.json();
+
+        if (payment.status === 'approved') {
+            const codigoAsiento = payment.external_reference;
+            const emailCliente = payment.payer?.email || 'sin-email';
+            const mpPaymentId = String(payment.id);
+
+            // Evitar duplicados (Idempotencia)
+            let ventaExiste = false;
+            if (db) {
+                const check = await db.execute({ 
+                    sql: "SELECT id FROM ventas WHERE mp_payment_id = ?", 
+                    args: [mpPaymentId] 
+                });
+                ventaExiste = check.rows.length > 0;
+            } else {
+                ventaExiste = ventasMemoria.some(v => String(v.mp_payment_id) === mpPaymentId);
+            }
+
+            if (!ventaExiste) {
+                const nuevaVenta = {
+                    mp_payment_id: mpPaymentId,
+                    codigoAsiento: codigoAsiento,
+                    email: emailCliente,
+                    monto: payment.transaction_amount,
+                    estado: 'completado',
+                    fecha: new Date().toISOString()
+                };
+
+                if (db) {
+                    await db.execute({
+                        sql: `INSERT INTO ventas (mp_payment_id, codigoAsiento, email, monto, estado, fecha) 
+                              VALUES (?, ?, ?, ?, ?, ?)`,
+                        args: [nuevaVenta.mp_payment_id, nuevaVenta.codigoAsiento, nuevaVenta.email, nuevaVenta.monto, nuevaVenta.estado, nuevaVenta.fecha]
+                    });
+                } else {
+                    ventasMemoria.push({ id: ventasMemoria.length + 1, ...nuevaVenta });
+                }
+            }
+        }
+
+        return res.sendStatus(200);
+    } catch (error) {
+        console.error('Error procesando webhook de Mercado Pago:', error);
+        return res.sendStatus(500);
+    }
+});
 
 // Conexión a DB Turso
 let db = null;
