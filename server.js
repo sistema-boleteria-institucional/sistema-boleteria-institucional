@@ -1212,15 +1212,20 @@ app.post('/api/mp/crear-preferencia', async (req, res) => {
 
         const data = await response.json();
 
-        if (response.ok && data.init_point) {
+if (response.ok && data.init_point) {
             res.json({
                 exito: true,
-                init_point: data.init_point, // Link para redirigir al cliente
+                init_point: data.init_point,
                 preferenceId: data.id
             });
         } else {
-            console.error("Error al crear preferencia MP:", data);
-            res.status(500).json({ exito: false, mensaje: "No se pudo generar la preferencia de Mercado Pago." });
+            console.error("Detalle del error Mercado Pago:", data);
+            // Muestra en la alerta del navegador la causa real devuelta por la API
+            const mensajeDetalle = data.cause ? data.cause[0]?.description : (data.message || 'Error desconocido');
+            res.status(400).json({ 
+                exito: false, 
+                mensaje: `Error Mercado Pago: ${mensajeDetalle}` 
+            });
         }
     } catch (error) {
         console.error("Error en servidor MP:", error);
