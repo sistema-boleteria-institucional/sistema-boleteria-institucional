@@ -870,9 +870,11 @@ async function procesarVenta() {
                 cargarMapaAsientos();
             }
         }
-    } catch (e) {
-        alert('Error al registrar la venta.');
+        } catch (e) {
+        console.error('Error detallado al procesar venta:', e);
+        alert('Error de conexión o en el servidor: ' + e.message);
     }
+
 }
         async function cargarCuponesEnSelectVenta(eventoId) {
             const select = document.getElementById('selCuponVenta');
