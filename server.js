@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { createClient } = require('@libsql/client');
 const QRCode = require('qrcode');
 
+
 const app = express();
 const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
 
