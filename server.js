@@ -1152,6 +1152,123 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Asegúrate de tener instalado 'mercadopago' o usar fetch con tu ACCESS_TOKEN
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || "TU_ACCESS_TOKEN_DE_MERCADO_PAGO";
+
+// 1. Endpoint para crear la preferencia de pago
+app.post('/api/mp/crear-preferencia', async (req, res) => {
+    try {
+        const { evento_id, asiento_id, nombre, apellido, email, contacto, monto_total, asiento_codigo, evento_nombre } = req.body;
+
+        if (!asiento_id || !monto_total || !email) {
+            return res.status(400).json({ exito: false, mensaje: "Faltan datos requeridos para procesar el pago." });
+        }
+
+        // Estructura de la preferencia para Mercado Pago
+        const preferenceData = {
+            items: [
+                {
+                    id: String(asiento_id),
+                    title: `Entrada: ${evento_nombre} - Asiento ${asiento_codigo}`,
+                    quantity: 1,
+                    currency_id: 'ARS', // Cambia según tu país (e.g. MXN, BRL, CLP)
+                    unit_price: Number(monto_total)
+                }
+            ],
+            payer: {
+                name: nombre,
+                surname: apellido,
+                email: email,
+                phone: {
+                    number: contacto
+                }
+            },
+            // Metadata personalizada para identificar la reserva al recibir la confirmación de pago
+            metadata: {
+                evento_id,
+                asiento_id,
+                nombre,
+                apellido,
+                email,
+                contacto
+            },
+            back_urls: {
+                success: `${req.protocol}://${req.get('host')}/entrada.html?status=success`,
+                failure: `${req.protocol}://${req.get('host')}/index.html?status=failure`,
+                pending: `${req.protocol}://${req.get('host')}/index.html?status=pending`
+            },
+            auto_return: 'approved',
+            notification_url: `${req.protocol}://${req.get('host')}/api/mp/webhook` // Servidor donde MP avisa el resultado
+        };
+
+        const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(preferenceData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.init_point) {
+            res.json({
+                exito: true,
+                init_point: data.init_point, // Link para redirigir al cliente
+                preferenceId: data.id
+            });
+        } else {
+            console.error("Error al crear preferencia MP:", data);
+            res.status(500).json({ exito: false, mensaje: "No se pudo generar la preferencia de Mercado Pago." });
+        }
+    } catch (error) {
+        console.error("Error en servidor MP:", error);
+        res.status(500).json({ exito: false, mensaje: "Error interno del servidor." });
+    }
+});
+
+// 2. Webhook / Notificación automática de pago
+app.post('/api/mp/webhook', async (req, res) => {
+    try {
+        const { type, data } = req.body;
+
+        // Mercado Pago avisa cuando hay un evento de 'payment'
+        if (type === 'payment' || req.query.type === 'payment') {
+            const paymentId = data?.id || req.query['data.id'];
+
+            // Consultar el estado del pago en la API de Mercado Pago
+            const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+                headers: { 'Authorization': `Bearer ${MP_ACCESS_TOKEN}` }
+            });
+
+            if (mpRes.ok) {
+                const payment = await mpRes.json();
+
+                // Si el pago fue APROBADO
+                if (payment.status === 'approved') {
+                    const meta = payment.metadata;
+
+                    // Registrar la venta en la Base de Datos y marcar asiento como vendido
+                    /* LÓGICA DE REGISTRO DE VENTA:
+                       1. UPDATE asientos SET vendido = 1 WHERE id = meta.asiento_id
+                       2. INSERT INTO ventas (evento_id, asiento_id, cliente, email, monto, metodo_pago, mp_payment_id) ...
+                       3. Enviar e-mail con el ticket/QR al cliente
+                    */
+
+                    console.log(`✅ Pago #${paymentId} APROBADO para el asiento ID: ${meta.asiento_id}`);
+                }
+            }
+        }
+
+        res.sendStatus(200); // Responder siempre 200 OK a Mercado Pago
+    } catch (err) {
+        console.error("Error procesando Webhook de MP:", err);
+        res.sendStatus(500);
+    }
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`===========================================`);
