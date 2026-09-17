@@ -257,7 +257,6 @@
                         <label>Método de Pago *</label>
                         <select id="selMetodoPago">
                             <option value="efectivo">Efectivo</option>
-							<option value="transferencia">Transferencia</option>
                             <option value="mercadopago">Mercado Pago</option>
                         </select>
                     </div>
@@ -838,7 +837,7 @@ async function procesarVenta() {
                 document.getElementById('txtApellido').value = '';
                 document.getElementById('txtContacto').value = '';
                 document.getElementById('txtEmail').value = '';
-                document.getElementById('selMetodoPago').value = '';
+                document.getElementById('selMetodoPago').value = 'efectivo';
                 cargarMapaAsientos();
             }
         }
