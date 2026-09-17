@@ -257,6 +257,7 @@
                         <label>Método de Pago *</label>
                         <select id="selMetodoPago">
                             <option value="efectivo">Efectivo</option>
+							<option value="transferencia">Transferencia</option>
                             <option value="mercadopago">Mercado Pago</option>
                         </select>
                     </div>
@@ -762,6 +763,7 @@
 		    const precioCalculado = calcularMontoFinal(asientoData.precio);
 		    document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
 		}
+
 async function procesarVenta() {
     if (!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
     
@@ -774,9 +776,15 @@ async function procesarVenta() {
         tipoDescStr = `$${descuentoAplicado.monto_fijo}`;
     }
 
+    // Obtener el nombre del evento para la descripción en Mercado Pago
+    const selEv = document.getElementById('selEventoVenta');
+    const eventoNombre = selEv.options[selEv.selectedIndex] ? selEv.options[selEv.selectedIndex].text : '';
+
     const body = {
-        evento_id: document.getElementById('selEventoVenta').value,
+        evento_id: selEv.value,
         asiento_id: asientoSeleccionado.id,
+        asiento_codigo: asientoSeleccionado.codigoAsiento, // Necesario para Mercado Pago
+        evento_nombre: eventoNombre,                       // Necesario para Mercado Pago
         nombre: document.getElementById('txtNombre').value.trim(),
         apellido: document.getElementById('txtApellido').value.trim(),
         contacto: document.getElementById('txtContacto').value.trim(),
@@ -792,23 +800,47 @@ async function procesarVenta() {
         return alert('Por favor completa todos los campos obligatorios (*)');
     }
 
+    // Validación obligatoria de correo si pagan con Mercado Pago
+    if ((body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') && !body.email) {
+        return alert('El correo electrónico es obligatorio para realizar pagos con Mercado Pago.');
+    }
+
     try {
-        const res = await fetch('/api/ventas/procesar', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        alert(data.mensaje || 'Venta procesada');
-        if (data.exito) {
-            descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
-            document.getElementById('selCuponVenta').value = "-1";
-            document.getElementById('txtNombre').value = '';
-            document.getElementById('txtApellido').value = '';
-            document.getElementById('txtContacto').value = '';
-            document.getElementById('txtEmail').value = '';
-            document.getElementById('selMetodoPago').value = 'efectivo'; // <-- AQUÍ SE AGREGA LA LÍNEA
-            cargarMapaAsientos();
+        // --- 1. SI SE SELECCIONA MERCADO PAGO ---
+        if (body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') {
+            const res = await fetch('/api/mp/crear-preferencia', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+
+            if (res.ok && data.init_point) {
+                // Redirigir al usuario a la pasarela de pagos de Mercado Pago
+                window.location.href = data.init_point;
+            } else {
+                alert(data.mensaje || 'Error al conectar con Mercado Pago.');
+            }
+        } 
+        // --- 2. VENTA NORMAL (Efectivo, Transferencia, etc.) ---
+        else {
+            const res = await fetch('/api/ventas/procesar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            alert(data.mensaje || 'Venta procesada');
+            if (data.exito) {
+                descuentoAplicado = { porcentaje: 0, monto_fijo: 0 };
+                document.getElementById('selCuponVenta').value = "-1";
+                document.getElementById('txtNombre').value = '';
+                document.getElementById('txtApellido').value = '';
+                document.getElementById('txtContacto').value = '';
+                document.getElementById('txtEmail').value = '';
+                document.getElementById('selMetodoPago').value = 'efectivo';
+                cargarMapaAsientos();
+            }
         }
     } catch (e) {
         alert('Error al registrar la venta.');
