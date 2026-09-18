@@ -195,52 +195,59 @@
         cargarDashboard(usuarioSesion);
     }
 
-    async function cargarDashboard(usuarioSesion) {
-        try {
-            // Se realiza la consulta utilizando las rutas existentes en server (19)_2.js
-            const [resInforme, resDetalle] = await Promise.all([
-                fetch('/api/informe/EV-101'),
-                fetch('/api/ventas/detalle/EV-101')
-            ]);
+   async function cargarDashboard(usuarioSesion) {
+    try {
+        // Se realiza la consulta a los endpoints del servidor
+        const [resInforme, resDetalle] = await Promise.all([
+            fetch('/api/informe/EV-101'),
+            fetch('/api/ventas/detalle/EV-101')
+        ]);
 
-            if (!resInforme.ok || !resDetalle.ok) {
-                alert('Error al consultar el reporte de la base de datos.');
-                cerrarSesion();
-                return;
-            }
-
-            const informe = await resInforme.json();
-            const ventas = await resDetalle.json();
-
-            document.getElementById('tituloEvento').innerText = `Reporte: Evento EV-101`;
-            document.getElementById('recaudado').innerText = `$${(informe.recaudado || 0).toLocaleString()} ARS`;
-            document.getElementById('totalVentas').innerText = informe.vendidas || 0;
-            document.getElementById('asistencia').innerText = informe.asistentes || 0;
-
-            const tbody = document.getElementById('tablaVentas');
-            tbody.innerHTML = '';
-            
-            if (Array.isArray(ventas) && ventas.length > 0) {
-                ventas.forEach(v => {
-                    tbody.innerHTML += `
-                        <tr>
-                            <td>${v.id || '-'}</td>
-                            <td>${v.fechaCompra ? new Date(v.fechaCompra).toLocaleDateString() : '-'}</td>
-                            <td>${(v.nombre || '') + ' ' + (v.apellido || '')}</td>
-                            <td>${v.email || '-'}</td>
-                            <td><strong>${v.codigoAsiento || '-'}</strong></td>
-                            <td>${v.metodo_pago || '-'}</td>
-                            <td>$${v.monto_total || 0}</td>
-                            <td><span class="badge badge-success">Completado</span></td>
-                        </tr>`;
-                });
-            } else {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
-            }
-        } catch (e) {
-            console.error("Error al cargar la información de la base de datos:", e);
+        if (!resInforme.ok || !resDetalle.ok) {
+            alert('Error al consultar el reporte de la base de datos.');
+            cerrarSesion();
+            return;
         }
+
+        // --- AQUÍ VA LA MODIFICACIÓN ---
+        const informe = await resInforme.json();
+        const dataDetalle = await resDetalle.json();
+
+        // Extrae el arreglo de ventas sin importar el formato que devuelva la API
+        const ventas = Array.isArray(dataDetalle) ? dataDetalle : (dataDetalle.ventas || dataDetalle.data || []);
+        // --------------------------------
+
+        // Actualizar tarjetas resumen
+        document.getElementById('tituloEvento').innerText = `Reporte: Evento EV-101`;
+        document.getElementById('recaudado').innerText = `$${(informe.recaudado || 0).toLocaleString()} ARS`;
+        document.getElementById('totalVentas').innerText = informe.vendidas || informe.totalVentas || 0;
+        document.getElementById('asistencia').innerText = informe.asistentes || informe.asistencia || 0;
+
+        // Renderizar tabla de historial
+        const tbody = document.getElementById('tablaVentas');
+        tbody.innerHTML = '';
+        
+        if (Array.isArray(ventas) && ventas.length > 0) {
+            ventas.forEach(v => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${v.id || v.idReserva || '-'}</td>
+                        <td>${v.fechaCompra ? new Date(v.fechaCompra).toLocaleDateString() : (v.fecha || '-')}</td>
+                        <td>${v.nombre ? (v.nombre + ' ' + (v.apellido || '')) : (v.cliente || '-')}</td>
+                        <td>${v.email || '-'}</td>
+                        <td><strong>${v.codigoAsiento || v.asiento || '-'}</strong></td>
+                        <td>${v.metodo_pago || v.metodoPago || '-'}</td>
+                        <td>$${v.monto_total || v.monto || 0}</td>
+                        <td><span class="badge badge-success">Completado</span></td>
+                    </tr>`;
+            });
+        } else {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
+        }
+    } catch (e) {
+        console.error("Error al cargar la información de la base de datos:", e);
     }
+}
 
     async function enviarEmail() {
         const email = prompt("Ingresa el correo de destino para enviar el informe:");
