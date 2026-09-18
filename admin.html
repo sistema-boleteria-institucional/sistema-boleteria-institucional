@@ -139,138 +139,138 @@
         </div>
     </div>
 
-   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const sesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-        const rol = String(sesion.tipo || sesion.Tipo || sesion.rol || sesion.Rol || '').toLowerCase();
-        if (rol === 'super' || rol === 'adm' || rol === 'admin') {
-            ocultarModalYMostrarDashboard(sesion);
-        }
-    });
-
-    async function procesarLogin(event) {
-        event.preventDefault();
-        const usuarioInput = document.getElementById('usuario').value.trim();
-        const claveInput = document.getElementById('clave').value.trim();
-        const divError = document.getElementById('mensajeError');
-
-        divError.style.display = 'none';
-
-        try {
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
-            });
-
-            const data = await res.json();
-
-            if (!res.ok || !data.exito) {
-                divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
-                divError.style.display = 'block';
-                return;
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const sesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
+            const rol = String(sesion.tipo || sesion.Tipo || sesion.rol || sesion.Rol || '').toLowerCase();
+            if (rol === 'super' || rol === 'adm' || rol === 'admin') {
+                ocultarModalYMostrarDashboard(sesion);
             }
+        });
 
-            // data contiene directamente { exito: true, usuario: 'admin', tipo: 'super', id: 1 }
-            const data = await res.json();
-            
-            if (!res.ok || !data.exito) {
-                divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
+        async function procesarLogin(event) {
+            event.preventDefault();
+            const usuarioInput = document.getElementById('usuario').value.trim();
+            const claveInput = document.getElementById('clave').value.trim();
+            const divError = document.getElementById('mensajeError');
+
+            divError.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok || !data.exito) {
+                    divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
+                    divError.style.display = 'block';
+                    return;
+                }
+
+                // Obtener rol
+                const tipoDB = String(data.tipo || data.rol || (typeof data.usuario === 'object' ? data.usuario.tipo : '') || '').toLowerCase().trim();
+
+                if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
+                    divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}', el cual no es de administrador.`;
+                    divError.style.display = 'block';
+                    return;
+                }
+
+                // Guardar sesión e ingresar
+                const usuarioSesion = typeof data.usuario === 'object' ? data.usuario : data;
+                usuarioSesion.tipo = tipoDB;
+                localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioSesion));
+                ocultarModalYMostrarDashboard(usuarioSesion);
+
+            } catch (error) {
+                console.error("Error en inicio de sesión:", error);
+                divError.innerText = "Error de conexión con el servidor.";
                 divError.style.display = 'block';
-                return;
             }
-
-        const tipoDB = String(data.tipo || data.rol || (typeof data.usuario === 'object' ? data.usuario.tipo : '') || '').toLowerCase().trim();
-        
-        if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
-            divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}', el cual no es de administrador.`;
-            divError.style.display = 'block';
-            return;
-        }
-    }
-
-    function ocultarModalYMostrarDashboard(usuarioSesion) {
-        document.getElementById('modalLogin').style.display = 'none';
-        document.getElementById('contenidoDashboard').style.display = 'block';
-        cargarDashboard(usuarioSesion);
-    }
-
-   async function cargarDashboard(usuarioSesion) {
-    try {
-        // Se realiza la consulta a los endpoints del servidor
-        const [resInforme, resDetalle] = await Promise.all([
-            fetch('/api/informe/EV-101'),
-            fetch('/api/ventas/detalle/EV-101')
-        ]);
-
-        if (!resInforme.ok || !resDetalle.ok) {
-            alert('Error al consultar el reporte de la base de datos.');
-            cerrarSesion();
-            return;
         }
 
-        // --- AQUÍ VA LA MODIFICACIÓN ---
-        const informe = await resInforme.json();
-        const dataDetalle = await resDetalle.json();
-
-        // Extrae el arreglo de ventas sin importar el formato que devuelva la API
-        const ventas = Array.isArray(dataDetalle) ? dataDetalle : (dataDetalle.ventas || dataDetalle.data || []);
-        // --------------------------------
-
-        // Actualizar tarjetas resumen
-        document.getElementById('tituloEvento').innerText = `Reporte: Evento EV-101`;
-        document.getElementById('recaudado').innerText = `$${(informe.recaudado || 0).toLocaleString()} ARS`;
-        document.getElementById('totalVentas').innerText = informe.vendidas || informe.totalVentas || 0;
-        document.getElementById('asistencia').innerText = informe.asistentes || informe.asistencia || 0;
-
-        // Renderizar tabla de historial
-        const tbody = document.getElementById('tablaVentas');
-        tbody.innerHTML = '';
-        
-        if (Array.isArray(ventas) && ventas.length > 0) {
-            ventas.forEach(v => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${v.id || v.idReserva || '-'}</td>
-                        <td>${v.fechaCompra ? new Date(v.fechaCompra).toLocaleDateString() : (v.fecha || '-')}</td>
-                        <td>${v.nombre ? (v.nombre + ' ' + (v.apellido || '')) : (v.cliente || '-')}</td>
-                        <td>${v.email || '-'}</td>
-                        <td><strong>${v.codigoAsiento || v.asiento || '-'}</strong></td>
-                        <td>${v.metodo_pago || v.metodoPago || '-'}</td>
-                        <td>$${v.monto_total || v.monto || 0}</td>
-                        <td><span class="badge badge-success">Completado</span></td>
-                    </tr>`;
-            });
-        } else {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
+        function ocultarModalYMostrarDashboard(usuarioSesion) {
+            document.getElementById('modalLogin').style.display = 'none';
+            document.getElementById('contenidoDashboard').style.display = 'block';
+            cargarDashboard(usuarioSesion);
         }
-    } catch (e) {
-        console.error("Error al cargar la información de la base de datos:", e);
-    }
-}
 
-    async function enviarEmail() {
-        const email = prompt("Ingresa el correo de destino para enviar el informe:");
-        if (!email) return;
+        async function cargarDashboard(usuarioSesion) {
+            try {
+                const [resInforme, resDetalle] = await Promise.all([
+                    fetch('/api/informe/EV-101'),
+                    fetch('/api/ventas/detalle/EV-101')
+                ]);
 
-        try {
-            const res = await fetch('/api/config/email-informe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
-            });
-            const data = await res.json();
-            alert(data.mensaje || 'Operación completada');
-        } catch (err) {
-            alert("Error enviando el correo.");
+                if (!resInforme.ok || !resDetalle.ok) {
+                    alert('Error al consultar el reporte de la base de datos.');
+                    cerrarSesion();
+                    return;
+                }
+
+                const informe = await resInforme.json();
+                const dataDetalle = await resDetalle.json();
+
+                // Extrae el arreglo de ventas independientemente del formato devuelto
+                const ventas = Array.isArray(dataDetalle) ? dataDetalle : (dataDetalle.ventas || dataDetalle.data || []);
+
+                // Actualizar tarjetas resumen
+                document.getElementById('tituloEvento').innerText = `Reporte: Evento EV-101`;
+                document.getElementById('recaudado').innerText = `$${(informe.recaudado || 0).toLocaleString()} ARS`;
+                document.getElementById('totalVentas').innerText = informe.vendidas || informe.totalVentas || 0;
+                document.getElementById('asistencia').innerText = informe.asistentes || informe.asistencia || 0;
+
+                // Renderizar tabla de historial
+                const tbody = document.getElementById('tablaVentas');
+                tbody.innerHTML = '';
+                
+                if (Array.isArray(ventas) && ventas.length > 0) {
+                    ventas.forEach(v => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${v.id || v.idReserva || '-'}</td>
+                                <td>${v.fechaCompra ? new Date(v.fechaCompra).toLocaleDateString() : (v.fecha || '-')}</td>
+                                <td>${v.nombre ? (v.nombre + ' ' + (v.apellido || '')) : (v.cliente || '-')}</td>
+                                <td>${v.email || '-'}</td>
+                                <td><strong>${v.codigoAsiento || v.asiento || '-'}</strong></td>
+                                <td>${v.metodo_pago || v.metodoPago || '-'}</td>
+                                <td>$${v.monto_total || v.monto || 0}</td>
+                                <td><span class="badge badge-success">Completado</span></td>
+                            </tr>`;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
+                }
+            } catch (e) {
+                console.error("Error al cargar la información de la base de datos:", e);
+            }
         }
-    }
 
-    function cerrarSesion() {
-        localStorage.removeItem('usuarioLogueado');
-        window.location.reload();
-    }
-</script>
+        async function enviarEmail() {
+            const email = prompt("Ingresa el correo de destino para enviar el informe:");
+            if (!email) return;
+
+            try {
+                const res = await fetch('/api/config/email-informe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                alert(data.mensaje || 'Operación completada');
+            } catch (err) {
+                alert("Error enviando el correo.");
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem('usuarioLogueado');
+            window.location.reload();
+        }
+    </script>
 </body>
 </html>
-
