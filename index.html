@@ -237,6 +237,7 @@
 
                 <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
                     <h3>Detalle de Reserva</h3>
+					<p>Evento: <strong id="lblEventoSeleccionado" style="color:#fcd34d;">Ninguno</strong></p>
                     <p>Asiento Seleccionado: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong></p>
                     <p>Monto Final: <strong id="lblPrecio" style="color:#22c55e;">$0</strong></p>
 
@@ -680,22 +681,27 @@
             }
         }
 
-        async function cargarMapaAsientos() {
-            const eventoId = document.getElementById('selEventoVenta').value;
-            const gridIzq = document.getElementById('gridPlateaIzq');
-            const gridDer = document.getElementById('gridPlateaDer');
-            const gridG1 = document.getElementById('gridGrada1');
-            const gridG2 = document.getElementById('gridGrada2');
+async function cargarMapaAsientos() {
+    const selVenta = document.getElementById('selEventoVenta');
+    const eventoId = selVenta.value;
+    
+    // Novedad: Capturar el nombre del evento seleccionado para mostrarlo al vendedor
+    const textoEvento = selVenta.options[selVenta.selectedIndex].text;
+    document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
 
-            cargarCuponesEnSelectVenta(eventoId);
+    const gridIzq = document.getElementById('gridPlateaIzq');
+    const gridDer = document.getElementById('gridPlateaDer');
+    const gridG1 = document.getElementById('gridGrada1');
+    const gridG2 = document.getElementById('gridGrada2');
 
-            gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
-            asientoSeleccionado = null;
-            document.getElementById('lblAsiento').innerText = 'Ninguno';
-            document.getElementById('lblPrecio').innerText = '$0';
+    cargarCuponesEnSelectVenta(eventoId);
 
-            if(!eventoId) return;
+    gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
+    asientoSeleccionado = null;
+    document.getElementById('lblAsiento').innerText = 'Ninguno';
+    document.getElementById('lblPrecio').innerText = '$0';
 
+    if(!eventoId) return;
             try {
                 const res = await fetch(`/api/eventos/${eventoId}/asientos`);
                 if(!res.ok) return;
