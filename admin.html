@@ -98,8 +98,7 @@
             <div class="header">
                 <h1 id="tituloEvento">Cargando reporte...</h1>
                 <div>
-                    <button class="btn btn-excel" onclick="window.location.href='/api/eventos/EV-101/descargar-excel'">Descargar Excel</button>
-                    <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
+                    <button class="btn btn-excel" onclick="window.location.href=`/api/eventos/${EVENTO_ID}/descargar-excel`">Descargar Excel</button>                    <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
                     <button class="btn btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
                 </div>
             </div>
@@ -199,10 +198,13 @@
             cargarDashboard(usuarioSesion);
         }
 
-        async function cargarDashboard(usuarioSesion) {
+  // Definición del identificador del evento activo
+const EVENTO_ID = 'EV-2026-101'; 
+
+async function cargarDashboard(usuarioSesion) {
     try {
-        // Consulta tu endpoint unificado de historial
-        const res = await fetch('/api/eventos/EV-101/historial');
+        // Consulta dinámica usando el prefijo EV-2026
+        const res = await fetch(`/api/eventos/${EVENTO_ID}/historial`);
 
         if (!res.ok) {
             alert('Error al consultar el reporte de la base de datos.');
@@ -211,16 +213,14 @@
 
         const data = await res.json();
 
-        // Actualizar tarjetas de resumen
-        document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || 'Evento EV-101'}`;
+        // Actualizar datos del encabezado y tarjetas
+        document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || EVENTO_ID}`;
         document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
         document.getElementById('totalVentas').innerText = data.totalVentas || 0;
         document.getElementById('asistencia').innerText = data.asistencia || 0;
 
-        // Leer el arreglo 'historialVentas' que envía tu backend
-        const ventas = data.historialVentas || [];
-
         // Renderizar tabla
+        const ventas = data.historialVentas || [];
         const tbody = document.getElementById('tablaVentas');
         tbody.innerHTML = '';
         
@@ -239,33 +239,12 @@
                     </tr>`;
             });
         } else {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas en la base de datos.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas para este evento.</td></tr>';
         }
     } catch (e) {
         console.error("Error al cargar el historial:", e);
     }
 }
-        async function enviarEmail() {
-            const email = prompt("Ingresa el correo de destino para enviar el informe:");
-            if (!email) return;
-
-            try {
-                const res = await fetch('/api/config/email-informe', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                });
-                const data = await res.json();
-                alert(data.mensaje || 'Operación completada');
-            } catch (err) {
-                alert("Error enviando el correo.");
-            }
-        }
-
-        function cerrarSesion() {
-            localStorage.removeItem('usuarioLogueado');
-            window.location.reload();
-        }
     </script>
 </body>
 </html>
