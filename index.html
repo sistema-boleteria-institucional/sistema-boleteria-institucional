@@ -786,7 +786,6 @@
 		    document.getElementById('lblPrecio').innerText = `$${precioCalculado.toFixed(2)}`;
 		}
 
-
 async function procesarVenta() {
     if (!asientoSeleccionado) return alert('Debes seleccionar un asiento primero.');
     
@@ -828,30 +827,19 @@ async function procesarVenta() {
 
     try {
         if (body.metodo_pago === 'mercadopago' || body.metodo_pago === 'mp') {
-            const body = {
-            asientoId: asientoSeleccionado.id, // Sustituye por tu variable de ID de asiento
-            precio: montoTotal,               // Sustituye por tu variable de monto final
-            titulo: eventoNombre              // Sustituye por tu variable con el título del evento
-        };
+            const res = await fetch('/api/mercadopago/crear-preferencia', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    asientoId: asientoSeleccionado.id,
+                    precio: montoCalculado,
+                    titulo: eventoNombre,
+                    ...body
+                })
+            });
 
-        // 2. Petición al endpoint correcto de server.js
-        const res = await fetch('/api/mercadopago/crear-preferencia', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
+            const data = await res.json();
 
-        const data = await res.json();
-
-        // 3. Redirección a la pasarela de pago de Mercado Pago
-        if (data.init_point) {
-            window.location.href = data.init_point;
-        }
-
-    } catch (error) {
-        console.error('Error al generar la preferencia de pago:', error);
-    }
-}
             if (res.ok && data.init_point) {
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data.init_point)}`;
                 
@@ -888,12 +876,12 @@ async function procesarVenta() {
                 cargarMapaAsientos();
             }
         }
-        } catch (e) {
+    } catch (e) {
         console.error('Error detallado al procesar venta:', e);
         alert('Error de conexión o en el servidor: ' + e.message);
     }
+}
 
-		}
         async function cargarCuponesEnSelectVenta(eventoId) {
             const select = document.getElementById('selCuponVenta');
             if (!select) return;
