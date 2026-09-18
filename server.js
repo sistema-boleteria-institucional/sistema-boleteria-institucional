@@ -1152,6 +1152,47 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+app.get('/api/eventos/:eventoId/historial', async (req, res) => {
+    const { eventoId } = req.params;
+    try {
+        let ventas = [];
+        let recaudado = 0;
+        let asistentes = 0;
+
+        if (db) {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            const aRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+            ventas = vRes.rows;
+            asistentes = aRes.rows.filter(a => a.vendido === 1 && a.asistio === 1).length;
+        } else {
+            ventas = ventasMemoria.filter(v => v.evento_id === eventoId);
+            const listaA = asientosMemoria[eventoId] || [];
+            asistentes = listaA.filter(a => a.vendido === 1 && a.asistio === 1).length;
+        }
+
+        recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || 0), 0);
+
+        return res.json({
+            nombre: `Evento ${eventoId}`,
+            recaudado,
+            totalVentas: ventas.length,
+            asistencia: asistentes,
+            historialVentas: ventas.map(v => ({
+                idReserva: v.id,
+                fecha: v.fechaCompra,
+                cliente: `${v.nombre} ${v.apellido}`,
+                email: v.email,
+                asiento: v.codigoAsiento,
+                metodoPago: v.metodo_pago,
+                monto: v.monto_total,
+                estado: 'Completado'
+            }))
+        });
+    } catch (e) {
+        res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`===========================================`);
