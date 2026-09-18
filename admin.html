@@ -172,23 +172,20 @@
             }
 
             // data contiene directamente { exito: true, usuario: 'admin', tipo: 'super', id: 1 }
-            const usuarioDB = data;
-            const tipoDB = String(usuarioDB.tipo || usuarioDB.rol || '').toLowerCase().trim();
-
-            if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
-                divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}', el cual no es de administrador.`;
+            const data = await res.json();
+            
+            if (!res.ok || !data.exito) {
+                divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
                 divError.style.display = 'block';
                 return;
             }
 
-            usuarioDB.tipo = tipoDB;
-            localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioDB));
-            ocultarModalYMostrarDashboard(usuarioDB);
-
-        } catch (error) {
-            console.error('Error al intentar autenticar:', error);
-            divError.innerText = 'Error al conectar con el servidor backend.';
+        const tipoDB = String(data.tipo || data.rol || (typeof data.usuario === 'object' ? data.usuario.tipo : '') || '').toLowerCase().trim();
+        
+        if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
+            divError.innerText = `Acceso denegado: El usuario tiene rol '${tipoDB || 'desconocido'}', el cual no es de administrador.`;
             divError.style.display = 'block';
+            return;
         }
     }
 
