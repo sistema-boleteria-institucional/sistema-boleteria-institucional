@@ -235,6 +235,77 @@ app.post('/api/login', async (req, res) => {
     res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
 });
 
+// 1. Endpoint para devolver el historial en JSON
+app.get('/api/eventos/:eventoId/historial', async (req, res) => {
+    const { eventoId } = req.params;
+    try {
+        let ventas = [];
+        let asistentes = 0;
+
+        if (db) {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            const aRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+            ventas = vRes.rows || [];
+            asistentes = (aRes.rows || []).filter(a => a.vendido === 1 && a.asistio === 1).length;
+        } else {
+            ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
+            const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
+            asistentes = listaA.filter(a => a.vendido === 1 && a.asistio === 1).length;
+        }
+
+        const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
+
+        return res.json({
+            nombre: `Evento ${eventoId}`,
+            recaudado,
+            totalVentas: ventas.length,
+            asistencia: asistentes,
+            historialVentas: ventas.map(v => ({
+                idReserva: v.id || v.idReserva || '-',
+                fecha: v.fechaCompra || v.fecha || null,
+                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-'),
+                email: v.email || '-',
+                asiento: v.codigoAsiento || v.asiento || '-',
+                metodoPago: v.metodo_pago || v.metodoPago || '-',
+                monto: v.monto_total || v.monto || 0,
+                estado: 'Completado'
+            }))
+        });
+    } catch (e) {
+        console.error("Error en /historial:", e);
+        return res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
+    }
+});
+
+// 2. Endpoint para descargar el reporte en formato CSV (compatible con Excel)
+app.get('/api/eventos/:eventoId/descargar-excel', async (req, res) => {
+    const { eventoId } = req.params;
+    try {
+        let ventas = [];
+        if (db) {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            ventas = vRes.rows || [];
+        } else {
+            ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
+        }
+
+        // Generación de cabecera e hileras CSV
+        let csv = "\uFEFFID Reserva;Fecha;Cliente;Email;Asiento;Metodo Pago;Monto\n";
+        ventas.forEach(v => {
+            const cliente = v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-');
+            csv += `${v.id || v.idReserva || '-'};${v.fechaCompra || v.fecha || '-'};${cliente};${v.email || '-'};${v.codigoAsiento || v.asiento || '-'};${v.metodo_pago || v.metodoPago || '-'};${v.monto_total || v.monto || 0}\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="reporte_${eventoId}.csv"`);
+        return res.status(200).send(csv);
+    } catch (e) {
+        console.error("Error en descarga Excel:", e);
+        return res.status(500).send("Error generando el archivo Excel.");
+    }
+});
+
+            
 app.get('/api/eventos', async (req, res) => {
     if (db) {
         try {
