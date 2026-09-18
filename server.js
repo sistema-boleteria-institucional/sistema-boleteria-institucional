@@ -1225,42 +1225,59 @@ app.get('*', (req, res) => {
 
 app.get('/api/eventos/:eventoId/historial', async (req, res) => {
     const { eventoId } = req.params;
+    const esTodos = !eventoId || eventoId.toUpperCase() === 'TODOS';
+
     try {
         let ventas = [];
-        let recaudado = 0;
         let asistentes = 0;
 
         if (db) {
-            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
-            const aRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
-            ventas = vRes.rows;
-            asistentes = aRes.rows.filter(a => a.vendido === 1 && a.asistio === 1).length;
+            // Consultas dinámicas para Base de Datos
+            const sqlVentas = esTodos ? "SELECT * FROM ventas" : "SELECT * FROM ventas WHERE evento_id = ?";
+            const sqlAsientos = esTodos ? "SELECT * FROM asientos" : "SELECT * FROM asientos WHERE evento_id = ?";
+            const args = esTodos ? [] : [eventoId];
+
+            const vRes = await db.execute({ sql: sqlVentas, args });
+            const aRes = await db.execute({ sql: sqlAsientos, args });
+
+            ventas = vRes.rows || [];
+            asistentes = (aRes.rows || []).filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
         } else {
-            ventas = ventasMemoria.filter(v => v.evento_id === eventoId);
-            const listaA = asientosMemoria[eventoId] || [];
-            asistentes = listaA.filter(a => a.vendido === 1 && a.asistio === 1).length;
+            // Consultas dinámicas en Memoria
+            const todasVentas = typeof ventasMemoria !== 'undefined' ? ventasMemoria : [];
+            ventas = esTodos ? todasVentas : todasVentas.filter(v => v.evento_id === eventoId);
+
+            if (esTodos) {
+                const todosAsientos = Object.values(typeof asientosMemoria !== 'undefined' ? asientosMemoria : {}).flat();
+                asistentes = todosAsientos.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            } else {
+                const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
+                asistentes = listaA.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            }
         }
 
-        recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || 0), 0);
+        const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
 
         return res.json({
-            nombre: `Evento ${eventoId}`,
+            nombre: esTodos ? "Todos los Eventos" : `Evento ${eventoId}`,
             recaudado,
             totalVentas: ventas.length,
             asistencia: asistentes,
             historialVentas: ventas.map(v => ({
-                idReserva: v.id,
-                fecha: v.fechaCompra,
-                cliente: `${v.nombre} ${v.apellido}`,
-                email: v.email,
-                asiento: v.codigoAsiento,
-                metodoPago: v.metodo_pago,
-                monto: v.monto_total,
+                idReserva: v.id || v.idReserva || '-',
+                eventoId: v.evento_id || eventoId,
+                fecha: v.fechaCompra || v.fecha || null,
+                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}`.trim() : (v.cliente || '-'),
+                email: v.email || '-',
+                asiento: v.codigoAsiento || v.asiento || '-',
+                metodoPago: v.metodo_pago || v.metodoPago || '-',
+                monto: v.monto_total || v.monto || 0,
                 estado: 'Completado'
             }))
         });
     } catch (e) {
-        res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
+        console.error("Error al obtener historial:", e);
+        return res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
     }
 });
 
