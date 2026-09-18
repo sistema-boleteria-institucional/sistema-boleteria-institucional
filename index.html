@@ -704,8 +704,8 @@ async function cargarMapaAsientos() {
             }
     
     // Novedad: Capturar el nombre del evento seleccionado para mostrarlo al vendedor
-    const textoEvento = selVenta.options[selVenta.selectedIndex].text;
-    document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
+	const textoEvento = selectVenta.options[selectVenta.selectedIndex].text;
+	document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
 
     const gridIzq = document.getElementById('gridPlateaIzq');
     const gridDer = document.getElementById('gridPlateaDer');
