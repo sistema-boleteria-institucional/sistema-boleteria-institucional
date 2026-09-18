@@ -98,7 +98,8 @@
             <div class="header">
                 <h1 id="tituloEvento">Cargando reporte...</h1>
                 <div>
-                    <button class="btn btn-excel" onclick="window.location.href=`/api/eventos/${EVENTO_ID}/descargar-excel`">Descargar Excel</button>                    <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
+                    <button class="btn btn-excel" onclick="descargarExcel()">Descargar Excel</button>
+                    <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
                     <button class="btn btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
                 </div>
             </div>
@@ -139,6 +140,9 @@
     </div>
 
     <script>
+        // Identificador global del evento
+        const EVENTO_ID = 'EV-2026-101';
+
         document.addEventListener('DOMContentLoaded', () => {
             const sesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
             const rol = String(sesion.tipo || sesion.Tipo || sesion.rol || sesion.Rol || '').toLowerCase();
@@ -170,7 +174,6 @@
                     return;
                 }
 
-                // Obtener rol
                 const tipoDB = String(data.tipo || data.rol || (typeof data.usuario === 'object' ? data.usuario.tipo : '') || '').toLowerCase().trim();
 
                 if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
@@ -179,7 +182,6 @@
                     return;
                 }
 
-                // Guardar sesión e ingresar
                 const usuarioSesion = typeof data.usuario === 'object' ? data.usuario : data;
                 usuarioSesion.tipo = tipoDB;
                 localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioSesion));
@@ -198,53 +200,78 @@
             cargarDashboard(usuarioSesion);
         }
 
-  // Definición del identificador del evento activo
-const EVENTO_ID = 'EV-2026-101'; 
+        async function cargarDashboard(usuarioSesion) {
+            const tbody = document.getElementById('tablaVentas');
+            const titulo = document.getElementById('tituloEvento');
 
-async function cargarDashboard(usuarioSesion) {
-    try {
-        // Consulta dinámica usando el prefijo EV-2026
-        const res = await fetch(`/api/eventos/${EVENTO_ID}/historial`);
+            try {
+                const res = await fetch(`/api/eventos/${EVENTO_ID}/historial`);
 
-        if (!res.ok) {
-            alert('Error al consultar el reporte de la base de datos.');
-            return;
+                if (!res.ok) {
+                    throw new Error(`Servidor devolvió código HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                titulo.innerText = `Reporte: ${data.nombre || EVENTO_ID}`;
+                document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
+                document.getElementById('totalVentas').innerText = data.totalVentas || 0;
+                document.getElementById('asistencia').innerText = data.asistencia || 0;
+
+                const ventas = data.historialVentas || [];
+                tbody.innerHTML = '';
+                
+                if (ventas.length > 0) {
+                    ventas.forEach(v => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${v.idReserva || '-'}</td>
+                                <td>${v.fecha ? new Date(v.fecha).toLocaleDateString() : '-'}</td>
+                                <td>${v.cliente || '-'}</td>
+                                <td>${v.email || '-'}</td>
+                                <td><strong>${v.asiento || '-'}</strong></td>
+                                <td>${v.metodoPago || '-'}</td>
+                                <td>$${v.monto || 0}</td>
+                                <td><span class="badge badge-success">${v.estado || 'Completado'}</span></td>
+                            </tr>`;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas para este evento.</td></tr>';
+                }
+            } catch (e) {
+                console.error("Error al cargar el historial:", e);
+                titulo.innerText = `Reporte: ${EVENTO_ID}`;
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #dc2626; font-weight: bold;">
+                    No se pudieron obtener los datos (${e.message}). Verifica que la ruta '/api/eventos/${EVENTO_ID}/historial' exista en tu backend.
+                </td></tr>`;
+            }
         }
 
-        const data = await res.json();
-
-        // Actualizar datos del encabezado y tarjetas
-        document.getElementById('tituloEvento').innerText = `Reporte: ${data.nombre || EVENTO_ID}`;
-        document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
-        document.getElementById('totalVentas').innerText = data.totalVentas || 0;
-        document.getElementById('asistencia').innerText = data.asistencia || 0;
-
-        // Renderizar tabla
-        const ventas = data.historialVentas || [];
-        const tbody = document.getElementById('tablaVentas');
-        tbody.innerHTML = '';
-        
-        if (ventas.length > 0) {
-            ventas.forEach(v => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${v.idReserva || '-'}</td>
-                        <td>${v.fecha ? new Date(v.fecha).toLocaleDateString() : '-'}</td>
-                        <td>${v.cliente || '-'}</td>
-                        <td>${v.email || '-'}</td>
-                        <td><strong>${v.asiento || '-'}</strong></td>
-                        <td>${v.metodoPago || '-'}</td>
-                        <td>$${v.monto || 0}</td>
-                        <td><span class="badge badge-success">${v.estado || 'Completado'}</span></td>
-                    </tr>`;
-            });
-        } else {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas para este evento.</td></tr>';
+        function descargarExcel() {
+            window.location.href = `/api/eventos/${EVENTO_ID}/descargar-excel`;
         }
-    } catch (e) {
-        console.error("Error al cargar el historial:", e);
-    }
-}
+
+        async function enviarEmail() {
+            const email = prompt("Ingresa el correo de destino para enviar el informe:");
+            if (!email) return;
+
+            try {
+                const res = await fetch('/api/config/email-informe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, eventoId: EVENTO_ID })
+                });
+                const data = await res.json();
+                alert(data.mensaje || 'Operación completada');
+            } catch (err) {
+                alert("Error enviando el correo.");
+            }
+        }
+
+        function cerrarSesion() {
+            localStorage.removeItem('usuarioLogueado');
+            window.location.reload();
+        }
     </script>
 </body>
 </html>
