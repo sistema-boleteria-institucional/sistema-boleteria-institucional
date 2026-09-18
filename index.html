@@ -195,6 +195,9 @@
             <div class="form-group" style="max-width: 350px;">
                 <label>Seleccionar Evento:</label>
                 <select id="selEventoVenta" onchange="cargarMapaAsientos()"></select>
+				<div id="detalleHoraEvento" style="margin-top: 12px; font-size: 1.1em; color: #38bdf8; background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid #334155; display: none;">
+                    ⏰ <strong>Hora del evento:</strong> <span id="lblHoraEvento"></span> hs
+                </div>
             </div>
 
             <div class="leyenda">
@@ -669,7 +672,8 @@
                 if(Array.isArray(eventos)){
                     eventos.forEach(ev => {
                         const evId = ev.id || ev.evento_id;
-                        const opt = `<option value="${evId}">${ev.nombre} (${ev.fecha})</option>`;
+                        const horaTexto = ev.hora ? ev.hora : 'Sin hora';
+                        const opt = `<option value="${evId}" data-hora="${ev.hora || ''}">${ev.nombre} (${ev.fecha} - ${horaTexto} hs)</option>`;
                         selVenta.innerHTML += opt;
                         selInf.innerHTML += opt;
                         if (selCup) selCup.innerHTML += opt;
@@ -682,8 +686,22 @@
         }
 
 async function cargarMapaAsientos() {
-    const selVenta = document.getElementById('selEventoVenta');
-    const eventoId = selVenta.value;
+    const selectVenta = document.getElementById('selEventoVenta');
+            const eventoId = selectVenta.value;
+            
+            // --- NUEVO: Mostrar/Ocultar la hora del evento seleccionado ---
+            const divDetalleHora = document.getElementById('detalleHoraEvento');
+            const lblHora = document.getElementById('lblHoraEvento');
+            
+            if (eventoId && selectVenta.selectedIndex > 0) {
+                const opcionSeleccionada = selectVenta.options[selectVenta.selectedIndex];
+                const horaSeleccionada = opcionSeleccionada.getAttribute('data-hora');
+                
+                divDetalleHora.style.display = 'block';
+                lblHora.innerText = horaSeleccionada || 'No especificada';
+            } else {
+                divDetalleHora.style.display = 'none';
+            }
     
     // Novedad: Capturar el nombre del evento seleccionado para mostrarlo al vendedor
     const textoEvento = selVenta.options[selVenta.selectedIndex].text;
