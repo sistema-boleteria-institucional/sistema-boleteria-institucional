@@ -263,27 +263,38 @@
 
     <script>
         const ROLES_PERMITIDOS = ['admin', 'super', 'superadmin'];
+        const TIEMPO_INACTIVIDAD_MS = 3 * 60 * 1000; // 3 minutos en milisegundos
+
         let eventosListaGlobal = [];
         let ventasActualesConsolidadas = [];
+        let timerInactividad = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            const sesionGuardada = sessionStorage.getItem('usuarioLogueado');
-            if (sesionGuardada) {
-                try {
-                    const datos = JSON.parse(sesionGuardada);
-                    const rolUsuario = (datos.tipo || datos.rol || '').toLowerCase();
-                    
-                    if (datos && datos.usuario && ROLES_PERMITIDOS.includes(rolUsuario)) {
-                        iniciarDashboard();
-                    } else {
-                        sessionStorage.removeItem('usuarioLogueado');
-                        mostrarErrorLogin('Acceso restringido. Tu rol no tiene permisos para este panel.');
-                    }
-                } catch (e) {
-                    console.error('Error al verificar sesión:', e);
-                }
-            }
+            // Al recargar o refrescar la página se invalida cualquier sesión activa previa
+            sessionStorage.removeItem('usuarioLogueado');
+            document.getElementById('modalLogin').style.display = 'flex';
+            document.getElementById('contenidoDashboard').style.display = 'none';
+
+            // Escuchar interacciones para reiniciar el temporizador de inactividad
+            ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evento => {
+                window.addEventListener(evento, reiniciarTimerInactividad, true);
+            });
         });
+
+        function iniciarTimerInactividad() {
+            clearTimeout(timerInactividad);
+            timerInactividad = setTimeout(() => {
+                alert('Sesión cerrada automáticamente por inactividad (3 minutos sin movimiento).');
+                cerrarSesion();
+            }, TIEMPO_INACTIVIDAD_MS);
+        }
+
+        function reiniciarTimerInactividad() {
+            const dashboardVisible = document.getElementById('contenidoDashboard').style.display === 'block';
+            if (dashboardVisible) {
+                iniciarTimerInactividad();
+            }
+        }
 
         function mostrarErrorLogin(mensaje) {
             const errDiv = document.getElementById('mensajeError');
@@ -332,13 +343,17 @@
         async function iniciarDashboard() {
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('contenidoDashboard').style.display = 'block';
+            iniciarTimerInactividad();
             await cargarEventosEnSelect();
             await cargarDashboard();
         }
 
         function cerrarSesion() {
+            clearTimeout(timerInactividad);
             sessionStorage.removeItem('usuarioLogueado');
-            window.location.reload();
+            document.getElementById('clave').value = '';
+            document.getElementById('contenidoDashboard').style.display = 'none';
+            document.getElementById('modalLogin').style.display = 'flex';
         }
 
         async function cargarEventosEnSelect() {
@@ -554,7 +569,6 @@
                 return alert('No hay datos para enviar.');
             }
 
-            // Descarga automática del reporte PDF para que el usuario pueda adjuntarlo
             descargarPDF();
 
             const recaudado = document.getElementById('recaudado').innerText;
