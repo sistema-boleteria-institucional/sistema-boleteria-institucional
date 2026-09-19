@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Ventas e Historial - Administración</title>
+    <!-- Librería para generación de PDF en el navegador -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -87,10 +89,12 @@
         }
         .btn-excel { background-color: #16a34a; color: white; }
         .btn-excel:hover { background-color: #15803d; }
+        .btn-pdf { background-color: #dc2626; color: white; }
+        .btn-pdf:hover { background-color: #b91c1c; }
         .btn-email { background-color: #2563eb; color: white; }
         .btn-email:hover { background-color: #1d4ed8; }
-        .btn-logout { background-color: #ef4444; color: white; }
-        .btn-logout:hover { background-color: #dc2626; }
+        .btn-logout { background-color: #64748b; color: white; }
+        .btn-logout:hover { background-color: #475569; }
         
         .table-responsive {
             overflow-x: auto;
@@ -173,7 +177,7 @@
     <div id="modalLogin" class="modal-overlay">
         <div class="login-box">
             <h2>Acceso Administrativo</h2>
-            <p style="color: #64748b; font-size: 0.9rem;">Ingresa tus credenciales para acceder al panel</p>
+            <p style="color: #64748b; font-size: 0.9rem;">Exclusivo para administradores y supervisores</p>
             <form id="formLogin" onsubmit="procesarLogin(event)">
                 <div class="form-group">
                     <label for="usuario">Usuario</label>
@@ -200,59 +204,65 @@
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-excel" onclick="descargarExcel()">📊 Descargar Excel</button>
-                    <button class="btn btn-email" onclick="enviarEmail()">✉️ Enviar por Email</button>
-                    <button class="btn btn-logout" onclick="cerrarSesion()">🚪 Cerrar Sesión</button>
+                    <button class="btn btn-excel" onclick="descargarExcel()">📊 Excel</button>
+                    <button class="btn btn-pdf" onclick="descargarPDF()">📄 Descargar PDF</button>
+                    <button class="btn btn-email" onclick="enviarEmailConPDF()">✉️ Enviar por Email</button>
+                    <button class="btn btn-logout" onclick="cerrarSesion()">🚪 Salir</button>
                 </div>
             </div>
 
-            <h1 id="tituloEvento" style="margin-top: 10px; margin-bottom: 20px; font-size: 1.5rem; color: #1e293b;">
-                Cargando reporte...
-            </h1>
+            <!-- CONTENEDOR PARA CAPTURA Y GENERACIÓN DE PDF -->
+            <div id="areaImpresionPDF" style="padding: 10px; background: #fff;">
+                <h1 id="tituloEvento" style="margin-top: 5px; margin-bottom: 20px; font-size: 1.5rem; color: #1e293b;">
+                    Cargando reporte...
+                </h1>
 
-            <div class="stats">
-                <div class="stat-box">
-                    <h3>Recaudación Total</h3>
-                    <p id="recaudado" style="color:#16a34a;">$0.00</p>
+                <div class="stats">
+                    <div class="stat-box">
+                        <h3>Recaudación Total</h3>
+                        <p id="recaudado" style="color:#16a34a;">$0.00</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Entradas Vendidas</h3>
+                        <p id="totalVentas">0</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>Asistencia en Puerta</h3>
+                        <p id="asistencia" style="color:#2563eb;">0</p>
+                    </div>
                 </div>
-                <div class="stat-box">
-                    <h3>Entradas Vendidas</h3>
-                    <p id="totalVentas">0</p>
-                </div>
-                <div class="stat-box">
-                    <h3>Asistencia en Puerta</h3>
-                    <p id="asistencia" style="color:#2563eb;">0</p>
+
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Evento</th>
+                                <th>ID Reserva</th>
+                                <th>Fecha Venta</th>
+                                <th>Cliente</th>
+                                <th>Contacto / Email</th>
+                                <th>Asiento</th>
+                                <th>Método Pago</th>
+                                <th>Monto</th>
+                                <th>Asistencia</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaVentas">
+                            <tr>
+                                <td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">
+                                    Selecciona un evento para visualizar los datos.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Evento</th>
-                            <th>ID Reserva</th>
-                            <th>Fecha Venta</th>
-                            <th>Cliente</th>
-                            <th>Contacto / Email</th>
-                            <th>Asiento</th>
-                            <th>Método Pago</th>
-                            <th>Monto</th>
-                            <th>Asistencia</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaVentas">
-                        <tr>
-                            <td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">
-                                Selecciona un evento para visualizar los datos.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 
     <script>
+        const ROLES_PERMITIDOS = ['admin', 'super', 'superadmin'];
         let eventosListaGlobal = [];
         let ventasActualesConsolidadas = [];
 
@@ -261,8 +271,13 @@
             if (sesionGuardada) {
                 try {
                     const datos = JSON.parse(sesionGuardada);
-                    if (datos && datos.usuario) {
+                    const rolUsuario = (datos.tipo || datos.rol || '').toLowerCase();
+                    
+                    if (datos && datos.usuario && ROLES_PERMITIDOS.includes(rolUsuario)) {
                         iniciarDashboard();
+                    } else {
+                        sessionStorage.removeItem('usuarioLogueado');
+                        mostrarErrorLogin('Acceso restringido. Tu rol no tiene permisos para este panel.');
                     }
                 } catch (e) {
                     console.error('Error al verificar sesión:', e);
@@ -270,13 +285,18 @@
             }
         });
 
+        function mostrarErrorLogin(mensaje) {
+            const errDiv = document.getElementById('mensajeError');
+            errDiv.innerText = mensaje;
+            errDiv.style.display = 'block';
+        }
+
         async function procesarLogin(e) {
             e.preventDefault();
             const usuario = document.getElementById('usuario').value.trim();
             const clave = document.getElementById('clave').value;
             const errDiv = document.getElementById('mensajeError');
             errDiv.style.display = 'none';
-            errDiv.innerText = '';
 
             try {
                 const res = await fetch('/api/login', {
@@ -288,19 +308,24 @@
                 const data = await res.json();
 
                 if (res.ok && (data.exito || data.usuario)) {
+                    const rolObtenido = (data.tipo || data.rol || '').toLowerCase();
+
+                    if (!ROLES_PERMITIDOS.includes(rolObtenido)) {
+                        mostrarErrorLogin('Acceso denegado: El rol "vendedor" no puede ingresar a administración.');
+                        return;
+                    }
+
                     sessionStorage.setItem('usuarioLogueado', JSON.stringify({
                         usuario: data.usuario || usuario,
-                        tipo: data.tipo || 'admin'
+                        tipo: rolObtenido
                     }));
                     iniciarDashboard();
                 } else {
-                    errDiv.innerText = data.mensaje || 'Credenciales incorrectas.';
-                    errDiv.style.display = 'block';
+                    mostrarErrorLogin(data.mensaje || 'Credenciales incorrectas.');
                 }
             } catch (err) {
                 console.error(err);
-                errDiv.innerText = 'Error de conexión con el servidor.';
-                errDiv.style.display = 'block';
+                mostrarErrorLogin('Error de conexión con el servidor.');
             }
         }
 
@@ -346,22 +371,17 @@
             const tbody = document.getElementById('tablaVentas');
 
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">Cargando información...</td></tr>';
-
             ventasActualesConsolidadas = [];
 
             if (eventoSeleccionadoId === 'TODOS') {
                 titulo.innerText = '📈 Reporte Consolidado - Todos los Eventos';
-                
-                // Intenta solicitar endpoint global o itera sobre todos los eventos existentes
                 try {
                     const resGlobal = await fetch('/api/ventas/detalle/TODOS');
                     if (resGlobal.ok) {
                         const datos = await resGlobal.json();
                         if (Array.isArray(datos)) ventasActualesConsolidadas = datos;
                     }
-                } catch(e) {
-                    // Fallback: consulta individual por cada evento
-                }
+                } catch(e) {}
 
                 if (ventasActualesConsolidadas.length === 0 && eventosListaGlobal.length > 0) {
                     const promesas = eventosListaGlobal.map(async (ev) => {
@@ -379,9 +399,7 @@
                                     });
                                 }
                             }
-                        } catch(e) {
-                            console.error(`Error al cargar ventas para ${evId}:`, e);
-                        }
+                        } catch(e) {}
                     });
                     await Promise.all(promesas);
                 }
@@ -482,7 +500,7 @@
                 return alert('No hay datos disponibles para exportar.');
             }
 
-            let csvContent = "\uFEFF"; // BOM UTF-8 para mantener tildes y caracteres en Excel
+            let csvContent = "\uFEFF";
             csvContent += "Evento;ID Reserva;Fecha;Cliente;Email;Telefono;Asiento;Metodo Pago;Monto;Asistencia\n";
 
             ventasActualesConsolidadas.forEach(v => {
@@ -503,35 +521,64 @@
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            
             const selEv = document.getElementById('selectEvento').value;
-            const filename = `Reporte_Ventas_${selEv}_${new Date().toISOString().slice(0,10)}.csv`;
-
             link.setAttribute('href', url);
-            link.setAttribute('download', filename);
+            link.setAttribute('download', `Reporte_Ventas_${selEv}_${new Date().toISOString().slice(0,10)}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
 
-        function enviarEmail() {
+        function descargarPDF() {
+            if (ventasActualesConsolidadas.length === 0) {
+                return alert('No hay datos suficientes para generar el PDF.');
+            }
+
+            const elemento = document.getElementById('areaImpresionPDF');
+            const selEv = document.getElementById('selectEvento').value;
+            const fechaHoy = new Date().toISOString().slice(0,10);
+
+            const opciones = {
+                margin:       0.3,
+                filename:     `Reporte_Ventas_${selEv}_${fechaHoy}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+            };
+
+            html2pdf().set(opciones).from(elemento).save();
+        }
+
+        function enviarEmailConPDF() {
+            if (ventasActualesConsolidadas.length === 0) {
+                return alert('No hay datos para enviar.');
+            }
+
+            // Descarga automática del reporte PDF para que el usuario pueda adjuntarlo
+            descargarPDF();
+
             const recaudado = document.getElementById('recaudado').innerText;
             const vendidas = document.getElementById('totalVentas').innerText;
             const asistencia = document.getElementById('asistencia').innerText;
             const eventoSel = document.getElementById('selectEvento');
             const nombreEventoStr = eventoSel.options[eventoSel.selectedIndex].text;
 
-            const asunto = encodeURIComponent(`Reporte de Ventas - ${nombreEventoStr}`);
+            const asunto = encodeURIComponent(`Reporte de Ventas PDF - ${nombreEventoStr}`);
             const cuerpo = encodeURIComponent(
-                `Hola,\n\nAdjunto el resumen del reporte de ventas:\n\n` +
+                `Estimado/a,\n\nAdjunto a este correo se encuentra el reporte en formato PDF recién descargado con los detalles del evento.\n\n` +
+                `Resumen del Evento:\n` +
+                `----------------------------------------\n` +
                 `Evento: ${nombreEventoStr}\n` +
                 `Recaudación Total: ${recaudado}\n` +
                 `Entradas Vendidas: ${vendidas}\n` +
-                `Asistencia Real: ${asistencia}\n\n` +
-                `Generado el: ${new Date().toLocaleString('es-AR')}`
+                `Asistencia Real: ${asistencia}\n` +
+                `Fecha del Reporte: ${new Date().toLocaleString('es-AR')}\n\n` +
+                `Por favor, adjunte el archivo PDF descargado a este mensaje.`
             );
 
-            window.location.href = `mailto:?subject=${asunto}&body=${cuerpo}`;
+            setTimeout(() => {
+                window.location.href = `mailto:?subject=${asunto}&body=${cuerpo}`;
+            }, 1000);
         }
     </script>
 </body>
