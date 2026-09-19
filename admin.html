@@ -2,35 +2,168 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard de Ventas e Historial</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Ventas e Historial - Administración</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #0f172a; margin: 0; padding: 30px; }
-        .container { max-width: 1200px; margin: 0 auto; display: none; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-        .selector-box { display: flex; align-items: center; gap: 10px; }
-        .selector-box select { padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: bold; font-size: 0.95rem; }
-        .stats { display: flex; gap: 20px; margin-bottom: 25px; }
-        .stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; flex: 1; text-align: center; }
-        .stat-box h3 { margin: 0; font-size: 0.9rem; color: #64748b; text-transform: uppercase; }
-        .stat-box p { margin: 10px 0 0 0; font-size: 1.8rem; font-weight: bold; color: #0f172a; }
-        .btn { padding: 10px 18px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f1f5f9; 
+            color: #0f172a; 
+            margin: 0; 
+            padding: 30px; 
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: none; 
+        }
+        .card { 
+            background: white; 
+            padding: 25px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
+        }
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 20px; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+        }
+        .selector-box { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        .selector-box select { 
+            padding: 10px 14px; 
+            border-radius: 6px; 
+            border: 1px solid #cbd5e1; 
+            font-weight: bold; 
+            font-size: 0.95rem; 
+            background-color: #fff;
+            color: #0f172a;
+            cursor: pointer;
+        }
+        .stats { 
+            display: flex; 
+            gap: 20px; 
+            margin-bottom: 25px; 
+            flex-wrap: wrap;
+        }
+        .stat-box { 
+            background: #f8fafc; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 8px; 
+            padding: 20px; 
+            flex: 1; 
+            min-width: 200px;
+            text-align: center; 
+        }
+        .stat-box h3 { 
+            margin: 0; 
+            font-size: 0.85rem; 
+            color: #64748b; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+        }
+        .stat-box p { 
+            margin: 10px 0 0 0; 
+            font-size: 1.8rem; 
+            font-weight: bold; 
+            color: #0f172a; 
+        }
+        .btn { 
+            padding: 10px 18px; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
         .btn-excel { background-color: #16a34a; color: white; }
+        .btn-excel:hover { background-color: #15803d; }
         .btn-email { background-color: #2563eb; color: white; }
+        .btn-email:hover { background-color: #1d4ed8; }
         .btn-logout { background-color: #ef4444; color: white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-        th { background-color: #1e293b; color: white; }
+        .btn-logout:hover { background-color: #dc2626; }
+        
+        .table-responsive {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+        }
+        th, td { 
+            padding: 12px 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #e2e8f0; 
+            font-size: 0.9rem;
+        }
+        th { 
+            background-color: #1e293b; 
+            color: white; 
+            font-weight: 600;
+        }
         tr:hover { background-color: #f8fafc; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+        
+        .badge { 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            font-size: 0.8rem; 
+            font-weight: bold; 
+            display: inline-block;
+        }
         .badge-success { background: #dcfce7; color: #166534; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-info { background: #e0f2fe; color: #0369a1; }
 
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .login-box { background: white; padding: 30px; border-radius: 12px; width: 100%; max-width: 380px; text-align: center; }
+        /* MODAL DE LOGIN */
+        .modal-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(15, 23, 42, 0.85); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 1000; 
+        }
+        .login-box { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            width: 100%; 
+            max-width: 380px; 
+            text-align: center; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
         .form-group { margin-bottom: 15px; text-align: left; }
         .form-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; color: #475569; }
-        .form-group input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
-        .btn-login { width: 100%; background-color: #1e293b; color: white; padding: 12px; font-size: 1rem; margin-top: 10px; }
+        .form-group input { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+        }
+        .btn-login { 
+            width: 100%; 
+            background-color: #1e293b; 
+            color: white; 
+            padding: 12px; 
+            font-size: 1rem; 
+            margin-top: 10px; 
+        }
+        .btn-login:hover { background-color: #0f172a; }
         .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 10px; display: none; }
     </style>
 </head>
@@ -40,11 +173,11 @@
     <div id="modalLogin" class="modal-overlay">
         <div class="login-box">
             <h2>Acceso Administrativo</h2>
-            <p style="color: #64748b; font-size: 0.9rem;">Ingresa tus credenciales para acceder</p>
+            <p style="color: #64748b; font-size: 0.9rem;">Ingresa tus credenciales para acceder al panel</p>
             <form id="formLogin" onsubmit="procesarLogin(event)">
                 <div class="form-group">
                     <label for="usuario">Usuario</label>
-                    <input type="text" id="usuario" required placeholder="Ej: PEPE o admin">
+                    <input type="text" id="usuario" required placeholder="Ej: admin">
                 </div>
                 <div class="form-group">
                     <label for="clave">Contraseña</label>
@@ -61,27 +194,26 @@
         <div class="card">
             <div class="header">
                 <div class="selector-box">
-                    <label for="selectEvento"><strong>Filtrar Evento:</strong></label>
+                    <label for="selectEvento"><strong>Seleccionar Evento:</strong></label>
                     <select id="selectEvento" onchange="cargarDashboard()">
-                        <option value="TODOS">-- Todos los Eventos --</option>
-                        <option value="EV-2026-01">EV-2026-01</option>
-                        <option value="EV-2026-02">EV-2026-02</option>
-                        <option value="EV-2026-03">EV-2026-03</option>
+                        <option value="TODOS">-- Cargando Eventos... --</option>
                     </select>
                 </div>
-                <div>
-                    <button class="btn btn-excel" onclick="descargarExcel()">Descargar Excel</button>
-                    <button class="btn btn-email" onclick="enviarEmail()">Enviar por Email</button>
-                    <button class="btn btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-excel" onclick="descargarExcel()">📊 Descargar Excel</button>
+                    <button class="btn btn-email" onclick="enviarEmail()">✉️ Enviar por Email</button>
+                    <button class="btn btn-logout" onclick="cerrarSesion()">🚪 Cerrar Sesión</button>
                 </div>
             </div>
 
-            <h1 id="tituloEvento">Cargando reporte...</h1>
+            <h1 id="tituloEvento" style="margin-top: 10px; margin-bottom: 20px; font-size: 1.5rem; color: #1e293b;">
+                Cargando reporte...
+            </h1>
 
             <div class="stats">
                 <div class="stat-box">
-                    <h3>Ventas Totales</h3>
-                    <p id="recaudado" style="color:#16a34a;">$0 ARS</p>
+                    <h3>Recaudación Total</h3>
+                    <p id="recaudado" style="color:#16a34a;">$0.00</p>
                 </div>
                 <div class="stat-box">
                     <h3>Entradas Vendidas</h3>
@@ -93,170 +225,313 @@
                 </div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>Evento</th>
-                        <th>ID Reserva</th>
-                        <th>Fecha</th>
-                        <th>Cliente</th>
-                        <th>Email</th>
-                        <th>Asiento</th>
-                        <th>Método</th>
-                        <th>Monto</th>
-                    </tr>
-                </thead>
-                <tbody id="tablaVentas">
-                    <tr><td colspan="8" style="text-align: center;">Cargando datos...</td></tr>
-                </tbody>
-            </table>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Evento</th>
+                            <th>ID Reserva</th>
+                            <th>Fecha Venta</th>
+                            <th>Cliente</th>
+                            <th>Contacto / Email</th>
+                            <th>Asiento</th>
+                            <th>Método Pago</th>
+                            <th>Monto</th>
+                            <th>Asistencia</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaVentas">
+                        <tr>
+                            <td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">
+                                Selecciona un evento para visualizar los datos.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
+        let eventosListaGlobal = [];
+        let ventasActualesConsolidadas = [];
+
         document.addEventListener('DOMContentLoaded', () => {
-            const sesion = JSON.parse(localStorage.getItem('usuarioLogueado') || '{}');
-            const rol = String(sesion.tipo || sesion.Tipo || sesion.rol || sesion.Rol || '').toLowerCase();
-            if (rol === 'super' || rol === 'adm' || rol === 'admin') {
-                ocultarModalYMostrarDashboard(sesion);
+            const sesionGuardada = sessionStorage.getItem('usuarioLogueado');
+            if (sesionGuardada) {
+                try {
+                    const datos = JSON.parse(sesionGuardada);
+                    if (datos && datos.usuario) {
+                        iniciarDashboard();
+                    }
+                } catch (e) {
+                    console.error('Error al verificar sesión:', e);
+                }
             }
         });
 
-        async function procesarLogin(event) {
-            event.preventDefault();
-            const usuarioInput = document.getElementById('usuario').value.trim();
-            const claveInput = document.getElementById('clave').value.trim();
-            const divError = document.getElementById('mensajeError');
-
-            divError.style.display = 'none';
+        async function procesarLogin(e) {
+            e.preventDefault();
+            const usuario = document.getElementById('usuario').value.trim();
+            const clave = document.getElementById('clave').value;
+            const errDiv = document.getElementById('mensajeError');
+            errDiv.style.display = 'none';
+            errDiv.innerText = '';
 
             try {
                 const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usuario: usuarioInput, clave: claveInput })
+                    body: JSON.stringify({ usuario, clave })
                 });
 
                 const data = await res.json();
 
-                if (!res.ok || !data.exito) {
-                    divError.innerText = data.mensaje || 'Usuario o contraseña incorrectos.';
-                    divError.style.display = 'block';
-                    return;
+                if (res.ok && (data.exito || data.usuario)) {
+                    sessionStorage.setItem('usuarioLogueado', JSON.stringify({
+                        usuario: data.usuario || usuario,
+                        tipo: data.tipo || 'admin'
+                    }));
+                    iniciarDashboard();
+                } else {
+                    errDiv.innerText = data.mensaje || 'Credenciales incorrectas.';
+                    errDiv.style.display = 'block';
                 }
-
-                const tipoDB = String(data.tipo || data.rol || (typeof data.usuario === 'object' ? data.usuario.tipo : '') || '').toLowerCase().trim();
-
-                if (tipoDB !== 'super' && tipoDB !== 'adm' && tipoDB !== 'admin') {
-                    divError.innerText = `Acceso denegado.`;
-                    divError.style.display = 'block';
-                    return;
-                }
-
-                const usuarioSesion = typeof data.usuario === 'object' ? data.usuario : data;
-                usuarioSesion.tipo = tipoDB;
-                localStorage.setItem('usuarioLogueado', JSON.stringify(usuarioSesion));
-                ocultarModalYMostrarDashboard(usuarioSesion);
-
-            } catch (error) {
-                divError.innerText = "Error de conexión con el servidor.";
-                divError.style.display = 'block';
+            } catch (err) {
+                console.error(err);
+                errDiv.innerText = 'Error de conexión con el servidor.';
+                errDiv.style.display = 'block';
             }
         }
 
-        async function ocultarModalYMostrarDashboard(usuarioSesion) {
+        async function iniciarDashboard() {
             document.getElementById('modalLogin').style.display = 'none';
             document.getElementById('contenidoDashboard').style.display = 'block';
-            await cargarListaEventos();
-            cargarDashboard();
+            await cargarEventosEnSelect();
+            await cargarDashboard();
         }
 
-        async function cargarListaEventos() {
+        function cerrarSesion() {
+            sessionStorage.removeItem('usuarioLogueado');
+            window.location.reload();
+        }
+
+        async function cargarEventosEnSelect() {
+            const select = document.getElementById('selectEvento');
             try {
-                const res = await fetch('/api/lista-eventos');
-                if (!res.ok) return;
-                const data = await res.json();
+                const res = await fetch('/api/eventos');
+                if (!res.ok) throw new Error('Error al obtener la lista de eventos');
                 
-                if (data.eventos && data.eventos.length > 0) {
-                    const select = document.getElementById('selectEvento');
-                    select.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
-                    data.eventos.forEach(evId => {
-                        select.innerHTML += `<option value="${evId}">${evId}</option>`;
-                    });
-                }
-            } catch(e) {
-                console.error("Error cargando lista de eventos", e);
+                const eventos = await res.json();
+                eventosListaGlobal = Array.isArray(eventos) ? eventos : [];
+
+                select.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
+
+                eventosListaGlobal.forEach(ev => {
+                    const evId = ev.id || ev.evento_id;
+                    const evNombre = ev.nombre || `Evento ${evId}`;
+                    const evFecha = ev.fecha ? ` (${ev.fecha})` : '';
+                    select.innerHTML += `<option value="${evId}">${evNombre}${evFecha}</option>`;
+                });
+            } catch (err) {
+                console.error(err);
+                select.innerHTML = '<option value="TODOS">-- Todos los Eventos --</option>';
             }
         }
 
         async function cargarDashboard() {
-            const eventoId = document.getElementById('selectEvento').value;
-            const tbody = document.getElementById('tablaVentas');
+            const select = document.getElementById('selectEvento');
+            const eventoSeleccionadoId = select.value;
             const titulo = document.getElementById('tituloEvento');
+            const tbody = document.getElementById('tablaVentas');
 
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/historial`);
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #64748b; padding: 20px;">Cargando información...</td></tr>';
 
-                const data = await res.json();
+            ventasActualesConsolidadas = [];
 
-                titulo.innerText = `Reporte: ${data.nombre}`;
-                document.getElementById('recaudado').innerText = `$${(data.recaudado || 0).toLocaleString()} ARS`;
-                document.getElementById('totalVentas').innerText = data.totalVentas || 0;
-                document.getElementById('asistencia').innerText = data.asistencia || 0;
-
-                const ventas = data.historialVentas || [];
-                tbody.innerHTML = '';
+            if (eventoSeleccionadoId === 'TODOS') {
+                titulo.innerText = '📈 Reporte Consolidado - Todos los Eventos';
                 
-                if (ventas.length > 0) {
-                    ventas.forEach(v => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td><strong>${v.eventoId || '-'}</strong></td>
-                                <td>${v.idReserva || '-'}</td>
-                                <td>${v.fecha ? new Date(v.fecha).toLocaleDateString() : '-'}</td>
-                                <td>${v.cliente || '-'}</td>
-                                <td>${v.email || '-'}</td>
-                                <td><strong>${v.asiento || '-'}</strong></td>
-                                <td>${v.metodoPago || '-'}</td>
-                                <td>$${v.monto || 0}</td>
-                            </tr>`;
-                    });
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay registros de ventas para la selección.</td></tr>';
+                // Intenta solicitar endpoint global o itera sobre todos los eventos existentes
+                try {
+                    const resGlobal = await fetch('/api/ventas/detalle/TODOS');
+                    if (resGlobal.ok) {
+                        const datos = await resGlobal.json();
+                        if (Array.isArray(datos)) ventasActualesConsolidadas = datos;
+                    }
+                } catch(e) {
+                    // Fallback: consulta individual por cada evento
                 }
-            } catch (e) {
-                titulo.innerText = `Reporte de Ventas`;
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #dc2626;">Error al consultar el servidor: ${e.message}</td></tr>`;
+
+                if (ventasActualesConsolidadas.length === 0 && eventosListaGlobal.length > 0) {
+                    const promesas = eventosListaGlobal.map(async (ev) => {
+                        const evId = ev.id || ev.evento_id;
+                        try {
+                            const res = await fetch(`/api/ventas/detalle/${evId}`);
+                            if (res.ok) {
+                                const ventasEv = await res.json();
+                                if (Array.isArray(ventasEv)) {
+                                    ventasEv.forEach(v => {
+                                        if (!v.eventoNombre && !v.evento) {
+                                            v.eventoNombre = ev.nombre || evId;
+                                        }
+                                        ventasActualesConsolidadas.push(v);
+                                    });
+                                }
+                            }
+                        } catch(e) {
+                            console.error(`Error al cargar ventas para ${evId}:`, e);
+                        }
+                    });
+                    await Promise.all(promesas);
+                }
+            } else {
+                const eventoObj = eventosListaGlobal.find(e => String(e.id || e.evento_id) === String(eventoSeleccionadoId));
+                const nombreEv = eventoObj ? eventoObj.nombre : eventoSeleccionadoId;
+                titulo.innerText = `📌 Reporte de Evento: ${nombreEv}`;
+
+                try {
+                    const res = await fetch(`/api/ventas/detalle/${eventoSeleccionadoId}`);
+                    if (res.ok) {
+                        const ventas = await res.json();
+                        if (Array.isArray(ventas)) {
+                            ventas.forEach(v => {
+                                if (!v.eventoNombre) v.eventoNombre = nombreEv;
+                                ventasActualesConsolidadas.push(v);
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error al cargar ventas del evento:", err);
+                }
             }
+
+            renderizarTablaYEstadisticas();
+        }
+
+        function renderizarTablaYEstadisticas() {
+            const tbody = document.getElementById('tablaVentas');
+            tbody.innerHTML = '';
+
+            let totalRecaudado = 0;
+            let totalEntradas = ventasActualesConsolidadas.length;
+            let totalAsistencias = 0;
+
+            if (totalEntradas === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; color: #94a3b8; padding: 20px;">
+                            No se encontraron registros de ventas para la selección actual.
+                        </td>
+                    </tr>
+                `;
+                actualizarTarjetas(0, 0, 0);
+                return;
+            }
+
+            ventasActualesConsolidadas.forEach(v => {
+                const eventoNombre = v.eventoNombre || v.evento || v.nombre_evento || v.evento_id || v.eventoId || 'General';
+                const ventaId = v.id || v.venta_id || '-';
+                const cliente = `${v.nombre || ''} ${v.apellido || ''}`.trim() || 'Cliente Sin Nombre';
+                const email = v.email || '';
+                const tel = v.telefono || v.contacto || '';
+                const contactoStr = `${email ? email : ''}${email && tel ? ' / ' : ''}${tel ? tel : ''}` || 'Sin Contacto';
+                const asiento = v.codigoAsiento || v.asiento || 'General';
+                
+                const metodoPagoRaw = (v.metodo_pago || v.metodoPago || 'Efectivo').toLowerCase();
+                const metodoPago = metodoPagoRaw.includes('mercadopago') || metodoPagoRaw.includes('mp') ? 'Mercado Pago' : 'Efectivo';
+                
+                const monto = parseFloat(v.monto_total || v.monto || v.precio || 0);
+                totalRecaudado += monto;
+
+                const fechaStr = v.fechaCompra ? new Date(v.fechaCompra).toLocaleString('es-AR') : (v.fecha || 'N/A');
+
+                const asistio = v.asistio === 1 || v.asistio === true || v.ingresado === 1 || v.ingresado === true;
+                if (asistio) totalAsistencias++;
+
+                const badgeAsistencia = asistio 
+                    ? `<span class="badge badge-success">✓ Ingresó</span>` 
+                    : `<span class="badge badge-warning">Pendiente</span>`;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><strong>${eventoNombre}</strong></td>
+                        <td><code>${ventaId}</code></td>
+                        <td>${fechaStr}</td>
+                        <td><strong>${cliente}</strong></td>
+                        <td><small style="color: #475569;">${contactoStr}</small></td>
+                        <td><span class="badge badge-info">${asiento}</span></td>
+                        <td>${metodoPago}</td>
+                        <td style="font-weight: bold; color: #16a34a;">$${monto.toFixed(2)}</td>
+                        <td>${badgeAsistencia}</td>
+                    </tr>
+                `;
+            });
+
+            actualizarTarjetas(totalRecaudado, totalEntradas, totalAsistencias);
+        }
+
+        function actualizarTarjetas(recaudado, totalVentas, asistencia) {
+            document.getElementById('recaudado').innerText = `$${recaudado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('totalVentas').innerText = totalVentas;
+            document.getElementById('asistencia').innerText = asistencia;
         }
 
         function descargarExcel() {
-            const eventoId = document.getElementById('selectEvento').value;
-            window.location.href = `/api/eventos/${eventoId}/descargar-excel`;
-        }
-
-        async function enviarEmail() {
-            const eventoId = document.getElementById('selectEvento').value;
-            const email = prompt("Ingresa el correo de destino para enviar el informe:");
-            if (!email) return;
-
-            try {
-                const res = await fetch('/api/config/email-informe', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, eventoId })
-                });
-                const data = await res.json();
-                alert(data.mensaje || 'Operación completada');
-            } catch (err) {
-                alert("Error enviando el correo.");
+            if (ventasActualesConsolidadas.length === 0) {
+                return alert('No hay datos disponibles para exportar.');
             }
+
+            let csvContent = "\uFEFF"; // BOM UTF-8 para mantener tildes y caracteres en Excel
+            csvContent += "Evento;ID Reserva;Fecha;Cliente;Email;Telefono;Asiento;Metodo Pago;Monto;Asistencia\n";
+
+            ventasActualesConsolidadas.forEach(v => {
+                const eventoNombre = (v.eventoNombre || v.evento || 'General').replace(/;/g, ' ');
+                const ventaId = v.id || v.venta_id || '-';
+                const cliente = `${v.nombre || ''} ${v.apellido || ''}`.trim().replace(/;/g, ' ');
+                const email = (v.email || '').replace(/;/g, ' ');
+                const tel = (v.telefono || v.contacto || '').replace(/;/g, ' ');
+                const asiento = v.codigoAsiento || v.asiento || 'General';
+                const metodo = (v.metodo_pago || v.metodoPago || 'Efectivo').replace(/;/g, ' ');
+                const monto = parseFloat(v.monto_total || v.monto || v.precio || 0).toFixed(2);
+                const asistio = (v.asistio === 1 || v.asistio === true || v.ingresado === 1) ? 'SI' : 'NO';
+                const fecha = v.fechaCompra ? new Date(v.fechaCompra).toLocaleString('es-AR') : (v.fecha || '');
+
+                csvContent += `"${eventoNombre}";"${ventaId}";"${fecha}";"${cliente}";"${email}";"${tel}";"${asiento}";"${metodo}";"${monto}";"${asistio}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            
+            const selEv = document.getElementById('selectEvento').value;
+            const filename = `Reporte_Ventas_${selEv}_${new Date().toISOString().slice(0,10)}.csv`;
+
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
-        function cerrarSesion() {
-            localStorage.removeItem('usuarioLogueado');
-            window.location.reload();
+        function enviarEmail() {
+            const recaudado = document.getElementById('recaudado').innerText;
+            const vendidas = document.getElementById('totalVentas').innerText;
+            const asistencia = document.getElementById('asistencia').innerText;
+            const eventoSel = document.getElementById('selectEvento');
+            const nombreEventoStr = eventoSel.options[eventoSel.selectedIndex].text;
+
+            const asunto = encodeURIComponent(`Reporte de Ventas - ${nombreEventoStr}`);
+            const cuerpo = encodeURIComponent(
+                `Hola,\n\nAdjunto el resumen del reporte de ventas:\n\n` +
+                `Evento: ${nombreEventoStr}\n` +
+                `Recaudación Total: ${recaudado}\n` +
+                `Entradas Vendidas: ${vendidas}\n` +
+                `Asistencia Real: ${asistencia}\n\n` +
+                `Generado el: ${new Date().toLocaleString('es-AR')}`
+            );
+
+            window.location.href = `mailto:?subject=${asunto}&body=${cuerpo}`;
         }
     </script>
 </body>
