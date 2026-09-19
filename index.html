@@ -1617,6 +1617,43 @@ async function crearCupon() {
                 alert('Error al conectar con el servidor para enviar el correo.');
             }
         }
+
+
+    const TIEMPO_INACTIVIDAD_MS = 3 * 60 * 1000; // 3 minutos
+    let timerInactividad = null;
+
+    function iniciarTimerInactividad() {
+        clearTimeout(timerInactividad);
+        timerInactividad = setTimeout(() => {
+            alert('Sesión cerrada automáticamente por inactividad.');
+            
+            // 1. Limpiar credenciales y datos guardados en memoria
+            sessionStorage.clear();
+            localStorage.clear();
+
+            // 2. Acción al vencer el tiempo (elige la opción que prefieras):
+            // Opción A: Redirigir a la pantalla de inicio de sesión
+            cerrarSesion(); 
+
+            // Opción B: Si index.html tiene un modal de login integrado, recargar la página:
+            // window.location.reload();
+        }, TIEMPO_INACTIVIDAD_MS);
+    }
+
+    function reiniciarTimerInactividad() {
+        iniciarTimerInactividad();
+    }
+
+    // Iniciar el control cuando la página cargue
+    document.addEventListener('DOMContentLoaded', () => {
+        iniciarTimerInactividad();
+
+        // Detectar interacción del usuario para reiniciar el temporizador
+        ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'].forEach(evento => {
+            window.addEventListener(evento, reiniciarTimerInactividad, true);
+        });
+    });
+		
     </script>
 </body>
 </html>
