@@ -1666,7 +1666,16 @@ async function cargarListaGestionEventos() {
             window.addEventListener(evento, reiniciarTimerInactividad, true);
         });
     });
-		
+	function mostrarTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+
+    if (tabId === 'tabReporteEventos') {
+        cargarReportesConsolidados();
+    } else if (tabId === 'tabCupones') {
+        cargarCuponesListado();
+    }
+}
     </script>
 </body>
 </html>
