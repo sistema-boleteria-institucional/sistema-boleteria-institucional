@@ -1653,7 +1653,7 @@ async function cargarListaGestionEventos() {
         }, TIEMPO_INACTIVIDAD_MS);
     }
 
-    function reiniciarTimerInactividad() {
+    function	 reiniciarTimerInactividad() {
         iniciarTimerInactividad();
     }
 
@@ -1674,6 +1674,75 @@ async function cargarListaGestionEventos() {
         cargarReportesConsolidados();
     } else if (tabId === 'tabCupones') {
         cargarCuponesListado();
+    }
+}
+		// Alterna el input visible según el tipo de cupón seleccionado
+function cambiarTipoCupon() {
+    const tipo = document.getElementById('cupTipo').value;
+    const grpPorcentaje = document.getElementById('grpPorcentaje');
+    const grpMonto = document.getElementById('grpMonto');
+
+    if (tipo === 'porcentaje') {
+        grpPorcentaje.style.display = 'block';
+        grpMonto.style.display = 'none';
+    } else {
+        grpPorcentaje.style.display = 'none';
+        grpMonto.style.display = 'block';
+    }
+}
+
+// Envía la solicitud al servidor para registrar el nuevo cupón
+async function crearCupon() {
+    const eventoId = document.getElementById('cupEventoId').value;
+    const codigo = document.getElementById('cupCodigo').value.trim();
+    const tipo = document.getElementById('cupTipo').value;
+
+    const porcentaje = tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0;
+    const montoFijo = tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0;
+
+    // Validaciones básicas
+    if (!eventoId) return alert('Por favor, selecciona un evento.');
+    if (!codigo) return alert('Por favor, ingresa un código para el cupón.');
+
+    if (tipo === 'porcentaje' && (porcentaje <= 0 || porcentaje > 100)) {
+        return alert('Ingresa un porcentaje de descuento válido (entre 1 y 100).');
+    }
+    if (tipo === 'monto' && montoFijo <= 0) {
+        return alert('Ingresa un monto de descuento válido (mayor a 0).');
+    }
+
+    const body = {
+        evento_id: eventoId,
+        codigo: codigo,
+        porcentaje: porcentaje,
+        monto_fijo: montoFijo,
+        rol: usuarioSesion ? usuarioSesion.tipo : ''
+    };
+
+    try {
+        const res = await fetch('/api/cupones/crear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        
+        const data = await res.json();
+        alert(data.mensaje);
+
+        if (data.exito) {
+            // Limpiar campos del formulario
+            document.getElementById('cupCodigo').value = '';
+            document.getElementById('cupPorcentaje').value = '';
+            document.getElementById('cupMontoFijo').value = '';
+            
+            // Recargar la tabla si la función existe
+            if (typeof cargarCuponesListado === 'function') {
+                cargarCuponesListado();
+            }
+        }
+    } catch (e) {
+        console.error('Error al crear cupón:', e);
+        alert('Error de conexión al intentar guardar el cupón.');
     }
 }
     </script>
