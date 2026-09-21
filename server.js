@@ -1,588 +1,1382 @@
+const nodemailer = require('nodemailer');
+const express = require('express');
+const path = require('path');
+const crypto = require('crypto');
+const { createClient } = require('@libsql/client');
+const QRCode = require('qrcode');
 
+const app = express();
+const HMAC_SECRET = process.env.HMAC_SECRET || 'llave-secreta-boleteria-super-segura-2026';
 
+// Middlewares
+app.use(express.json());
+app.use(express.static(__dirname));
 
+// Configuración de Nodemailer
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.GMAIL_USER || 'gonzalog2019@gmail.com',
+        pass: process.env.GMAIL_PASS || 'wwopwhvtbnoxkahn'
+    },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000
+});
 
+// Seguridad HMAC
+function generarFirma(ventaId, asientoCodigo) {
+    return crypto
+        .createHmac('sha256', HMAC_SECRET)
+        .update(`${ventaId}:${asientoCodigo}`)
+        .digest('hex');
+}
 
+function verificarFirmaMiddleware(req, res, next) {
+    const { id } = req.params;
+    const { sig } = req.query;
 
-<!DOCTYPE html>
-<html
-  lang="en"
-    class="html-auth"
-  
-  data-color-mode="auto" data-light-theme="light" data-dark-theme="dark"
-  data-a11y-animated-images="system" data-a11y-link-underlines="true"
-  
-  >
+    if (!sig) return res.status(403).json({ exito: false, mensaje: 'Firma de seguridad requerida' });
 
+    const verificar = (codigoAsiento) => {
+        const firmaEsperada = generarFirma(id, codigoAsiento);
+        if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(firmaEsperada))) return next();
+        return res.status(401).json({ exito: false, mensaje: 'Entrada inválida o firma alterada' });
+    };
 
+    if (db) {
+        db.execute({ sql: "SELECT codigoAsiento FROM ventas WHERE id = ?", args: [id] })
+            .then(resV => {
+                if (resV.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+                verificar(resV.rows[0].codigoAsiento);
+            })
+            .catch(err => res.status(500).json({ exito: false, mensaje: 'Error al verificar firma' }));
+    } else {
+        const venta = ventasMemoria.find(v => v.id == id);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+        verificar(venta.codigoAsiento);
+    }
+}
 
+// Conexión a DB Turso
+let db = null;
+if (process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN) {
+    db = createClient({
+        url: process.env.TURSO_DATABASE_URL,
+        authToken: process.env.TURSO_AUTH_TOKEN
+    });
+    console.log(' Conectado exitosamente a la base de datos de Turso.');
+} else {
+    console.warn('⚠️ No se encontraron las credenciales de Turso. Usando almacenamiento temporal en memoria.');
+}
 
-  <head>
-    <meta charset="utf-8">
-  <link rel="dns-prefetch" href="https://github.githubassets.com">
-  <link rel="dns-prefetch" href="https://avatars.githubusercontent.com">
-  <link rel="dns-prefetch" href="https://github-cloud.s3.amazonaws.com">
-  <link rel="dns-prefetch" href="https://user-images.githubusercontent.com/">
-  <link rel="preconnect" href="https://github.githubassets.com" crossorigin>
-  <link rel="preconnect" href="https://avatars.githubusercontent.com">
+async function inicializarTablasDB() {
+    if (!db) return;
+    try {
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario TEXT UNIQUE,
+                clave TEXT,
+                tipo TEXT,
+                identificacion TEXT
+            );
+        `);
 
-<script type="importmap">{"imports":{"react":"https://github.githubassets.com/assets/react-e27d1b3e03961e68.js","react-dom":"https://github.githubassets.com/assets/react-dom-e5fd46a22d5c4058.js","react-dom/client":"https://github.githubassets.com/assets/react-dom-client-1b4a3ee065998cea.js","react-is":"https://github.githubassets.com/assets/react-is-e0b593954b4706d8.js","react-reconciler":"https://github.githubassets.com/assets/react-reconciler-8e99e505c4429605.js","react/compiler-runtime":"https://github.githubassets.com/assets/react-compiler-runtime-4610bd6d3de9c049.js","react/jsx-dev-runtime":"https://github.githubassets.com/assets/react-jsx-dev-runtime-ea55d68667d559e5.js","react/jsx-runtime":"https://github.githubassets.com/assets/react-jsx-runtime-4915cb0f5b3aff04.js","scheduler":"https://github.githubassets.com/assets/scheduler-58b860b049ca307c.js"}}</script>
-<meta name="react-profiling" content="0" data-turbo-transient="true" />
-<meta name="react-import-map" content="react,react-dom,react-dom/client,react-dom/profiling,react-is,react-reconciler,react/compiler-runtime,react/jsx-dev-runtime,react/jsx-runtime,scheduler@777f63f87cd0" data-turbo-track="reload" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-e27d1b3e03961e68.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-compiler-runtime-4610bd6d3de9c049.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/scheduler-58b860b049ca307c.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-dom-e5fd46a22d5c4058.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-dom-client-1b4a3ee065998cea.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-is-e0b593954b4706d8.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-jsx-runtime-4915cb0f5b3aff04.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-reconciler-8e99e505c4429605.js" />
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS eventos (
+                id TEXT PRIMARY KEY,
+                nombre TEXT,
+                fecha TEXT,
+                hora TEXT,
+                precioGeneral REAL,
+                dispGen INTEGER,
+                precioGradas REAL,
+                dispGrada INTEGER
+            );
+        `);
 
-  
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS cupones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evento_id TEXT,
+                codigo TEXT,
+                porcentaje REAL DEFAULT 0,
+                monto_fijo REAL DEFAULT 0
+            );
+        `);
 
-  <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/light-99f877e9ddfc0e51.css" /><link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/light_high_contrast-48fdd0811afbab3c.css" /><link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/dark-79ad2ace604703b3.css" /><link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/dark_high_contrast-24484a076f02295f.css" /><link data-color-theme="light" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light-99f877e9ddfc0e51.css" /><link data-color-theme="light_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_high_contrast-48fdd0811afbab3c.css" /><link data-color-theme="light_colorblind" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_colorblind-f4bf1142976e4bbf.css" /><link data-color-theme="light_colorblind_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_colorblind_high_contrast-f661b49995ba0bd8.css" /><link data-color-theme="light_tritanopia" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_tritanopia-0b38d22346321c92.css" /><link data-color-theme="light_tritanopia_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/light_tritanopia_high_contrast-f1c62c9e70259b9f.css" /><link data-color-theme="dark" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark-79ad2ace604703b3.css" /><link data-color-theme="dark_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_high_contrast-24484a076f02295f.css" /><link data-color-theme="dark_colorblind" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_colorblind-f50cacf0a86b9929.css" /><link data-color-theme="dark_colorblind_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_colorblind_high_contrast-e61d4f4ca17852c2.css" /><link data-color-theme="dark_tritanopia" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_tritanopia-39c10993d5603fac.css" /><link data-color-theme="dark_tritanopia_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_tritanopia_high_contrast-73236c840c0c7d90.css" /><link data-color-theme="dark_dimmed" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_dimmed-0de76f07cc035b10.css" /><link data-color-theme="dark_dimmed_high_contrast" crossorigin="anonymous" media="all" rel="stylesheet" data-href="https://github.githubassets.com/assets/dark_dimmed_high_contrast-fd1500c8744e40d6.css" />
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS asientos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evento_id TEXT,
+                codigoAsiento TEXT,
+                tipoZona TEXT,
+                precio REAL,
+                vendido INTEGER DEFAULT 0,
+                habilitado INTEGER DEFAULT 1,
+                asistio INTEGER DEFAULT 0
+            );
+        `);
 
-  <style type="text/css">
-    :root {
-      --tab-size-preference: 4;
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS ventas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                evento_id TEXT,
+                asiento_id INTEGER,
+                codigoAsiento TEXT,
+                nombre TEXT,
+                apellido TEXT,
+                contacto TEXT,
+                email TEXT,
+                metodo_pago TEXT,
+                monto_total REAL,
+                vendedor TEXT,
+                fechaCompra TEXT
+            );
+        `);
+
+        const resUser = await db.execute("SELECT COUNT(*) as cant FROM usuarios");
+        if (resUser.rows[0].cant === 0) {
+            await db.execute({
+                sql: "INSERT INTO usuarios (usuario, clave, tipo, identificacion) VALUES (?, ?, ?, ?)",
+                args: ['admin', '1234', 'super', 'SUP-01']
+            });
+            await db.execute({
+                sql: "INSERT INTO usuarios (usuario, clave, tipo, identificacion) VALUES (?, ?, ?, ?)",
+                args: ['operario1', '1234', 'vendedor', 'VEN-01']
+            });
+        }
+        console.log(' Tablas creadas/verificadas en Turso.');
+    } catch (e) {
+        console.error('Error al inicializar las tablas de Turso:', e);
+    }
+}
+
+inicializarTablasDB();
+
+// Memoria Temporal
+let usuariosMemoria = [
+    { id: 1, usuario: 'admin', clave: '1234', tipo: 'super', identificacion: 'SUP-01' },
+    { id: 2, usuario: 'operario1', clave: '1234', tipo: 'vendedor', identificacion: 'VEN-01' }
+];
+let eventosMemoria = [];
+let cuponesMemoria = [{ codigo: 'DESCUENTO10', porcentaje: 10, monto_fijo: 0 }];
+let asientosMemoria = {};
+let ventasMemoria = [];
+let configMemoria = {};
+
+async function generarAsientosParaEvento(eventoObj) {
+    const pGen = Number(eventoObj.precioGeneral) || 1500;
+    const pGrada = Number(eventoObj.precioGradas) || 3000;
+    const totalGen = Math.min(Number(eventoObj.dispGen) || 112, 112);
+    const totalGrada = Math.min(Number(eventoObj.dispGrada) || 24, 24);
+
+    if (db) {
+        for (let i = 1; i <= totalGen; i++) {
+            await db.execute({
+                sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                args: [eventoObj.id, `GEN-A${i}`, 'General', pGen]
+            });
+        }
+        const porG1 = Math.ceil(totalGrada / 2);
+        const porG2 = totalGrada - porG1;
+
+        for (let i = 1; i <= porG1; i++) {
+            await db.execute({
+                sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                args: [eventoObj.id, `G1-${i}`, 'Grada', pGrada]
+            });
+        }
+        for (let i = 1; i <= porG2; i++) {
+            await db.execute({
+                sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                args: [eventoObj.id, `G2-${i}`, 'Grada', pGrada]
+            });
+        }
+    } else {
+        let lista = [];
+        let idCounter = 1;
+
+        for (let i = 1; i <= totalGen; i++) {
+            lista.push({ id: idCounter++, codigoAsiento: `GEN-A${i}`, tipoZona: 'General', precio: pGen, vendido: 0, habilitado: 1, asistio: 0 });
+        }
+        const porG1 = Math.ceil(totalGrada / 2);
+        const porG2 = totalGrada - porG1;
+        for (let i = 1; i <= porG1; i++) {
+            lista.push({ id: idCounter++, codigoAsiento: `G1-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
+        }
+        for (let i = 1; i <= porG2; i++) {
+            lista.push({ id: idCounter++, codigoAsiento: `G2-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
+        }
+        asientosMemoria[eventoObj.id] = lista;
+    }
+}
+
+// Endpoints Auth & Eventos
+app.post('/api/login', async (req, res) => {
+    const { usuario, clave } = req.body;
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: "SELECT * FROM usuarios WHERE LOWER(usuario) = LOWER(?) AND clave = ?",
+                args: [usuario || '', clave || '']
+            });
+            if (result.rows.length > 0) {
+                const u = result.rows[0];
+                return res.json({ exito: true, usuario: u.usuario, tipo: u.tipo, id: u.id });
+            }
+        } catch (e) { console.error(e); }
+    } else {
+        const usr = usuariosMemoria.find(u => u.usuario.toLowerCase() === (usuario || '').toLowerCase() && u.clave === clave);
+        if (usr) return res.json({ exito: true, usuario: usr.usuario, tipo: usr.tipo, id: usr.id });
+    }
+    res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
+});
+
+// 1. Endpoint para devolver el historial en JSON
+app.get('/api/eventos/:eventoId/historial', async (req, res) => {
+    const { eventoId } = req.params;
+    try {
+        let ventas = [];
+        let asistentes = 0;
+
+        if (db) {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            const aRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+            ventas = vRes.rows || [];
+            asistentes = (aRes.rows || []).filter(a => a.vendido === 1 && a.asistio === 1).length;
+        } else {
+            ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
+            const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
+            asistentes = listaA.filter(a => a.vendido === 1 && a.asistio === 1).length;
+        }
+
+        const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
+
+        return res.json({
+            nombre: `Evento ${eventoId}`,
+            recaudado,
+            totalVentas: ventas.length,
+            asistencia: asistentes,
+            historialVentas: ventas.map(v => ({
+                idReserva: v.id || v.idReserva || '-',
+                fecha: v.fechaCompra || v.fecha || null,
+                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-'),
+                email: v.email || '-',
+                asiento: v.codigoAsiento || v.asiento || '-',
+                metodoPago: v.metodo_pago || v.metodoPago || '-',
+                monto: v.monto_total || v.monto || 0,
+                estado: 'Completado'
+            }))
+        });
+    } catch (e) {
+        console.error("Error en /historial:", e);
+        return res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
+    }
+});
+
+// 2. Endpoint para descargar el reporte en formato CSV (compatible con Excel)
+app.get('/api/eventos/:eventoId/descargar-excel', async (req, res) => {
+    const { eventoId } = req.params;
+    try {
+        let ventas = [];
+        if (db) {
+            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            ventas = vRes.rows || [];
+        } else {
+            ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
+        }
+
+        // Generación de cabecera e hileras CSV
+        let csv = "\uFEFFID Reserva;Fecha;Cliente;Email;Asiento;Metodo Pago;Monto\n";
+        ventas.forEach(v => {
+            const cliente = v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-');
+            csv += `${v.id || v.idReserva || '-'};${v.fechaCompra || v.fecha || '-'};${cliente};${v.email || '-'};${v.codigoAsiento || v.asiento || '-'};${v.metodo_pago || v.metodoPago || '-'};${v.monto_total || v.monto || 0}\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="reporte_${eventoId}.csv"`);
+        return res.status(200).send(csv);
+    } catch (e) {
+        console.error("Error en descarga Excel:", e);
+        return res.status(500).send("Error generando el archivo Excel.");
+    }
+});
+
+            
+app.get('/api/eventos', async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute("SELECT * FROM eventos");
+            return res.json(result.rows);
+        } catch (e) { console.error(e); }
+    }
+    res.json(eventosMemoria);
+});
+
+app.post('/api/eventos/crear', async (req, res) => {
+    const evento = req.body;
+    if (db) {
+        try {
+            await db.execute({
+                sql: "INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                args: [evento.id, evento.nombre, evento.fecha, evento.hora, evento.precioGeneral, evento.dispGen, evento.precioGradas, evento.dispGrada]
+            });
+            await generarAsientosParaEvento(evento);
+            return res.json({ exito: true, mensaje: 'Evento creado con éxito' });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al crear evento' });
+        }
+    } else {
+        eventosMemoria.push(evento);
+        await generarAsientosParaEvento(evento);
+        return res.json({ exito: true, mensaje: 'Evento creado (Memoria)' });
+    }
+});
+
+app.post('/api/config/email-informe', (req, res) => {
+    const { email } = req.body;
+    configMemoria.emailInforme = email;
+    res.json({ exito: true, mensaje: 'Email de informes guardado correctamente' });
+});
+
+app.post('/api/cupones/crear', async (req, res) => {
+    try {
+        const { evento_id, codigo, porcentaje, monto_fijo } = req.body;
+        if (!evento_id || !codigo) return res.status(400).json({ exito: false, mensaje: 'El evento y el código son obligatorios.' });
+
+        const pct = parseFloat(porcentaje) || 0;
+        const monto = parseFloat(monto_fijo) || 0;
+
+        if (pct > 0 && monto > 0) return res.status(400).json({ exito: false, mensaje: 'No puedes aplicar Porcentaje y Monto Fijo simultáneamente.' });
+        if (pct === 0 && monto === 0) return res.status(400).json({ exito: false, mensaje: 'El cupón debe tener un valor mayor a 0.' });
+
+        if (db) {
+            await db.execute({
+                sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo) VALUES (?, ?, ?, ?)',
+                args: [evento_id, codigo.toUpperCase(), pct, monto]
+            });
+            return res.json({ exito: true, mensaje: 'Cupón creado con éxito' });
+        } else {
+            cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: pct, monto_fijo: monto });
+            return res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
+        }
+    } catch (error) {
+        res.status(500).json({ exito: false, mensaje: 'Error al guardar cupón: ' + error.message });
+    }
+});
+
+app.get('/api/eventos/:id/asientos', async (req, res) => {
+    const { id } = req.params;
+    if (db) {
+        try {
+            const result = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [id] });
+            return res.json(result.rows);
+        } catch (e) { console.error(e); }
+    }
+    if (!asientosMemoria[id]) asientosMemoria[id] = [];
+    res.json(asientosMemoria[id]);
+});
+
+app.get('/api/cupones/evento/:eventoId', async (req, res) => {
+    const { eventoId } = req.params;
+    if (db) {
+        try {
+            const result = await db.execute({ sql: "SELECT * FROM cupones WHERE evento_id = ?", args: [eventoId] });
+            return res.json(result.rows);
+        } catch (e) { return res.status(500).json({ exito: false, mensaje: 'Error al obtener cupones' }); }
+    } else {
+        res.json(cuponesMemoria.filter(c => c.evento_id === eventoId));
+    }
+});
+
+app.get('/api/cupones', async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute("SELECT * FROM cupones");
+            return res.json(result.rows);
+        } catch (e) { console.error(e); }
+    }
+    res.json(cuponesMemoria);
+});
+
+app.post('/api/ventas/procesar', async (req, res) => {
+    const venta = req.body;
+    const vendedorNombre = venta.usuario_vendedor || venta.vendedor || 'Sistema';
+    
+    // Función auxiliar para verificar si el evento ya superó las 5 hs
+    const validarTiempoVenta = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteVenta = new Date(inicioEvento.getTime() + (5 * 60 * 60 * 1000));
+        return new Date() <= limiteVenta;
+    };
+
+    if (db) {
+        try {
+            // Verificar tiempo del evento
+            const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
+            if (evRes.rows.length > 0) {
+                const { fecha, hora } = evRes.rows[0];
+                if (!validarTiempoVenta(fecha, hora)) {
+                    return res.status(403).json({ exito: false, mensaje: 'La venta para este evento ha finalizado (pasaron más de 5hs del inicio).' });
+                }
+            }
+
+            const asientoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ? AND evento_id = ?", args: [venta.asiento_id, venta.evento_id] });
+            if (asientoRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Asiento no encontrado' });
+
+            const asiento = asientoRes.rows[0];
+            if (asiento.vendido === 1) return res.json({ exito: false, mensaje: 'Asiento ocupado' });
+
+            await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
+
+            const insRes = await db.execute({
+                sql: `INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, vendedor, fechaCompra) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, vendedorNombre, new Date().toISOString()]
+            });
+
+            const nuevaVentaId = insRes.rows[0].id;
+            const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
+
+            return res.json({ exito: true, mensaje: 'Venta registrada', ventaId: nuevaVentaId, sig });
+        } catch (e) {
+            console.error("Error al procesar venta:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al procesar la venta' });
+        }
+    } else {
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+        if (evento && !validarTiempoVenta(evento.fecha, evento.hora)) {
+            return res.status(403).json({ exito: false, mensaje: 'La venta para este evento ha finalizado (pasaron más de 5hs del inicio).' });
+        }
+
+        const lista = asientosMemoria[venta.evento_id] || [];
+        const asiento = lista.find(a => a.id === venta.asiento_id);
+        if (!asiento || asiento.vendido === 1) return res.json({ exito: false, mensaje: 'Asiento no disponible' });
+
+        asiento.vendido = 1;
+        const nuevaVentaId = ventasMemoria.length + 1;
+        ventasMemoria.push({ 
+            ...venta, 
+            id: nuevaVentaId, 
+            codigoAsiento: asiento.codigoAsiento, 
+            vendedor: vendedorNombre, 
+            fechaCompra: new Date().toISOString() 
+        });
+
+        const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
+        res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
+    }
+});
+// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
+app.delete('/api/ventas/cancelar/:id', async (req, res) => {
+    const ventaId = req.params.id;
+    const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
+
+    if (!['super', 'admin', 'adm', 'vendedor'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Permiso denegado. Rol no autorizado.' });
     }
 
-    pre, code {
-      tab-size: var(--tab-size-preference);
+    if (!ventaId) return res.status(400).json({ exito: false, mensaje: 'ID de venta requerido' });
+
+    const validarLimite12Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteCancelacion = new Date(inicioEvento.getTime() + (12 * 60 * 60 * 1000));
+        return new Date() <= limiteCancelacion;
+    };
+
+    if (db) {
+        try {
+            const vRes = await db.execute({ 
+                sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
+                args: [ventaId] 
+            });
+
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+
+            const venta = vRes.rows[0];
+
+            if (!validarLimite12Hs(venta.fecha, venta.hora)) {
+                return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido: No se pueden cancelar ventas pasadas las 12hs del inicio del evento.' });
+            }
+
+            await db.execute({ sql: "UPDATE asientos SET vendido = 0, asistio = 0 WHERE id = ?", args: [venta.asiento_id] });
+            await db.execute({ sql: "DELETE FROM ventas WHERE id = ?", args: [ventaId] });
+
+            return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al cancelar la venta' });
+        }
+    } else {
+        const indexVenta = ventasMemoria.findIndex(v => v.id == ventaId);
+        if (indexVenta === -1) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+
+        const venta = ventasMemoria[indexVenta];
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+
+        if (evento && !validarLimite12Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ exito: false, mensaje: 'Límite de tiempo excedido' });
+        }
+
+        const lista = asientosMemoria[venta.evento_id] || [];
+        const asiento = lista.find(a => a.id === venta.asiento_id);
+        if (asiento) { asiento.vendido = 0; asiento.asistio = 0; }
+
+        ventasMemoria.splice(indexVenta, 1);
+        return res.json({ exito: true, mensaje: 'Venta cancelada exitosamente (Memoria)' });
     }
-  </style>
+});
+
+app.get('/api/informe/:eventoId', async (req, res) => {
+    const { eventoId } = req.params;
+    if (db) {
+        try {
+            const ventasRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
+            const asientosRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+
+            const vendidas = ventasRes.rows.length;
+            const recaudado = ventasRes.rows.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
+            const asistentes = asientosRes.rows.filter(a => a.vendido === 1 && a.asistio === 1).length;
+
+            return res.json({ vendidas, asistentes, recaudado });
+        } catch (e) { console.error(e); }
+    }
+
+    const ventasEvento = ventasMemoria.filter(v => v.evento_id === eventoId);
+    const listaAsientos = asientosMemoria[eventoId] || [];
+    const vendidas = ventasEvento.length;
+    const recaudado = ventasEvento.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
+    const asistentes = listaAsientos.filter(a => a.vendido === 1 && a.asistio === 1).length;
+
+    res.json({ vendidas, asistentes, recaudado });
+});
+
+// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
+app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute(`
+                SELECT 
+                    e.id as id,
+                    e.id as evento_id,
+                    e.nombre as nombre,
+                    e.nombre as evento_nombre,
+                    e.fecha,
+                    e.hora,
+                    COALESCE(v.vendidas, 0) as vendidas,
+                    COALESCE(v.recaudado, 0) as recaudado,
+                    0 as descuento,
+                    COALESCE(a.asistentes, 0) as asistentes
+                FROM eventos e
+                LEFT JOIN (
+                    SELECT 
+                        evento_id, 
+                        COUNT(id) as vendidas, 
+                        SUM(monto_total) as recaudado
+                    FROM ventas 
+                    GROUP BY evento_id
+                ) v ON e.id = v.evento_id
+                LEFT JOIN (
+                    SELECT 
+                        evento_id, 
+                        COUNT(id) as asistentes 
+                    FROM asientos 
+                    WHERE asistio = 1 OR asistio = '1'
+                    GROUP BY evento_id
+                ) a ON e.id = a.evento_id
+                ORDER BY e.fecha DESC
+            `);
+            return res.json(result.rows);
+        } catch (e) {
+            console.error("Error reporte consolidado:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
+        }
+    } else {
+        // Modo Memoria
+        const reportes = eventosMemoria.map(e => {
+            const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
+            const listaAsientos = asientosMemoria[e.id] || [];
+            
+            const totalAsistentes = listaAsientos.filter(a => a.asistio == 1 || a.asistio === true).length;
+            const totalRecaudado = ventas.reduce((acc, v) => acc + Number(v.monto_total || 0), 0);
+
+            return {
+                id: e.id,
+                evento_id: e.id,
+                nombre: e.nombre,
+                fecha: e.fecha,
+                hora: e.hora,
+                vendidas: ventas.length,
+                recaudado: totalRecaudado,
+                descuento: 0,
+                asistentes: totalAsistentes
+            };
+        });
+        return res.json(reportes);
+    }
+});
+app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
+    const { eventoId } = req.params;
+    if (db) {
+        try {
+            const result = await db.execute({
+                sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
+                             v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id
+                      FROM ventas v
+                      WHERE v.evento_id = ?
+                      ORDER BY v.id DESC`,
+                args: [eventoId]
+            });
+
+            const ventasConFirma = result.rows.map(v => ({
+                ...v,
+                sig: generarFirma(v.id, v.codigoAsiento)
+            }));
+
+            return res.json(ventasConFirma);
+        } catch (e) {
+            console.error("Error al consultar detalles de ventas:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' });
+        }
+    } else {
+        const lista = ventasMemoria
+            .filter(v => v.evento_id === eventoId)
+            .map(v => ({
+                id: v.id,
+                nombre: v.nombre,
+                apellido: v.apellido,
+                email: v.email,
+                telefono: v.contacto,
+                codigoAsiento: v.codigoAsiento,
+                monto_total: v.monto_total,
+                metodo_pago: v.metodo_pago || v.metodoPago || 'efectivo',
+                vendedor: v.vendedor || v.usuario_vendedor || 'Sistema',
+                fechaCompra: v.fechaCompra,
+                evento_id: v.evento_id,
+                asiento_id: v.asiento_id,
+                sig: generarFirma(v.id, v.codigoAsiento)
+            }));
+        res.json(lista);
+    }
+});
+
+async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada) {
+    const newGen = Math.min(Number(dispGen) || 0, 112);
+    const newGrada = Math.min(Number(dispGrada) || 0, 24);
+
+    if (db) {
+        // Obtener todos los asientos del evento
+        const resA = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+        const asientosExistentes = resA.rows || [];
+
+        // 1. Actualizar precios de asientos no vendidos
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'General' AND vendido = 0", args: [pGen, eventoId] });
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'Grada' AND vendido = 0", args: [pGrada, eventoId] });
+
+        // --- GENERAL ---
+        const genExistentes = asientosExistentes.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-'));
+        const cantGenActual = genExistentes.length;
+
+        if (newGen > cantGenActual) {
+            // Ampliar asientos General
+            for (let i = cantGenActual + 1; i <= newGen; i++) {
+                await db.execute({
+                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                    args: [eventoId, `GEN-A${i}`, 'General', pGen]
+                });
+            }
+        } else if (newGen < cantGenActual) {
+            // Reducir asientos General (Solo elimina si NO está vendido)
+            for (let i = newGen + 1; i <= cantGenActual; i++) {
+                await db.execute({
+                    sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0",
+                    args: [eventoId, `GEN-A${i}`]
+                });
+            }
+        }
+
+        // --- GRADAS ---
+        const g1Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G1-')).length;
+        const g2Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G2-')).length;
+
+        const targetG1 = Math.ceil(newGrada / 2);
+        const targetG2 = newGrada - targetG1;
+
+        // Ajustar G1
+        if (targetG1 > g1Existentes) {
+            for (let i = g1Existentes + 1; i <= targetG1; i++) {
+                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G1-${i}`, 'Grada', pGrada] });
+            }
+        } else if (targetG1 < g1Existentes) {
+            for (let i = targetG1 + 1; i <= g1Existentes; i++) {
+                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G1-${i}`] });
+            }
+        }
+
+        // Ajustar G2
+        if (targetG2 > g2Existentes) {
+            for (let i = g2Existentes + 1; i <= targetG2; i++) {
+                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G2-${i}`, 'Grada', pGrada] });
+            }
+        } else if (targetG2 < g2Existentes) {
+            for (let i = targetG2 + 1; i <= targetG2; i++) {
+                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G2-${i}`] });
+            }
+        }
+    }
+}
+
+// 3. EDITAR / ACTUALIZAR EVENTO
+// 3. EDITAR / ACTUALIZAR EVENTO
+app.put('/api/eventos/editar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
+
+    // Control de permisos por rol
+    const rolConsulta = req.query.rol || rol;
+    if (rolConsulta && !['super', 'adm', 'admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
+        return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
+    }
+
+    // Validación para impedir modificar eventos pasados
+    if (fecha) {
+        const fechaEvento = new Date(`${fecha}T23:59:59`);
+        if (fechaEvento < new Date()) {
+            return res.status(400).json({ 
+                exito: false, 
+                mensaje: "No se pueden modificar eventos que ya han finalizado." 
+            });
+        }
+    }
+
+    const pGen = Number(precioGeneral) || 0;
+    const pGrada = Number(precioGradas) || 0;
+    const dGen = Number(dispGen) || 0;
+    const dGrada = Number(dispGrada) || 0;
+
+    if (db) {
+        try {
+            await db.execute({
+                sql: `UPDATE eventos 
+                      SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? 
+                      WHERE id = ?`,
+                args: [nombre, fecha, hora, pGen, dGen, pGrada, dGrada, id]
+            });
+
+            await ajustarAsientosEvento(id, pGen, dGen, pGrada, dGrada);
+
+            return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente." });
+        } catch (e) {
+            console.error("Error al actualizar evento:", e);
+            return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
+        }
+    } else {
+        // Modo Memoria
+        const idx = eventosMemoria.findIndex(e => e.id === id);
+        if (idx === -1) {
+            return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
+        }
+
+        eventosMemoria[idx] = {
+            ...eventosMemoria[idx],
+            nombre: nombre || eventosMemoria[idx].nombre,
+            fecha: fecha || eventosMemoria[idx].fecha,
+            hora: hora || eventosMemoria[idx].hora,
+            precioGeneral: pGen,
+            dispGen: dGen,
+            precioGradas: pGrada,
+            dispGrada: dGrada
+        };
+
+        await ajustarAsientosEvento(id, pGen, dGen, pGrada, dGrada);
+
+        return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente (Modo Memoria)." });
+    }
+});
+// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
+app.delete('/api/eventos/eliminar/:id', async (req, res) => {
+    const { id } = req.params;
+    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
+
+    if (!['super', 'admin', 'adm'].includes(rol)) {
+        return res.status(403).json({ exito: false, mensaje: 'Sin autorización para eliminar eventos.' });
+    }
+
+    if (db) {
+        try {
+            await db.execute({ sql: "DELETE FROM ventas WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM cupones WHERE evento_id = ?", args: [id] });
+            await db.execute({ sql: "DELETE FROM eventos WHERE id = ?", args: [id] });
+            return res.json({ exito: true, mensaje: 'Evento eliminado correctamente' });
+        } catch (e) {
+            return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el evento' });
+        }
+    } else {
+        eventosMemoria = eventosMemoria.filter(e => e.id !== id);
+        delete asientosMemoria[id];
+        ventasMemoria = ventasMemoria.filter(v => v.evento_id !== id);
+        return res.json({ exito: true, mensaje: 'Evento eliminado (Memoria)' });
+    }
+});
+
+app.put('/api/ventas/editar', async (req, res) => {
+    const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
+
+    // Función auxiliar para verificar límite de 2hs desde el inicio del evento
+    const validarLimite2Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteEdicion = new Date(inicioEvento.getTime() + (2 * 60 * 60 * 1000));
+        return new Date() <= limiteEdicion;
+    };
+
+    if (db) {
+        try {
+            // 1. Obtener la venta y los datos del evento asociado
+            const vRes = await db.execute({ 
+                sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
+                args: [ventaId] 
+            });
+
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+            const venta = vRes.rows[0];
+
+            // 2. Validar que no hayan transcurrido más de 2 horas desde el inicio del evento
+            if (!validarLimite2Hs(venta.fecha, venta.hora)) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: 'No es posible editar la venta: Han transcurrido más de 2 horas desde el inicio del evento.' 
+                });
+            }
+
+            // 3. Validar cambio de asiento si se especificó un nuevo asiento
+            if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
+                const aViejoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [venta.asiento_id] });
+                const aNuevoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
+
+                if (aNuevoRes.rows.length === 0) {
+                    return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado no existe.' });
+                }
+
+                const asientoNuevo = aNuevoRes.rows[0];
+
+                if (asientoNuevo.vendido === 1) {
+                    return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado ya está ocupado.' });
+                }
+
+                if (aViejoRes.rows.length > 0) {
+                    const asientoViejo = aViejoRes.rows[0];
+                    
+                    // Restricción: Solo se permite dentro de la misma categoría (tipoZona)
+                    if (asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
+                        return res.status(400).json({ 
+                            exito: false, 
+                            mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
+                        });
+                    }
+
+                    // Liberar asiento anterior
+                    await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejo.id] });
+                }
+
+                // Ocupar nuevo asiento
+                await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
+
+                // Actualizar registro en ventas
+                await db.execute({
+                    sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
+                    args: [nuevoAsientoId, asientoNuevo.codigoAsiento, ventaId]
+                });
+            }
+
+            // 4. Actualizar información del comprador
+            await db.execute({
+                sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
+                args: [nombre, apellido, contacto, email || '', ventaId]
+            });
+
+            return res.json({ exito: true, mensaje: 'Venta actualizada correctamente' });
+        } catch (e) {
+            console.error("Error al actualizar la venta:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
+        }
+    } else {
+        // Modo Memoria
+        const venta = ventasMemoria.find(x => x.id == ventaId);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
+
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+        if (evento && !validarLimite2Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ 
+                exito: false, 
+                mensaje: 'No es posible editar la venta: Han transcurrido más de 2 horas desde el inicio del evento.' 
+            });
+        }
+
+        if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
+            const lista = asientosMemoria[venta.evento_id] || [];
+            const asientoViejo = lista.find(a => a.id === venta.asiento_id);
+            const asientoNuevo = lista.find(a => a.id == nuevoAsientoId);
+
+            if (!asientoNuevo) {
+                return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado no existe.' });
+            }
+
+            if (asientoNuevo.vendido === 1) {
+                return res.status(400).json({ exito: false, mensaje: 'El nuevo asiento seleccionado ya está ocupado.' });
+            }
+
+            if (asientoViejo && asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
+                return res.status(400).json({ 
+                    exito: false, 
+                    mensaje: 'Solo puedes cambiar entre asientos de la misma categoría (General a General / Grada a Grada). Para cambiar de categoría, cancela la venta y regístrala nuevamente.' 
+                });
+            }
+
+            if (asientoViejo) asientoViejo.vendido = 0;
+            asientoNuevo.vendido = 1;
+            venta.asiento_id = asientoNuevo.id;
+            venta.codigoAsiento = asientoNuevo.codigoAsiento;
+        }
+
+        venta.nombre = nombre;
+        venta.apellido = apellido;
+        venta.contacto = contacto;
+        venta.email = email || '';
+
+        return res.json({ exito: true, mensaje: 'Venta actualizada correctamente (Memoria)' });
+    }
+});
+
+app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
+    const { id } = req.params;
+    const { sig } = req.query;
+
+    if (db) {
+        try {
+            // Se hace LEFT JOIN con la tabla asientos para obtener la columna 'asistio'
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora, a.asistio
+                      FROM ventas v
+                      JOIN eventos e ON v.evento_id = e.id
+                      LEFT JOIN asientos a ON v.asiento_id = a.id
+                      WHERE v.id = ?`,
+                args: [id]
+            });
+            if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+
+            const venta = vRes.rows[0];
+
+            // Determinar estado visual del ticket
+            let estado = 'pendiente'; // Azul por defecto
+            const yaIngreso = Number(venta.asistio) === 1;
+
+            if (yaIngreso) {
+                estado = 'ingresado'; // Verde
+            } else if (venta.evento_fecha && venta.evento_hora) {
+                const inicioEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
+                const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
+                if (new Date() > limite6hs) {
+                    estado = 'expirado'; // Rojo
+                }
+            }
+
+            const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+            const qrCodeUrl = await QRCode.toDataURL(qrPayload);
+
+            return res.json({ exito: true, ticket: { ...venta, estado, qr: qrCodeUrl, sig } });
+        } catch (e) {
+            console.error("Error al obtener entrada:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
+        }
+    } else {
+        // Modo Memoria
+        const venta = ventasMemoria.find(v => v.id == id);
+        if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
+
+        const evento = eventosMemoria.find(e => e.id === venta.evento_id) || {};
+        const listaAsientos = asientosMemoria[venta.evento_id] || [];
+        const asientoObj = listaAsientos.find(a => a.id === venta.asiento_id);
+        const yaIngreso = asientoObj ? Number(asientoObj.asistio) === 1 : false;
+
+        let estado = 'pendiente'; // Azul
+        if (yaIngreso) {
+            estado = 'ingresado'; // Verde
+        } else if (evento.fecha && evento.hora) {
+            const inicioEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
+            const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
+            if (new Date() > limite6hs) {
+                estado = 'expirado'; // Rojo
+            }
+        }
+
+        const qrPayload = JSON.stringify({ ticket_id: venta.id, asiento: venta.codigoAsiento, sig });
+        const qrCodeUrl = await QRCode.toDataURL(qrPayload);
+
+        res.json({
+            exito: true,
+            ticket: {
+                ...venta,
+                evento_nombre: evento.nombre || 'Evento',
+                evento_fecha: evento.fecha || '',
+                evento_hora: evento.hora || '',
+                estado,
+                qr: qrCodeUrl,
+                sig
+            }
+        });
+    }
+});
+
+app.post('/api/entradas/enviar-email', async (req, res) => {
+    const { ventaId, hostOrigin } = req.body;
+
+    try {
+        let ticketData;
+        if (db) {
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora
+                      FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?`,
+                args: [ventaId]
+            });
+            if (vRes.rows.length > 0) ticketData = vRes.rows[0];
+        } else {
+            const v = ventasMemoria.find(x => x.id == ventaId);
+            const e = eventosMemoria.find(x => x.id === (v ? v.evento_id : ''));
+            if (v) ticketData = { ...v, evento_nombre: e ? e.nombre : 'Evento', evento_fecha: e ? e.fecha : '', evento_hora: e ? e.hora : '' };
+        }
+
+        if (!ticketData || !ticketData.email) {
+            return res.json({ exito: false, mensaje: 'El cliente no posee una dirección de correo válida' });
+        }
+
+        const sig = generarFirma(ticketData.id, ticketData.codigoAsiento);
+        const baseUrl = hostOrigin || 'https://sistema-boleteria-institucional.onrender.com';
+        const ticketUrl = `${baseUrl}/entrada.html?id=${ventaId}&sig=${sig}`;
+
+        const qrPayload = JSON.stringify({ ticket_id: ticketData.id, asiento: ticketData.codigoAsiento, sig });
+        const qrDataUrl = await QRCode.toDataURL(qrPayload);
+
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({
+                sender: { name: 'Boletería Institucional', email: 'gonzalog2019@gmail.com' },
+                to: [{ email: ticketData.email, name: `${ticketData.nombre} ${ticketData.apellido}` }],
+                subject: `🎫 Tu Entrada Oficial - ${ticketData.evento_nombre}`,
+                htmlContent: `
+                    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+                        <h2 style="color: #0d6efd; text-align: center;">¡Gracias por tu compra!</h2>
+                        <p>Hola <strong>${ticketData.nombre} ${ticketData.apellido}</strong>,</p>
+                        <p>Aquí tienes el detalle de tu entrada digital para el evento:</p>
+                        
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <p style="margin: 5px 0;"><strong>Evento:</strong> ${ticketData.evento_nombre}</p>
+                            <p style="margin: 5px 0;"><strong>Fecha y Hora:</strong> ${ticketData.evento_fecha} - ${ticketData.evento_hora} hs</p>
+                            <p style="margin: 5px 0;"><strong>Asiento / Ubicación:</strong> <span style="color: #0d6efd; font-weight: bold;">${ticketData.codigoAsiento}</span></p>
+                        </div>
+
+                        <div style="text-align: center; margin: 20px 0;">
+                            <img src="${qrDataUrl}" alt="Código QR de Entrada" style="width: 200px; height: 200px;" /><br/>
+                            <small style="color: #6c757d;">Muestra este código QR en el ingreso</small>
+                        </div>
+
+                        <div style="text-align: center; margin-top: 25px;">
+                            <a href="${ticketUrl}" style="background-color: #0d6efd; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Entrada Online</a>
+                        </div>
+                    </div>
+                `
+            })
+        });
+
+        const resData = await response.json();
+        if (!response.ok) {
+            return res.status(500).json({ exito: false, mensaje: resData.message || 'Error al enviar por Brevo' });
+        }
+
+        res.json({ exito: true, mensaje: 'Email enviado exitosamente' });
+    } catch (e) {
+        res.status(500).json({ exito: false, mensaje: 'Error al enviar el correo electrónico' });
+    }
+});
+
+// Endpoints Superusuario
+app.post('/api/usuarios/crear', async (req, res) => {
+    const nuevoUsr = req.body;
+    if (db) {
+        try {
+            await db.execute({
+                sql: "INSERT INTO usuarios (usuario, clave, tipo, identificacion) VALUES (?, ?, ?, ?)",
+                args: [nuevoUsr.usuario, nuevoUsr.clave, nuevoUsr.tipo, nuevoUsr.identificacion]
+            });
+            return res.json({ exito: true, mensaje: 'Usuario guardado' });
+        } catch (e) { return res.json({ exito: false, mensaje: 'El usuario ya existe' }); }
+    } else {
+        if (usuariosMemoria.some(u => u.usuario.toLowerCase() === nuevoUsr.usuario.toLowerCase())) return res.json({ exito: false, mensaje: 'El usuario ya existe' });
+        nuevoUsr.id = usuariosMemoria.length + 1;
+        usuariosMemoria.push(nuevoUsr);
+        res.json({ exito: true, mensaje: 'Usuario creado (Memoria)' });
+    }
+});
+
+app.get('/api/super/usuarios', async (req, res) => {
+    if (db) {
+        try {
+            const result = await db.execute("SELECT id, usuario, tipo, identificacion FROM usuarios");
+            return res.json(result.rows);
+        } catch (e) { console.error(e); }
+    }
+    res.json(usuariosMemoria);
+});
+
+app.post('/api/super/revelar-clave', async (req, res) => {
+    const { claveSuper, usuarioIdTarget } = req.body;
+    if (db) {
+        try {
+            const superRes = await db.execute({ sql: "SELECT * FROM usuarios WHERE (tipo = 'super' OR tipo = 'admin') AND clave = ?", args: [claveSuper] });
+            if (superRes.rows.length === 0) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
+
+            const targetRes = await db.execute({ sql: "SELECT clave FROM usuarios WHERE id = ?", args: [usuarioIdTarget] });
+            if (targetRes.rows.length > 0) return res.json({ exito: true, clave: targetRes.rows[0].clave });
+        } catch (e) { console.error(e); }
+    } else {
+        const superAdmin = usuariosMemoria.find(u => (u.tipo === 'super' || u.tipo === 'admin') && u.clave === claveSuper);
+        if (!superAdmin) return res.status(403).json({ exito: false, mensaje: 'Clave incorrecta' });
+
+        const target = usuariosMemoria.find(u => u.id === usuarioIdTarget);
+        if (target) return res.json({ exito: true, clave: target.clave });
+    }
+    res.status(404).json({ exito: false, mensaje: 'Usuario no encontrado' });
+});
+
+app.delete('/api/super/usuarios/:id', async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (db) {
+        try {
+            await db.execute({ sql: "DELETE FROM usuarios WHERE id = ?", args: [id] });
+            return res.json({ exito: true, mensaje: 'Usuario eliminado' });
+        } catch (e) { console.error(e); }
+    }
+    usuariosMemoria = usuariosMemoria.filter(u => u.id !== id);
+    res.json({ exito: true, mensaje: 'Usuario eliminado (Memoria)' });
+});
+
+// Puerta Escaneo
+app.post('/api/puerta/validar', async (req, res) => {
+    try {
+        const { id, sig } = req.body;
+        if (!id) return res.status(400).json({ exito: false, mensaje: 'Código no recibido.' });
+
+        let ventaId = id;
+        let sigRecibida = sig || null;
+
+        if (typeof id === 'string' && id.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(id);
+                ventaId = parsed.ticket_id || parsed.id || id;
+                sigRecibida = parsed.sig || sigRecibida;
+            } catch (e) {}
+        }
+
+        if (db) {
+            const vRes = await db.execute({
+                sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora 
+                      FROM ventas v 
+                      LEFT JOIN eventos e ON v.evento_id = e.id 
+                      WHERE v.id = ? OR v.codigoAsiento = ?`,
+                args: [ventaId, ventaId]
+            });
+
+            if (vRes.rows.length === 0) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+
+            const venta = vRes.rows[0];
+
+            if (venta.evento_fecha && venta.evento_hora) {
+                const fechaHoraEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${venta.evento_fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${venta.evento_nombre}</strong><br>El ingreso habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Esta entrada correspondía al evento del <strong>${venta.evento_fecha}</strong>.` 
+                    });
+                }
+            }
+
+            if (sigRecibida && typeof generarFirma === 'function') {
+                const firmaEsperada = generarFirma(venta.id, venta.codigoAsiento);
+                if (sigRecibida !== firmaEsperada) {
+                    return res.json({ exito: false, mensaje: '¡ALERTA! Entrada falsificada o firma inválida.' });
+                }
+            }
+
+            const asientoRes = await db.execute({
+                sql: "SELECT asistio FROM asientos WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            if (asientoRes.rows.length > 0 && asientoRes.rows[0].asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido} (${venta.codigoAsiento})` 
+                });
+            }
+
+            await db.execute({
+                sql: "UPDATE asientos SET asistio = 1 WHERE id = ?",
+                args: [venta.asiento_id]
+            });
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+
+        } else {
+            const venta = ventasMemoria.find(v => v.id == ventaId || v.codigoAsiento == ventaId);
+            if (!venta) return res.json({ exito: false, mensaje: 'Entrada no válida o no encontrada.' });
+
+            const evento = eventosMemoria.find(e => e.id === venta.evento_id);
+            if (evento && evento.fecha && evento.hora) {
+                const fechaHoraEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
+                const aperturaPuertas = new Date(fechaHoraEvento.getTime() - (2 * 60 * 60 * 1000));
+                const cierreEvento = new Date(`${evento.fecha}T23:59:59`);
+                const horaActual = new Date();
+
+                if (horaActual < aperturaPuertas) {
+                    const horaAperturaTexto = aperturaPuertas.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ INGRESO NO HABILITADO AÚN<br>Evento: <strong>${evento.nombre}</strong><br>Habilita a las <strong>${horaAperturaTexto} hs</strong>.` 
+                    });
+                }
+
+                if (horaActual > cierreEvento) {
+                    return res.json({ 
+                        exito: false, 
+                        mensaje: `⛔ ENTRADA EXPIRADA<br>Pertenecía al evento del <strong>${evento.fecha}</strong>.` 
+                    });
+                }
+            }
+
+            const lista = asientosMemoria[venta.evento_id] || [];
+            const asiento = lista.find(a => a.id === venta.asiento_id);
+
+            if (asiento && asiento.asistio === 1) {
+                return res.json({ 
+                    exito: false, 
+                    mensaje: `ENTRADA YA INGRESADA ANTERIORMENTE.<br>Cliente: ${venta.nombre} ${venta.apellido}` 
+                });
+            }
+
+            if (asiento) asiento.asistio = 1;
+
+            return res.json({
+                exito: true,
+                asiento: venta.codigoAsiento,
+                cliente: `${venta.nombre} ${venta.apellido}`,
+                mensaje: 'INGRESO PERMITIDO'
+            });
+        }
+    } catch (error) {
+        return res.status(500).json({ exito: false, mensaje: 'Error interno en el servidor.' });
+    }
+});
+
+app.get('/puerta.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'puerta.html'));
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/api/eventos/:eventoId/historial', async (req, res) => {
+    const { eventoId } = req.params;
+    const esTodos = !eventoId || eventoId.toUpperCase() === 'TODOS';
+
+    try {
+        let ventas = [];
+        let asistentes = 0;
+
+        if (db) {
+            // Consultas dinámicas para Base de Datos
+            const sqlVentas = esTodos ? "SELECT * FROM ventas" : "SELECT * FROM ventas WHERE evento_id = ?";
+            const sqlAsientos = esTodos ? "SELECT * FROM asientos" : "SELECT * FROM asientos WHERE evento_id = ?";
+            const args = esTodos ? [] : [eventoId];
+
+            const vRes = await db.execute({ sql: sqlVentas, args });
+            const aRes = await db.execute({ sql: sqlAsientos, args });
+
+            ventas = vRes.rows || [];
+            asistentes = (aRes.rows || []).filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+        } else {
+            // Consultas dinámicas en Memoria
+            const todasVentas = typeof ventasMemoria !== 'undefined' ? ventasMemoria : [];
+            ventas = esTodos ? todasVentas : todasVentas.filter(v => v.evento_id === eventoId);
+
+            if (esTodos) {
+                const todosAsientos = Object.values(typeof asientosMemoria !== 'undefined' ? asientosMemoria : {}).flat();
+                asistentes = todosAsientos.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            } else {
+                const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
+                asistentes = listaA.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            }
+        }
+
+        const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
+
+        return res.json({
+            nombre: esTodos ? "Todos los Eventos" : `Evento ${eventoId}`,
+            recaudado,
+            totalVentas: ventas.length,
+            asistencia: asistentes,
+            historialVentas: ventas.map(v => ({
+                idReserva: v.id || v.idReserva || '-',
+                eventoId: v.evento_id || eventoId,
+                fecha: v.fechaCompra || v.fecha || null,
+                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}`.trim() : (v.cliente || '-'),
+                email: v.email || '-',
+                asiento: v.codigoAsiento || v.asiento || '-',
+                metodoPago: v.metodo_pago || v.metodoPago || '-',
+                monto: v.monto_total || v.monto || 0,
+                estado: 'Completado'
+            }))
+        });
+    } catch (e) {
+        console.error("Error al obtener historial:", e);
+        return res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`===========================================`);
+    console.log(`Servidor iniciado en http://localhost:${PORT}`);
+    console.log(`===========================================`);
+});
 
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/primer-primitives-ed9ca172356fd545.css" />
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/primer-1d2c7f7b52a6068b.css" />
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/global-54ba76e934a49d7c.css" />
-    <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/github-456bd5deb85c7ecd.css" />
-  
 
-  
 
-  <script type="application/json" id="client-env">{"locale":"en","featureFlags":["actions_enable_background_steps","actions_new_hosted_runner_image_select_sizes_and_versions","activity_diff_file_tree","activity_repos_file_tree","activity_repos_overview_header","activity_repos_overview_sidebar","agent_author_search_expansion","agent_author_search_expansion_ui_pulls","alternate_user_config_repo","async_conversion_coverage_enabled","billing_billable_licenses_cost_center_bucket_fix","billing_budget_expiration","billing_cost_center_list_assigned_resources","billing_discount_threshold_notification","code_quality_enablement_banner_targeting","code_quality_remove_preview","code_view_raf_sticky_lines","codespaces_prebuild_region_target_update","coding_agent_third_party_model_ui","copilot_agent_snippy","copilot_api_agentic_issue_marshal_yaml","copilot_automation_repo_mcp_servers","copilot_automations_pagination","copilot_chat_auto_mode_v2","copilot_chat_clear_model_selection_for_default_change","copilot_chat_vision_dotcom_chat_ga_gate","copilot_css_textarea_autosize","copilot_custom_copilots","copilot_custom_copilots_feature_preview","copilot_duplicate_thread","copilot_extensions_removal_on_marketplace","copilot_fix_failed_workflows_all_skus","copilot_hide_hovercard","copilot_immersive_task_hyperlinking","copilot_mc_cli_resume_any_users_task","copilot_mission_control_agent_merge_fix_ci","copilot_mission_control_agent_merge_resolve_conflicts","copilot_mission_control_early_stop","copilot_mission_control_environment_list_icons","copilot_mission_control_managed_sandbox_environments","copilot_mission_control_needs_attention","copilot_mission_control_reasoning_effort","copilot_mission_control_sandbox_client_side_clone","copilot_mission_control_sandbox_remote_bypass","copilot_mission_control_session_filters","copilot_mission_control_task_alive_updates","copilot_mission_control_task_sharing","copilot_org_policy_page_focus_mode","copilot_share_active_subthread","copilot_spaces_ga","copilot_spaces_individual_policies_ga","copilot_spark_handle_nil_friendly_name","copilot_swe_agent_authorization_status_ui","copilot_swe_agent_automation_resource_scoped_writes","copilot_swe_agent_hide_model_picker_if_only_auto","copilot_swe_agent_issue_comment_trigger","copilot_swe_agent_pr_comment_model_picker","copilot_swe_agent_pull_request_comment_trigger","copilot_swe_agent_pull_request_merged_trigger","copilot_swe_agent_pull_request_opened_trigger","copilot_swe_agent_pull_request_synchronize_trigger","copilot_swe_agent_use_subagents","copilot_task_api_github_rest_style","copilot_task_scoped_alive_channel","copilot_token_based_billing","copilot_unconfigured_is_inherited","copilot_user_can_upgrade_plan_field","copilot_workbench_sunset","copilot_workbench_sunset_redirect","copilot_workbench_ubb","custom_properties_set_values_error_focusing","dashboard_indexeddb_caching","dashboard_lists_max_age_filter","dashboard_universe_2025_feedback_dialog","glc_code_quality_repo_settings_workflow_config","hide_github_models_ui","hyperspace_2025_logged_out_batch_1","hyperspace_2025_logged_out_batch_2","hyperspace_2025_logged_out_batch_3","in_product_messaging_datadog_monitoring","ipm_ubb_individual_budget_banner","issue_fields_multi_select","issue_inline_avatars","issue_pinned_views","issue_pinned_views_optimistic_updates","issue_relative_time_micro","issues_dashboard_sso_structured_errors","issues_expanded_file_types","issues_hide_closed_sub_issues","issues_lazy_load_comment_box_suggestions","issues_react_chrome_container_query_fix","labels_archiving","labels_archiving_info","landing_pages_ninetailed","lifecycle_label_name_updates","marketing_cookie_consent_banner","marketing_pages_search_explore_provider","memex_default_issue_create_repository","memex_lazy_hydrate_agent_tasks","memex_live_update_hovercard","memex_mwl_filter_field_delimiter","memex_remove_deprecated_type_issue","merge_queue_restricted_pushers_warning","merge_status_checks_refetch_dedupe","merge_status_header_feedback","oauth_authorize_clickjacking_protection","octocaptcha_origin_optimization","primer_react_css_anchor_positioning","primer_react_merged_forwarded_refs","prs_copilot_app_open_action","prs_css_anchor_positioning","pull_request_commit_checks_dialog","pull_request_copilot_attribution_header","pull_request_overview_panel_edit_description","pull_request_persister","pull_request_stacks_feedback_dialog","pull_request_virtualization_image_estimate","pull_request_virtualization_loader_batching","pull_request_virtualization_scroll_compensation","pull_request_virtualization_scroll_intent","quick_search_lazy_suggestions","react_blob_isolate_code_lines","react_blob_ssr_content_visibility","react_data_router_tanstack_allowed","react_query_props_with_key","react_sandbox_future_tanstack","repo_app_turbo","repo_issues_sidebar_layout","repo_pulls_dashboard_declutter","repo_pulls_dashboard_persistence","repo_pulls_dashboard_sidebar_links","repos_contributors_limited_default_range","review_involves_filter","rule_ignored_file_paths","rulesets_actor_list_editor","sample_network_conn_type","security_center_artifact_filters_popover","see_who_reacted","semantic_similarity_duplicate_issue_detection","session_logs_ungroup_reasoning_text","set_sha256_on_repo_creation_form","site_banner_desktop_copilot_app","site_ghca_pixel_mona","site_github_app_ga_page","site_github_app_ga_page_highlight","site_github_app_mobile_native_share","site_global_banner_dev_days_attendee","site_global_banner_learn_copilot_sdk","site_global_nav_spark_models_removed","spark_prompt_secret_scanning","spark_server_connection_status","suggest_custom_property_values_copilot","suppress_automated_browser_vitals","swp_forms_disable_octocaptcha","thread_resolution_reason","ui_service_referrer_metrics","ui_service_staleness_detection","update_issue_suggestions","user_code_paste_ux","viewscreen_sandbox","warn_inaccessible_attachments","webp_support","workbench_store_readonly","workstream_plugin_bootstrap"],"githubDomain":"https://github.com","copilotApiOverrideUrl":"https://api.githubcopilot.com","cmcApiUrl":"https://api.github.com/cmc_internal/api"}</script>
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/high-contrast-cookie-e3d808ee18eb9784.js"></script>
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/wp-runtime-756e5f4c1af0ed7e.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/app-foundation-74e9766bd696d26a.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/app-runtime-ecf766ea8a2c7fd6.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/fetch-utilities-8e3d9c5d57d50312.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/ser-cd1b421ad0ad7ed5.js" />
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/environment-e009dd3e5f182e0e.js" defer="defer"></script>
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/app-runtime.b6099d51b9e67b57.module.css" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/catalyst-86a8f5de995615f8.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/selector-observer-e88088f989b27670.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/relative-time-element-7cdf4e0db98b997c.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/by-6b3c07383371bf58.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/ja9-36f036c13c2e3a4c.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/kw-866fd9513ae95106.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/r1-b075aab3204f32f9.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/jz5-7c5d1669717041f8.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/hj-5126390ff433704d.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/j05-dce4d588268f0f7e.js" />
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/github-elements-be8651e746106a4e.js" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/element-registry-d3fb505937f9ae66.js" defer="defer"></script>
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/runtime-helpers-f3f5d71440009c48.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/aria-live-76b18916d0c8ec4d.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/hotkey-5109c77d7ac61078.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/react-core-2f96a5da06c99d97.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/04n-5f33b9f3b1da0a14.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/ur-024971cb63acad59.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/4t-364e19c63d726e9a.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/6ny-c969fbae697a356f.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/yhq-3a209035a30b1a09.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/z1v-da5b33b877bfa358.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/wo-09f85d22a6c8931b.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/9y-81cfe57dc9040f3e.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/j0-41a4cf04cbd99503.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/0p-81491ed0d9d666e2.js" />
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/behaviors-2fd0d43095b1a44d.js" defer="defer"></script>
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/react-core.6ead8e9f801bdec9.module.css" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/ic-991f04433f366e7b.js" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/pk3-391f4f6d6744735a.js" />
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/settings-0884195299064613.js" defer="defer"></script>
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/a3-8832097e3f5df400.js" />
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/sessions-bdda6ea716ee47fa.js" defer="defer"></script>
-<script crossorigin="anonymous" type="module" src="https://github.githubassets.com/assets/signup-04d3c28906275919.js" defer="defer"></script>
-  
-
-  <title>Sign in to GitHub · GitHub</title>
-
-
-
-  <meta name="route-pattern" content="/login(.:format)" data-turbo-transient>
-  <meta name="route-controller" content="sessions" data-turbo-transient>
-  <meta name="route-action" content="new" data-turbo-transient>
-  <meta name="fetch-nonce" content="v2:c0e8fe2a-1769-5aa4-e1df-062e5f2079fe">
-
-    
-  <meta name="current-catalog-service-hash" content="701273d4944fb23919c770da2da3f33b6da9ed8e668f7249090e3e9f429343b5">
-
-
-  <meta name="request-id" content="EE67:2DA65E:262FAA:3A7C64:6AB12847" data-turbo-transient="true" /><meta name="html-safe-nonce" content="25fac6591e83c3c6b44cd89f85f470f42f11b692be4fd0ae8d245b44da24dadc" data-turbo-transient="true" /><meta name="visitor-payload" content="eyJyZWZlcnJlciI6Imh0dHBzOi8vZ2l0aHViLmNvbS9zaXN0ZW1hLWJvbGV0ZXJpYS1pbnN0aXR1Y2lvbmFsL3Npc3RlbWEtYm9sZXRlcmlhLWluc3RpdHVjaW9uYWwvYmxvYi9tYWluL3NlcnZlci5qcyIsInJlcXVlc3RfaWQiOiJFRTY3OjJEQTY1RToyNjJGQUE6M0E3QzY0OjZBQjEyODQ3IiwidmlzaXRvcl9pZCI6IjQwODMxNDk4MTg2NzA5NzU5ODkiLCJyZWdpb25fZWRnZSI6ImJyYXppbHNvdXRoIiwicmVnaW9uX3JlbmRlciI6ImNlbnRyYWx1cyJ9" data-turbo-transient="true" /><meta name="visitor-hmac" content="b50796506eff252e107244f5b5b7efcee16ffc007d8931cf3baff7c294703a67" data-turbo-transient="true" />
-
-
-
-
-  <meta name="github-keyboard-shortcuts" content="copilot" data-turbo-transient="true" />
-  
-
-  <meta name="selected-link" value="/login" data-turbo-transient>
-  <link rel="assets" href="https://github.githubassets.com/">
-
-    <meta name="google-site-verification" content="Apib7-x98H0j5cPqHWwSMm6dNU4GmODRoqxLiDzdx9I">
-
-<meta name="octolytics-url" content="https://collector.github.com/github/collect" />
-
-
-
-
-
-  <meta name="analytics-location-query-strip" content="true" data-turbo-transient="true" />
-
-  
-
-
-
-
-    <meta name="user-login" content="">
-
-  
-
-    <meta name="viewport" content="width=device-width">
-
-    
-
-      <meta name="description" content="GitHub is where people build software. More than 150 million people use GitHub to discover, fork, and contribute to over 420 million projects.">
-
-      <link rel="search" type="application/opensearchdescription+xml" href="/opensearch.xml" title="GitHub">
-
-    <link rel="fluid-icon" href="https://github.com/fluidicon.png" title="GitHub">
-    <meta property="fb:app_id" content="1401488693436528">
-    
-
-      <meta property="og:url" content="https://github.com">
-  <meta property="og:site_name" content="GitHub">
-  <meta property="og:title" content="Build software better, together">
-  <meta property="og:description" content="GitHub is where people build software. More than 150 million people use GitHub to discover, fork, and contribute to over 420 million projects.">
-  <meta property="og:image" content="https://github.githubassets.com/assets/github-logo-55c5b9a1fe52.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="1200">
-  <meta property="og:image" content="https://github.githubassets.com/assets/github-mark-57519b92ca4e.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="620">
-  <meta property="og:image" content="https://github.githubassets.com/assets/github-octocat-13c86b8b336d.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="620">
-
-  <meta property="twitter:site" content="github">
-  <meta property="twitter:site:id" content="13334762">
-  <meta property="twitter:creator" content="github">
-  <meta property="twitter:creator:id" content="13334762">
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:title" content="GitHub">
-  <meta property="twitter:description" content="GitHub is where people build software. More than 150 million people use GitHub to discover, fork, and contribute to over 420 million projects.">
-  <meta property="twitter:image" content="https://github.githubassets.com/assets/github-logo-55c5b9a1fe52.png">
-  <meta property="twitter:image:width" content="1200">
-  <meta property="twitter:image:height" content="1200">
-
-
-
-
-      <meta name="hostname" content="github.com">
-
-
-
-        <meta name="expected-hostname" content="github.com">
-
-
-  <meta http-equiv="x-pjax-version" content="e7e9555d894218f5063d39059a3e52bcb7b57519894e4b7dbdb0fad9fbac5497" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-csp-version" content="c7662755e5fb393e79a00ffb5e3a79d94f012b44b1b9be52b6749a994748d398" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-css-version" content="ec4c7b86d7b57240253150b827ea48b04e08d8760dc6553d2a04f62000f3fe0c" data-turbo-track="reload">
-  <meta http-equiv="x-pjax-js-version" content="491bb0fa6afdfd6bab9b1139becbe62733eaeebd1dbb307a71025a6213f26ff2" data-turbo-track="reload">
-
-  <meta name="turbo-cache-control" content="no-preview" data-turbo-transient="">
-
-      <link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/github-456bd5deb85c7ecd.css" />
-
-
-
-      <link rel="canonical" href="https://github.com/login" data-turbo-transient>
-
-
-    <meta name="turbo-body-classes" content="logged-out env-production page-responsive session-authentication">
-  <meta name="disable-turbo" content="false">
-
-
-  <meta name="browser-stats-url" content="https://api.github.com/_private/browser/stats">
-
-
-  <meta name="browser-errors-url" content="https://api.github.com/_private/browser/errors">
-
-  <meta name="release" content="726636a7212d4292248515af2092328f89fb97ba" data-turbo-track="reload">
-  <meta name="ui-target" content="full">
-
-  <link rel="mask-icon" href="https://github.githubassets.com/assets/pinned-octocat-093da3e6fa40.svg" color="#000000">
-  <link rel="alternate icon" class="js-site-favicon" type="image/png" href="https://github.githubassets.com/favicons/favicon.png">
-  <link rel="icon" class="js-site-favicon" type="image/svg+xml" href="https://github.githubassets.com/favicons/favicon.svg" data-base-href="https://github.githubassets.com/favicons/favicon">
-
-<meta name="theme-color" content="#1e2327">
-<meta name="color-scheme" content="light dark" />
-
-
-  <link rel="manifest" href="/manifest.json" crossOrigin="use-credentials">
-
-  </head>
-
-  <body class="logged-out env-production page-responsive session-authentication" style="word-wrap: break-word;" >
-    <div data-turbo-body class="logged-out env-production page-responsive session-authentication" style="word-wrap: break-word;" >
-      <div id="__primerPortalRoot__" style="z-index: 1000; position: absolute; width: 100%;" data-turbo-permanent></div>
-      
-
-    <div class="position-relative header-wrapper js-header-wrapper ">
-      <a href="#start-of-content" data-skip-target-assigned="false" class="px-2 tmp-py-4 color-bg-accent-emphasis color-fg-on-emphasis show-on-focus js-skip-to-content">Skip to content</a>
-
-      <span data-view-component="true" class="progress-pjax-loader Progress position-fixed width-full">
-    <span style="width: 0%;" data-view-component="true" class="Progress-item progress-pjax-loader-bar left-0 top-0 color-bg-accent-emphasis"></span>
-</span>      
-      <link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/t7l-bf6f21d7e7a43c35.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/l7j-2ddd8b435dadae28.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/gzu-1a09248f686325f6.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/bi0-d23ece5beb291343.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/keyboard-shortcuts-dialog-da870c1638e6c519.js" fetchpriority="low" />
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/primer-react-css.9e1f329f2c36a989.module.css" />
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/keyboard-shortcuts-dialog.61ba213ef284e580.module.css" />
-
-<react-partial
-  partial-name="keyboard-shortcuts-dialog"
-  data-ssr="false"
-  data-attempted-ssr="false"
-  data-react-profiling="false"
->
-  
-  <script type="application/json" data-target="react-partial.embeddedData">{"props":{"docsUrl":"https://docs.github.com/get-started/accessibility/keyboard-shortcuts"}}</script>
-  <div data-target="react-partial.reactRoot"></div>
-</react-partial>
-
-
-
-
-
-      
-
-          
-          <div class="authentication-header-page" role="banner">
-
-</div>
-
-
-      <div hidden="hidden" data-view-component="true" class="js-stale-session-flash stale-session-flash flash flash-warn flash-full">
-  
-        <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-alert">
-    <path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path>
-</svg>
-        <span class="js-stale-session-flash-signed-in" hidden>You signed in with another tab or window. <a class="Link--inTextBlock" href="">Reload</a> to refresh your session.</span>
-        <span class="js-stale-session-flash-signed-out" hidden>You signed out in another tab or window. <a class="Link--inTextBlock" href="">Reload</a> to refresh your session.</span>
-        <span class="js-stale-session-flash-switched" hidden>You switched accounts on another tab or window. <a class="Link--inTextBlock" href="">Reload</a> to refresh your session.</span>
-
-    <button id="icon-button-2461fc25-cf0d-4bba-bd9c-8dc538550ea9" aria-labelledby="tooltip-b7ab2e3f-2b23-4180-9f5b-05a6343eabf4" type="button" data-view-component="true" class="Button Button--iconOnly Button--invisible Button--medium flash-close js-flash-close">  <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x Button-visual">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-</button><tool-tip id="tooltip-b7ab2e3f-2b23-4180-9f5b-05a6343eabf4" for="icon-button-2461fc25-cf0d-4bba-bd9c-8dc538550ea9" popover="manual" data-direction="s" data-type="label" data-view-component="true" class="sr-only position-absolute">Dismiss alert</tool-tip>
-
-
-  
-</div>
-    </div>
-
-  <div id="start-of-content" class="show-on-focus"></div>
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-  <div
-    class="application-main "
-    data-commit-hovercards-enabled
-    data-discussion-hovercards-enabled
-    data-issue-and-pr-hovercards-enabled
-    data-project-hovercards-enabled
-  >
-      <main>
-        
-
-<div data-test-selector="login-standard-view" data-hpc="true" class="authentication ">
-    <div class="authentication-header ">
-            <link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/primer-react-3ca70c6e707ba409.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/ncx-9a860680a5f230b9.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/c5-248ebd89895e674d.js" fetchpriority="low" />
-<link crossorigin="anonymous" rel="modulepreload" href="https://github.githubassets.com/assets/sessions-auth-header-cda20bb4d3872930.js" fetchpriority="low" />
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/primer-react-css.9e1f329f2c36a989.module.css" />
-<link crossorigin="anonymous" media="all" rel="stylesheet" href="https://github.githubassets.com/assets/sessions-auth-header.1b336f70c6ee1431.module.css" />
-
-<react-partial
-  partial-name="sessions-auth-header"
-  data-ssr="true"
-  data-attempted-ssr="true"
-  data-react-profiling="false"
->
-  
-  <script type="application/json" data-target="react-partial.embeddedData">{"props":{"variant":"github","avatarUrl":null,"userName":null,"title":"Sign in to GitHub","description":null}}</script>
-  <div data-target="react-partial.reactRoot"><div class="SessionsAuthHeader-module__authFormHeader__S9PBN"><div class="SessionsAuthHeader-module__authFormHeaderIcon__NP4aI"><div class="SessionsAuthHeader-module__authFormAvatarWrapperStatic__YE9pe"><svg data-component="Octicon" aria-hidden="true" focusable="false" class="octicon octicon-mark-github SessionsAuthHeader-module__avatarCoinGithub__n0H61" viewBox="0 0 24 24" width="48" height="48" fill="currentColor" display="inline-block" overflow="visible" style="vertical-align:text-bottom"><path d="M10.226 17.284c-2.965-.36-5.054-2.493-5.054-5.256 0-1.123.404-2.336 1.078-3.144-.292-.741-.247-2.314.09-2.965.898-.112 2.111.36 2.83 1.01.853-.269 1.752-.404 2.853-.404 1.1 0 1.999.135 2.807.382.696-.629 1.932-1.1 2.83-.988.315.606.36 2.179.067 2.942.72.854 1.101 2 1.101 3.167 0 2.763-2.089 4.852-5.098 5.234.763.494 1.28 1.572 1.28 2.807v2.336c0 .674.561 1.056 1.235.786 4.066-1.55 7.255-5.615 7.255-10.646C23.5 6.188 18.334 1 11.978 1 5.62 1 .5 6.188.5 12.545c0 4.986 3.167 9.12 7.435 10.669.606.225 1.19-.18 1.19-.786V20.63a2.9 2.9 0 0 1-1.078.224c-1.483 0-2.359-.808-2.987-2.313-.247-.607-.517-.966-1.034-1.033-.27-.023-.359-.135-.359-.27 0-.27.45-.471.898-.471.652 0 1.213.404 1.797 1.235.45.651.921.943 1.483.943.561 0 .92-.202 1.437-.719.382-.381.674-.718.944-.943"></path></svg></div></div><div class="SessionsAuthHeader-module__authFormHeaderContent__wtmqP"><h1 class="SessionsAuthHeader-module__authFormHeaderTitle__rVSNG">Sign in to GitHub</h1></div></div></div>
-</react-partial>
-
-
-
-    </div>
-
-    <div class="authentication-body authentication-body--with-form new-session">
-          <div id="js-flash-container" class="flash-container" data-turbo-replace>
-
-
-
-
-  <template class="js-flash-template">
-    
-<div class="flash flash-full   {{ className }}">
-  <div >
-    <button autofocus class="flash-close js-flash-close" type="button" aria-label="Dismiss this message">
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-    </button>
-    <div aria-atomic="true" role="alert" class="js-flash-alert">
-      
-      <div>{{ message }}</div>
-
-    </div>
-  </div>
-</div>
-  </template>
-</div>
-
-
-    <div class="flash js-transform-notice" hidden>
-      <button class="flash-close js-flash-close" type="button" aria-label="Dismiss this message">
-        <svg aria-label="Dismiss" role="img" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-      </button>
-    </div>
-      
-<!-- '"` --><!-- </textarea></xmp> --></option></form><form data-turbo="false" action="/session" accept-charset="UTF-8" method="post"><input type="hidden" name="authenticity_token" value="GdJv9L3jmY56IQ35vy9S1fIPROXj-Pf7BRVdajMwvRunghqwxFzzhopOTtkSijk8fAD1tcC3mLX_LmBio_Me0g" />  <div>
-
-  <input type="hidden" name="add_account" id="add_account" autocomplete="off" class="form-control" />
-
-    <label for="login_field">
-      Username or email address
-    </label>
-    <input type="text" name="login" id="login_field" autocapitalize="off" autocorrect="off" autocomplete="username" class="form-control  js-login-field" autofocus="autofocus" required="required" />
-  </div>
-
-
-  <div class="position-relative">
-    <label for="password">
-      Password
-    </label>
-    <input type="password" name="password" id="password" class="form-control form-control js-password-field" autocomplete="current-password" required="required" />
-    <a class="label-link position-absolute top-0 right-0" id="forgot-password" href="/password_reset">Forgot password?</a>
-    
-<input type="hidden" name="webauthn-conditional" value="undefined">
-<input type="hidden" class="js-support" name="javascript-support" value="unknown">
-<input type="hidden" class="js-webauthn-support" name="webauthn-support" value="unknown">
-<input type="hidden" class="js-webauthn-iuvpaa-support" name="webauthn-iuvpaa-support" value="unknown">
-<input type="hidden" name="return_to" id="return_to" value="https://github.com/sistema-boleteria-institucional/sistema-boleteria-institucional/raw/refs/heads/main/server.js" autocomplete="off" class="form-control" />
-<input type="hidden" name="allow_signup" id="allow_signup" autocomplete="off" class="form-control" />
-<input type="hidden" name="client_id" id="client_id" autocomplete="off" class="form-control" />
-<input type="hidden" name="integration" id="integration" autocomplete="off" class="form-control" />
-<input type="text" name="required_field_1b50" hidden="hidden" class="form-control" /><input type="hidden" name="timestamp" value="1789995079461" autocomplete="off" class="form-control" /><input type="hidden" name="timestamp_secret" value="140b87b592c863e0573e2111638bc734e137e3c7141885fb680ad3936fb3f633" autocomplete="off" class="form-control" />
-
-  </div>
-
-  <div>
-    <input type="submit" name="commit" value="Sign in" class="btn btn-primary btn-block js-sign-in-button" data-disable-with="Signing in…" data-signin-label="Sign in" data-sso-label="Sign in with your identity provider" development="false" disable-emu-sso="false" />
-  </div>
-</form>  <webauthn-status class="js-webauthn-login-emu-control">
-      <include-fragment data-target="webauthn-status.fragment" data-src="/u2f/login_fragment?disable_signup=false&amp;is_emu_login=false&amp;mobile_ios=false&amp;return_to=https%3A%2F%2Fgithub.com%2Fsistema-boleteria-institucional%2Fsistema-boleteria-institucional%2Fraw%2Frefs%2Fheads%2Fmain%2Fserver.js" data-nonce="v2:c0e8fe2a-1769-5aa4-e1df-062e5f2079fe" data-view-component="true">
-  
-  <div data-show-on-forbidden-error hidden>
-    <div class="Box">
-  <div class="blankslate-container">
-    <div data-view-component="true" class="blankslate blankslate-spacious color-bg-default rounded-2">
-      
-
-      <h3 data-view-component="true" class="blankslate-heading">        Uh oh!
-</h3>
-      <p data-view-component="true" class="blankslate-description">        <p class="color-fg-muted my-2 mb-2 ws-normal">There was an error while loading. <a class="Link--inTextBlock" data-turbo="false" href="" aria-label="Please reload this page">Please reload this page</a>.</p>
-</p>
-
-</div>  </div>
-</div>  </div>
-</include-fragment>
-  </webauthn-status>
-
-
-
-    </div>
-
-    <div class="authentication-footer ">
-                <div class="authentication-login-footer-links">
-          <p class="mt-1 mb-0 p-0">
-            New to GitHub?
-              <a data-ga-click="Sign in, switch to sign up" data-hydro-click="{&quot;event_type&quot;:&quot;authentication.click&quot;,&quot;payload&quot;:{&quot;location_in_page&quot;:&quot;sign in switch to sign up&quot;,&quot;repository_id&quot;:null,&quot;auth_type&quot;:&quot;SIGN_UP&quot;,&quot;originating_url&quot;:&quot;https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fsistema-boleteria-institucional%2Fsistema-boleteria-institucional%2Fraw%2Frefs%2Fheads%2Fmain%2Fserver.js&quot;,&quot;user_id&quot;:null}}" data-hydro-click-hmac="accb129fd0f987d137aaa5ce07764250ce4d530407974a5611d4fab6df0c694d" href="/signup?return_to=https%3A%2F%2Fgithub.com%2Fsistema-boleteria-institucional%2Fsistema-boleteria-institucional%2Fraw%2Frefs%2Fheads%2Fmain%2Fserver.js&amp;source=login">Create an account</a>
-          </p>
-          </div>
-            <webauthn-subtle class="js-webauthn-subtle" hidden>
-    <p class="mb-0 mt-0 js-webauthn-subtle-emu-control">
-      <button data-action="click:webauthn-subtle#prompt" type="button" data-view-component="true" class="Button--link Button--medium Button">  <span class="Button-content">
-    <span class="Button-label">Sign in with a passkey</span>
-  </span>
-</button>
-    </p>
-  </webauthn-subtle>
-
-
-    </div>
-</div>
-      </main>
-  </div>
-
-          <div class="footer-session-authentication" role="contentinfo">
-    <ul class="footer-session-authentication-links">
-        <li>
-          <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to Terms&quot;,&quot;label&quot;:&quot;text:terms&quot;}" href="https://docs.github.com/site-policy/github-terms/github-terms-of-service" data-view-component="true" class="Link--secondary Link">Terms</a>
-        </li>
-
-        <li>
-          <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to privacy&quot;,&quot;label&quot;:&quot;text:privacy&quot;}" href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement" data-view-component="true" class="Link--secondary Link">Privacy</a>
-        </li>
-
-        <li>
-          <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to docs&quot;,&quot;label&quot;:&quot;text:docs&quot;}" href="https://docs.github.com" data-view-component="true" class="Link--secondary Link">Docs</a>
-        </li>
-
-        <li>
-            <a data-analytics-event="{&quot;category&quot;:&quot;Footer&quot;,&quot;action&quot;:&quot;go to contact&quot;,&quot;label&quot;:&quot;text:contact&quot;}" href="https://support.github.com" data-view-component="true" class="Link--secondary Link">Contact GitHub Support</a>
-        </li>
-
-          
-<li class="mx-2" >
-  <cookie-consent-link>
-    <button
-      type="button"
-      class="Link--secondary underline-on-hover border-0 p-0 color-bg-transparent"
-      data-action="click:cookie-consent-link#showConsentManagement"
-      data-analytics-event="{&quot;location&quot;:&quot;footer&quot;,&quot;action&quot;:&quot;cookies&quot;,&quot;context&quot;:&quot;subfooter&quot;,&quot;tag&quot;:&quot;link&quot;,&quot;label&quot;:&quot;cookies_link_subfooter_footer&quot;}"
-    >
-      Manage cookies
-    </button>
-  </cookie-consent-link>
-</li>
-
-  <li class="mx-2">
-    <cookie-consent-link>
-      <button
-        type="button"
-        class="Link--secondary underline-on-hover border-0 p-0 color-bg-transparent text-left"
-        data-action="click:cookie-consent-link#showConsentManagement"
-        data-analytics-event="{&quot;location&quot;:&quot;footer&quot;,&quot;action&quot;:&quot;dont_share_info&quot;,&quot;context&quot;:&quot;subfooter&quot;,&quot;tag&quot;:&quot;link&quot;,&quot;label&quot;:&quot;dont_share_info_link_subfooter_footer&quot;}"
-      >
-        Do not share my personal information
-      </button>
-    </cookie-consent-link>
-  </li>
-
-    </ul>
-  </div>
-
-
-    <ghcc-consent id="ghcc" class="position-fixed bottom-0 left-0" style="z-index: 999999"
-      data-locale="en"
-      data-initial-cookie-consent-allowed=""
-      data-cookie-consent-required="false"
-    ></ghcc-consent>
-
-
-
-
-  <div id="ajax-error-message" class="ajax-error-message flash flash-error" hidden>
-    <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-alert">
-    <path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path>
-</svg>
-    <button type="button" class="flash-close js-ajax-error-dismiss" aria-label="Dismiss error">
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-    </button>
-    You can’t perform that action at this time.
-  </div>
-
-    <template id="site-details-dialog">
-  <details class="details-reset details-overlay details-overlay-dark lh-default color-fg-default hx_rsm" open>
-    <summary role="button" aria-label="Close dialog"></summary>
-    <details-dialog class="Box Box--overlay d-flex flex-column anim-fade-in fast hx_rsm-dialog hx_rsm-modal">
-      <button class="Box-btn-octicon m-0 btn-octicon position-absolute right-0 top-0" type="button" aria-label="Close dialog" data-close-dialog>
-        <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-x">
-    <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>
-</svg>
-      </button>
-      <div class="octocat-spinner tmp-my-6 js-details-dialog-spinner"></div>
-    </details-dialog>
-  </details>
-</template>
-
-    <div class="Popover js-hovercard-content position-absolute" style="display: none; outline: none;">
-  <div class="Popover-message Popover-message--bottom-left Popover-message--large Box color-shadow-large" style="width:360px;">
-  </div>
-</div>
-
-    <template id="snippet-clipboard-copy-button">
-  <div class="zeroclipboard-container position-absolute right-0 top-0">
-    <clipboard-copy aria-label="Copy code to clipboard" class="ClipboardButton btn js-clipboard-copy m-2 p-0" data-copy-feedback="Copied!" data-tooltip-direction="w">
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-copy js-clipboard-copy-icon m-2 tmp-m-2">
-    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path>
-</svg>
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-check js-clipboard-check-icon color-fg-success d-none m-2 tmp-m-2">
-    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
-</svg>
-    </clipboard-copy>
-  </div>
-</template>
-<template id="snippet-clipboard-copy-button-unpositioned">
-  <div class="zeroclipboard-container">
-    <clipboard-copy aria-label="Copy code to clipboard" class="ClipboardButton btn btn-invisible js-clipboard-copy m-2 p-0 d-flex flex-justify-center flex-items-center" data-copy-feedback="Copied!" data-tooltip-direction="w">
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-copy js-clipboard-copy-icon">
-    <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path>
-</svg>
-      <svg aria-hidden="true" data-component="Octicon" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-check js-clipboard-check-icon color-fg-success d-none">
-    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
-</svg>
-    </clipboard-copy>
-  </div>
-</template>
-
-
-
-
-    </div>
-    <div id="js-global-screen-reader-notice" class="sr-only mt-n1" aria-live="polite" aria-atomic="true" ></div>
-    <div id="js-global-screen-reader-notice-assertive" class="sr-only mt-n1" aria-live="assertive" aria-atomic="true"></div>
-  </body>
-</html>
-
-
-  <microsoft-analytics>
-  </microsoft-analytics>
