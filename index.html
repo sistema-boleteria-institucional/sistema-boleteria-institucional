@@ -1676,39 +1676,78 @@ async function cargarListaGestionEventos() {
         cargarCuponesListado();
     }
 }
-		// Alterna el input visible según el tipo de cupón seleccionado
-function cambiarTipoCupon() {
-    const tipo = document.getElementById('cupTipo').value;
-    const grpPorcentaje = document.getElementById('grpPorcentaje');
-    const grpMonto = document.getElementById('grpMonto');
+	async function cargarCuponesListado() {
+    const eventoId = document.getElementById('cupEventoId').value;
+    const tbody = document.getElementById('tbodyCupones');
+    if (!tbody) return;
 
-    if (tipo === 'porcentaje') {
-        grpPorcentaje.style.display = 'block';
-        grpMonto.style.display = 'none';
-    } else {
-        grpPorcentaje.style.display = 'none';
-        grpMonto.style.display = 'block';
+    if (!eventoId) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #94a3b8; padding: 12px;">Selecciona un evento para ver los cupones.</td></tr>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/cupones/evento/${eventoId}`);
+        const cupones = await res.json();
+        tbody.innerHTML = '';
+
+        if (!Array.isArray(cupones) || cupones.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #94a3b8; padding: 12px;">No hay cupones registrados para este evento.</td></tr>';
+            return;
+        }
+
+        cupones.forEach(c => {
+            const labelDesc = (c.porcentaje && c.porcentaje > 0) ? `${c.porcentaje}% OFF` : `$${c.monto_fijo} OFF`;
+            const cuponId = c.id;
+
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #334155;">
+                    <td style="padding: 10px;"><strong>${c.codigo}</strong></td>
+                    <td style="padding: 10px; color: #38bdf8; font-weight: bold;">${labelDesc}</td>
+                    <td style="padding: 10px; text-align: center;">
+                        <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;" onclick="eliminarCupon('${cuponId}')">
+                            🗑️ Eliminar
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error("Error al cargar cupones del evento:", e);
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #ef4444; padding: 12px;">Error al obtener cupones desde el servidor.</td></tr>';
     }
 }
 
-// Envía la solicitud al servidor para registrar el nuevo cupón
-async function crearCupon() {
+async function eliminarCupon(cuponId) {
+    if (!confirm('¿Seguro que deseas eliminar este cupón?')) return;
+
+    const rol = usuarioSesion ? usuarioSesion.tipo : '';
+    try {
+        const res = await fetch(`/api/cupones/eliminar/${cuponId}?rol=${rol}`, { method: 'DELETE' });
+        const data = await res.json();
+        alert(data.mensaje || 'Cupón eliminado');
+        if (data.exito) {
+            cargarCuponesListado();
+        }
+    } catch (err) {
+        console.error("Error al eliminar cupón:", err);
+        alert('Error al intentar eliminar el cupón.');
+    }
+}
+		async function crearCupon() {
+    const tipo = document.getElementById('cupTipo').value;
     const eventoId = document.getElementById('cupEventoId').value;
     const codigo = document.getElementById('cupCodigo').value.trim();
-    const tipo = document.getElementById('cupTipo').value;
 
     const porcentaje = tipo === 'porcentaje' ? parseFloat(document.getElementById('cupPorcentaje').value) || 0 : 0;
     const montoFijo = tipo === 'monto' ? parseFloat(document.getElementById('cupMontoFijo').value) || 0 : 0;
 
-    // Validaciones básicas
-    if (!eventoId) return alert('Por favor, selecciona un evento.');
-    if (!codigo) return alert('Por favor, ingresa un código para el cupón.');
-
-    if (tipo === 'porcentaje' && (porcentaje <= 0 || porcentaje > 100)) {
-        return alert('Ingresa un porcentaje de descuento válido (entre 1 y 100).');
+    if (!eventoId || !codigo) {
+        return alert('Selecciona un evento e ingresa un código.');
     }
-    if (tipo === 'monto' && montoFijo <= 0) {
-        return alert('Ingresa un monto de descuento válido (mayor a 0).');
+
+    if (porcentaje === 0 && montoFijo === 0) {
+        return alert('El cupón debe tener un valor mayor a 0.');
     }
 
     const body = {
@@ -1725,24 +1764,16 @@ async function crearCupon() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
-        
         const data = await res.json();
         alert(data.mensaje);
-
         if (data.exito) {
-            // Limpiar campos del formulario
             document.getElementById('cupCodigo').value = '';
             document.getElementById('cupPorcentaje').value = '';
             document.getElementById('cupMontoFijo').value = '';
-            
-            // Recargar la tabla si la función existe
-            if (typeof cargarCuponesListado === 'function') {
-                cargarCuponesListado();
-            }
+            cargarCuponesListado(); // <-- Actualiza la lista al crear
         }
     } catch (e) {
-        console.error('Error al crear cupón:', e);
-        alert('Error de conexión al intentar guardar el cupón.');
+        alert('Error al guardar el cupón.');
     }
 }
     </script>
