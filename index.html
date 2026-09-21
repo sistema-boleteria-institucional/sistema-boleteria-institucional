@@ -410,13 +410,13 @@
             </table>
         </div>
 
-        <!-- PESTAÑA CUPONES -->
+<!-- PESTAÑA CUPONES -->
         <div id="tabCupones" class="tab-content">
             <h3>Gestión de Cupones de Descuento</h3>
             <div style="max-width: 400px;">
                 <div class="form-group">
                     <label>Seleccionar Evento:</label>
-                    <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;">
+                    <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cargarCuponesListado()">
                         <option value="">-- Seleccionar Evento --</option>
                     </select>
                 </div>
@@ -441,6 +441,23 @@
                 </div>
 
                 <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
+            </div>
+
+            <hr style="border-color: #334155; margin: 30px 0;">
+            <h4>📋 Cupones del Evento</h4>
+            <div style="overflow-x: auto; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; margin-top: 15px;">
+                <table class="tabla-admin" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Tipo / Descuento</th>
+                            <th style="text-align: center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCupones">
+                        <tr><td colspan="3" style="text-align: center; color: #94a3b8;">Selecciona un evento para ver los cupones.</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
