@@ -664,27 +664,122 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
         res.json(lista);
     }
 });
+async function agregarAsientosFaltantes(eventoId, pGen, dispGen, pGrada, dispGrada) {
+    const newGen = Math.min(Number(dispGen) || 0, 112);
+    const newGrada = Math.min(Number(dispGrada) || 0, 24);
 
+    if (db) {
+        // Obtener asientos actualmente existentes
+        const resA = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+        const asientosExistentes = resA.rows || [];
+
+        // Actualizar precios de asientos aún no vendidos
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'General' AND vendido = 0", args: [pGen, eventoId] });
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'Grada' AND vendido = 0", args: [pGrada, eventoId] });
+
+        // General: verificar cuántos existen y agregar los faltantes
+        const genExistentes = asientosExistentes.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-'));
+        const cantGenActual = genExistentes.length;
+
+        if (newGen > cantGenActual) {
+            for (let i = cantGenActual + 1; i <= newGen; i++) {
+                await db.execute({
+                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                    args: [eventoId, `GEN-A${i}`, 'General', pGen]
+                });
+            }
+        }
+
+        // Gradas: verificar cuántos G1 y G2 existen
+        const g1Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G1-')).length;
+        const g2Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G2-')).length;
+
+        const targetG1 = Math.ceil(newGrada / 2);
+        const targetG2 = newGrada - targetG1;
+
+        if (targetG1 > g1Existentes) {
+            for (let i = g1Existentes + 1; i <= targetG1; i++) {
+                await db.execute({
+                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                    args: [eventoId, `G1-${i}`, 'Grada', pGrada]
+                });
+            }
+        }
+
+        if (targetG2 > g2Existentes) {
+            for (let i = g2Existentes + 1; i <= targetG2; i++) {
+                await db.execute({
+                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
+                    args: [eventoId, `G2-${i}`, 'Grada', pGrada]
+                });
+            }
+        }
+    } else {
+        // Modo Memoria
+        if (!asientosMemoria[eventoId]) asientosMemoria[eventoId] = [];
+        const lista = asientosMemoria[eventoId];
+
+        lista.forEach(a => {
+            if (a.vendido === 0) {
+                if (a.tipoZona === 'General') a.precio = pGen;
+                if (a.tipoZona === 'Grada') a.precio = pGrada;
+            }
+        });
+
+        let maxId = lista.reduce((max, a) => Math.max(max, a.id || 0), 0);
+
+        const cantGenActual = lista.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')).length;
+        if (newGen > cantGenActual) {
+            for (let i = cantGenActual + 1; i <= newGen; i++) {
+                lista.push({ id: ++maxId, codigoAsiento: `GEN-A${i}`, tipoZona: 'General', precio: pGen, vendido: 0, habilitado: 1, asistio: 0 });
+            }
+        }
+
+        const g1Existentes = lista.filter(a => a.codigoAsiento.startsWith('G1-')).length;
+        const g2Existentes = lista.filter(a => a.codigoAsiento.startsWith('G2-')).length;
+        const targetG1 = Math.ceil(newGrada / 2);
+        const targetG2 = newGrada - targetG1;
+
+        if (targetG1 > g1Existentes) {
+            for (let i = g1Existentes + 1; i <= targetG1; i++) {
+                lista.push({ id: ++maxId, codigoAsiento: `G1-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
+            }
+        }
+        if (targetG2 > g2Existentes) {
+            for (let i = g2Existentes + 1; i <= targetG2; i++) {
+                lista.push({ id: ++maxId, codigoAsiento: `G2-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
+            }
+        }
+    }
+}
 // 3. EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
-    const { nombre, fecha, hora, precioGeneral, precioGradas, rol } = req.body;
+    const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
 
-    // Control de permisos por rol (Se agregaron 'super' y 'adm')
+    // Control de permisos por rol
     const rolConsulta = req.query.rol || rol;
     if (rolConsulta && !['super', 'adm', 'admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
 
+    const pGen = Number(precioGeneral) || 0;
+    const pGrada = Number(precioGradas) || 0;
+    const dGen = Number(dispGen) || 0;
+    const dGrada = Number(dispGrada) || 0;
+
     if (db) {
         try {
             await db.execute({
                 sql: `UPDATE eventos 
-                      SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, precioGradas = ? 
+                      SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? 
                       WHERE id = ?`,
-                args: [nombre, fecha, hora, precioGeneral, precioGradas, id]
+                args: [nombre, fecha, hora, pGen, dGen, pGrada, dGrada, id]
             });
-            return res.json({ exito: true, mensaje: "Evento actualizado correctamente." });
+
+            await agregarAsientosFaltantes(id, pGen, dGen, pGrada, dGrada);
+
+            return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente." });
         } catch (e) {
             console.error("Error al actualizar evento:", e);
             return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
@@ -701,11 +796,15 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             nombre: nombre || eventosMemoria[idx].nombre,
             fecha: fecha || eventosMemoria[idx].fecha,
             hora: hora || eventosMemoria[idx].hora,
-            precioGeneral: precioGeneral !== undefined ? precioGeneral : eventosMemoria[idx].precioGeneral,
-            precioGradas: precioGradas !== undefined ? precioGradas : eventosMemoria[idx].precioGradas
+            precioGeneral: pGen,
+            dispGen: dGen,
+            precioGradas: pGrada,
+            dispGrada: dGrada
         };
 
-        return res.json({ exito: true, mensaje: "Evento actualizado correctamente (Modo Memoria)." });
+        await agregarAsientosFaltantes(id, pGen, dGen, pGrada, dGrada);
+
+        return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente (Modo Memoria)." });
     }
 });
 // 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
