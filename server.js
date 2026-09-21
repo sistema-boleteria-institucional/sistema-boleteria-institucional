@@ -664,94 +664,73 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
         res.json(lista);
     }
 });
-async function agregarAsientosFaltantes(eventoId, pGen, dispGen, pGrada, dispGrada) {
+
+async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada) {
     const newGen = Math.min(Number(dispGen) || 0, 112);
     const newGrada = Math.min(Number(dispGrada) || 0, 24);
 
     if (db) {
-        // Obtener asientos actualmente existentes
+        // Obtener todos los asientos del evento
         const resA = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
         const asientosExistentes = resA.rows || [];
 
-        // Actualizar precios de asientos aún no vendidos
+        // 1. Actualizar precios de asientos no vendidos
         await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'General' AND vendido = 0", args: [pGen, eventoId] });
         await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'Grada' AND vendido = 0", args: [pGrada, eventoId] });
 
-        // General: verificar cuántos existen y agregar los faltantes
+        // --- GENERAL ---
         const genExistentes = asientosExistentes.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-'));
         const cantGenActual = genExistentes.length;
 
         if (newGen > cantGenActual) {
+            // Ampliar asientos General
             for (let i = cantGenActual + 1; i <= newGen; i++) {
                 await db.execute({
                     sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
                     args: [eventoId, `GEN-A${i}`, 'General', pGen]
                 });
             }
+        } else if (newGen < cantGenActual) {
+            // Reducir asientos General (Solo elimina si NO está vendido)
+            for (let i = newGen + 1; i <= cantGenActual; i++) {
+                await db.execute({
+                    sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0",
+                    args: [eventoId, `GEN-A${i}`]
+                });
+            }
         }
 
-        // Gradas: verificar cuántos G1 y G2 existen
+        // --- GRADAS ---
         const g1Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G1-')).length;
         const g2Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G2-')).length;
 
         const targetG1 = Math.ceil(newGrada / 2);
         const targetG2 = newGrada - targetG1;
 
+        // Ajustar G1
         if (targetG1 > g1Existentes) {
             for (let i = g1Existentes + 1; i <= targetG1; i++) {
-                await db.execute({
-                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
-                    args: [eventoId, `G1-${i}`, 'Grada', pGrada]
-                });
+                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G1-${i}`, 'Grada', pGrada] });
+            }
+        } else if (targetG1 < g1Existentes) {
+            for (let i = targetG1 + 1; i <= g1Existentes; i++) {
+                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G1-${i}`] });
             }
         }
 
+        // Ajustar G2
         if (targetG2 > g2Existentes) {
             for (let i = g2Existentes + 1; i <= targetG2; i++) {
-                await db.execute({
-                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
-                    args: [eventoId, `G2-${i}`, 'Grada', pGrada]
-                });
+                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G2-${i}`, 'Grada', pGrada] });
             }
-        }
-    } else {
-        // Modo Memoria
-        if (!asientosMemoria[eventoId]) asientosMemoria[eventoId] = [];
-        const lista = asientosMemoria[eventoId];
-
-        lista.forEach(a => {
-            if (a.vendido === 0) {
-                if (a.tipoZona === 'General') a.precio = pGen;
-                if (a.tipoZona === 'Grada') a.precio = pGrada;
-            }
-        });
-
-        let maxId = lista.reduce((max, a) => Math.max(max, a.id || 0), 0);
-
-        const cantGenActual = lista.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')).length;
-        if (newGen > cantGenActual) {
-            for (let i = cantGenActual + 1; i <= newGen; i++) {
-                lista.push({ id: ++maxId, codigoAsiento: `GEN-A${i}`, tipoZona: 'General', precio: pGen, vendido: 0, habilitado: 1, asistio: 0 });
-            }
-        }
-
-        const g1Existentes = lista.filter(a => a.codigoAsiento.startsWith('G1-')).length;
-        const g2Existentes = lista.filter(a => a.codigoAsiento.startsWith('G2-')).length;
-        const targetG1 = Math.ceil(newGrada / 2);
-        const targetG2 = newGrada - targetG1;
-
-        if (targetG1 > g1Existentes) {
-            for (let i = g1Existentes + 1; i <= targetG1; i++) {
-                lista.push({ id: ++maxId, codigoAsiento: `G1-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
-            }
-        }
-        if (targetG2 > g2Existentes) {
-            for (let i = g2Existentes + 1; i <= targetG2; i++) {
-                lista.push({ id: ++maxId, codigoAsiento: `G2-${i}`, tipoZona: 'Grada', precio: pGrada, vendido: 0, habilitado: 1, asistio: 0 });
+        } else if (targetG2 < g2Existentes) {
+            for (let i = targetG2 + 1; i <= targetG2; i++) {
+                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G2-${i}`] });
             }
         }
     }
 }
+
 // 3. EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
@@ -806,6 +785,17 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
 
         return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente (Modo Memoria)." });
     }
+
+    // Validación opcional para impedir modificar eventos pasados
+const fechaEvento = new Date(`${fecha}T23:59:59`);
+const hoy = new Date();
+
+if (fechaEvento < hoy) {
+    return res.status(400).json({ 
+        exito: false, 
+        mensaje: "No se pueden modificar eventos que ya han finalizado." 
+    });
+}
 });
 // 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
