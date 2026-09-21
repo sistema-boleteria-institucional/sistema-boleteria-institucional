@@ -732,7 +732,6 @@ async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada)
 }
 
 // 3. EDITAR / ACTUALIZAR EVENTO
-// 3. EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
@@ -741,17 +740,6 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
     const rolConsulta = req.query.rol || rol;
     if (rolConsulta && !['super', 'adm', 'admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
-    }
-
-    // Validación para impedir modificar eventos pasados
-    if (fecha) {
-        const fechaEvento = new Date(`${fecha}T23:59:59`);
-        if (fechaEvento < new Date()) {
-            return res.status(400).json({ 
-                exito: false, 
-                mensaje: "No se pueden modificar eventos que ya han finalizado." 
-            });
-        }
     }
 
     const pGen = Number(precioGeneral) || 0;
@@ -768,7 +756,7 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
                 args: [nombre, fecha, hora, pGen, dGen, pGrada, dGrada, id]
             });
 
-            await ajustarAsientosEvento(id, pGen, dGen, pGrada, dGrada);
+            await agregarAsientosFaltantes(id, pGen, dGen, pGrada, dGrada);
 
             return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente." });
         } catch (e) {
@@ -793,10 +781,21 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             dispGrada: dGrada
         };
 
-        await ajustarAsientosEvento(id, pGen, dGen, pGrada, dGrada);
+        await agregarAsientosFaltantes(id, pGen, dGen, pGrada, dGrada);
 
         return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente (Modo Memoria)." });
     }
+
+    // Validación opcional para impedir modificar eventos pasados
+const fechaEvento = new Date(`${fecha}T23:59:59`);
+const hoy = new Date();
+
+if (fechaEvento < hoy) {
+    return res.status(400).json({ 
+        exito: false, 
+        mensaje: "No se pueden modificar eventos que ya han finalizado." 
+    });
+}
 });
 // 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
