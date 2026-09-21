@@ -489,7 +489,7 @@
         </div>
     </div>
 
-    <!-- MODAL PARA EDITAR EVENTO -->
+<!-- MODAL PARA EDITAR EVENTO -->
     <div id="modalEditarEvento" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999; justify-content:center; align-items:center;">
         <div style="background:#1e293b; color:#fff; padding:25px; border-radius:12px; width:90%; max-width:500px; border:1px solid #334155;">
             <h3>✏️ Editar Evento</h3>
@@ -515,8 +515,19 @@
                     <input type="number" id="editEvPrecioGeneral" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
                 </div>
                 <div style="flex:1;">
+                    <label>Cant. General (Máx 112):</label>
+                    <input type="number" id="editEvDispGen" min="1" max="112" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <div style="flex:1;">
                     <label>Precio Gradas ($):</label>
                     <input type="number" id="editEvPrecioGradas" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
+                </div>
+                <div style="flex:1;">
+                    <label>Cant. Gradas (Máx 24):</label>
+                    <input type="number" id="editEvDispGrada" min="1" max="24" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
                 </div>
             </div>
 
@@ -1015,49 +1026,57 @@ async function crearCupon() {
             }
         }
 
-        function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas) {
-            document.getElementById('editEvId').value = id;
-            document.getElementById('editEvNombre').value = nombre;
-            document.getElementById('editEvFecha').value = fecha;
-            document.getElementById('editEvHora').value = hora;
-            document.getElementById('editEvPrecioGeneral').value = precioGen;
-            document.getElementById('editEvPrecioGradas').value = precioGradas;
-            document.getElementById('modalEditarEvento').style.display = 'flex';
-        }
+		function abrirModalEditarEvento(evento) {
+		    document.getElementById('editEvId').value = evento.id || evento.evento_id;
+		    document.getElementById('editEvNombre').value = evento.nombre || '';
+		    document.getElementById('editEvFecha').value = evento.fecha || '';
+		    document.getElementById('editEvHora').value = evento.hora || '';
+		    document.getElementById('editEvPrecioGeneral').value = evento.precioGeneral || 1500;
+		    document.getElementById('editEvDispGen').value = evento.dispGen || 112; // <-- NUEVO
+		    document.getElementById('editEvPrecioGradas').value = evento.precioGradas || 3000;
+		    document.getElementById('editEvDispGrada').value = evento.dispGrada || 24;  // <-- NUEVO
+		
+		    document.getElementById('modalEditarEvento').style.display = 'flex';
+		}
 
         function cerrarModalEditarEvento() {
             document.getElementById('modalEditarEvento').style.display = 'none';
         }
 
-        async function guardarEdicionEvento() {
-            const id = document.getElementById('editEvId').value;
-            const body = {
-                nombre: document.getElementById('editEvNombre').value.trim(),
-                fecha: document.getElementById('editEvFecha').value,
-                hora: document.getElementById('editEvHora').value,
-                precioGeneral: parseFloat(document.getElementById('editEvPrecioGeneral').value) || 0,
-                precioGradas: parseFloat(document.getElementById('editEvPrecioGradas').value) || 0,
-                rol: usuarioSesion ? usuarioSesion.tipo : ''
-            };
-
-            try {
-                const res = await fetch(`/api/eventos/editar/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await res.json();
-                alert(data.mensaje || 'Evento actualizado correctamente');
-                if (res.ok || data.exito) {
-                    cerrarModalEditarEvento();
-                    cargarListaGestionEventos();
-                    cargarEventosEnSelect();
-                }
-            } catch (err) {
-                console.error(err);
-                alert('Error al intentar guardar los cambios del evento.');
-            }
-        }
+// 2. Modificar para capturar dispGen y dispGrada y enviarlos al backend
+		async function guardarEdicionEvento() {
+		    const id = document.getElementById('editEvId').value;
+		    const body = {
+		        nombre: document.getElementById('editEvNombre').value,
+		        fecha: document.getElementById('editEvFecha').value,
+		        hora: document.getElementById('editEvHora').value,
+		        precioGeneral: parseFloat(document.getElementById('editEvPrecioGeneral').value) || 0,
+		        dispGen: parseInt(document.getElementById('editEvDispGen').value, 10) || 0,      // <-- NUEVO
+		        precioGradas: parseFloat(document.getElementById('editEvPrecioGradas').value) || 0,
+		        dispGrada: parseInt(document.getElementById('editEvDispGrada').value, 10) || 0,   // <-- NUEVO
+		        rol: usuarioSesion ? usuarioSesion.tipo : 'admin'
+		    };
+		
+		    try {
+		        const res = await fetch(`/api/eventos/editar/${id}`, {
+		            method: 'PUT',
+		            headers: { 'Content-Type': 'application/json' },
+		            body: JSON.stringify(body)
+		        });
+		        const data = await res.json();
+		        if (res.ok && data.exito) {
+		            alert('Evento y asientos actualizados correctamente.');
+		            cerrarModalEditarEvento();
+		            if (typeof cargarListaGestionEventos === 'function') cargarListaGestionEventos();
+		            if (typeof cargarEventosEnSelect === 'function') cargarEventosEnSelect();
+		        } else {
+		            alert(data.mensaje || 'Error al guardar cambios.');
+		        }
+		    } catch (err) {
+		        console.error("Error al editar evento:", err);
+		        alert('Error de conexión con el servidor.');
+		    }
+		}
 
         async function eliminarEvento(id) {
             if (!confirm(`¿Seguro que deseas eliminar el evento ${id}? Se borrarán también sus ventas y asientos asociados.`)) return;
