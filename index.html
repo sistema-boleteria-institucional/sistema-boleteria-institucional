@@ -697,81 +697,68 @@
         }
 
 async function cargarMapaAsientos() {
-    const selectVenta = document.getElementById('selEventoVenta');
+            const selectVenta = document.getElementById('selEventoVenta');
             const eventoId = selectVenta.value;
-            
-            // --- NUEVO: Mostrar/Ocultar la hora del evento seleccionado ---
-            const divDetalleHora = document.getElementById('detalleHoraEvento');
+            const detalleHora = document.getElementById('detalleHoraEvento');
             const lblHora = document.getElementById('lblHoraEvento');
-            
-            if (eventoId && selectVenta.selectedIndex > 0) {
-                const opcionSeleccionada = selectVenta.options[selectVenta.selectedIndex];
-                const horaSeleccionada = opcionSeleccionada.getAttribute('data-hora');
-                
-                divDetalleHora.style.display = 'block';
-                lblHora.innerText = horaSeleccionada || 'No especificada';
-            } else {
-                divDetalleHora.style.display = 'none';
+            const gridPlateaIzq = document.getElementById('gridPlateaIzq');
+            const gridPlateaDer = document.getElementById('gridPlateaDer');
+            const gridGrada1 = document.getElementById('gridGrada1');
+            const gridGrada2 = document.getElementById('gridGrada2');
+
+            gridPlateaIzq.innerHTML = '';
+            gridPlateaDer.innerHTML = '';
+            gridGrada1.innerHTML = '';
+            gridGrada2.innerHTML = '';
+
+            if (!eventoId) {
+                if (detalleHora) detalleHora.style.display = 'none';
+                return;
             }
-    
-    // Novedad: Capturar el nombre del evento seleccionado para mostrarlo al vendedor
-	const textoEvento = selectVenta.options[selectVenta.selectedIndex].text;
-	document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
 
-    const gridIzq = document.getElementById('gridPlateaIzq');
-    const gridDer = document.getElementById('gridPlateaDer');
-    const gridG1 = document.getElementById('gridGrada1');
-    const gridG2 = document.getElementById('gridGrada2');
+            const selectedOption = selectVenta.options[selectVenta.selectedIndex];
+            const hora = selectedOption.getAttribute('data-hora');
+            if (lblHora && hora) {
+                lblHora.innerText = hora;
+                detalleHora.style.display = 'block';
+            }
 
-    cargarCuponesEnSelectVenta(eventoId);
-
-    gridIzq.innerHTML = ''; gridDer.innerHTML = ''; gridG1.innerHTML = ''; gridG2.innerHTML = '';
-    asientoSeleccionado = null;
-    document.getElementById('lblAsiento').innerText = 'Ninguno';
-    document.getElementById('lblPrecio').innerText = '$0';
-
-    if(!eventoId) return;
             try {
                 const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                if(!res.ok) return;
+                if (!res.ok) return;
                 const asientos = await res.json();
 
-                if(Array.isArray(asientos)){
-                    asientos.forEach(a => {
-                        const div = document.createElement('div');
-                        div.classList.add('asiento');
+                asientos.forEach(a => {
+                    const btn = document.createElement('button');
+                    btn.className = `asiento ${a.vendido ? 'ocupado' : 'disponible'}`;
+                    btn.innerText = a.codigoAsiento;
+                    btn.disabled = a.vendido === 1;
 
-                        if (a.vendido === 1) div.classList.add('vendido');
-                        else if (a.habilitado === 0) div.classList.add('bloqueado');
-                        else {
-                            div.classList.add('disponible');
-                            div.onclick = () => seleccionarAsiento(div, a);
-                        }
+                    btn.onclick = () => seleccionarAsiento(a, btn);
 
-                        const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
-                        div.innerText = codigoLimpio;
-
-                        if(a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) {
-                            const matchNum = codigoLimpio.match(/\d+$/);
-                            const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
-                            
-                            const posEnFila = ((numAsiento - 1) % 16) + 1;
-                            if (posEnFila >= 1 && posEnFila <= 8) {
-                                gridIzq.appendChild(div);
-                            } else {
-                                gridDer.appendChild(div);
-                            }
-                        } else if(a.codigoAsiento.startsWith('G1')) {
-                            gridG1.appendChild(div);
-                        } else if(a.codigoAsiento.startsWith('G2')) {
-                            gridG2.appendChild(div);
-                        }
-                    });
-                }
-            } catch(e) {
-                console.error("Error al cargar asientos:", e);
+                    if (a.codigoAsiento.startsWith('GEN-A')) {
+                        const num = parseInt(a.codigoAsiento.replace('GEN-A', ''), 10);
+                        if (num <= 56) gridPlateaIzq.appendChild(btn);
+                        else gridPlateaDer.appendChild(btn);
+                    } else if (a.codigoAsiento.startsWith('G1-')) {
+                        gridGrada1.appendChild(btn);
+                    } else if (a.codigoAsiento.startsWith('G2-')) {
+                        gridGrada2.appendChild(btn);
+                    }
+                });
+            } catch (e) {
+                console.error("Error al cargar mapa de asientos:", e);
             }
         }
+
+        function seleccionarAsiento(asientoObj, el) {
+            document.querySelectorAll('.asiento').forEach(b => b.classList.remove('seleccionado'));
+            el.classList.add('seleccionado');
+            asientoSeleccionado = asientoObj;
+            document.getElementById('lblAsiento').innerText = asientoObj.codigoAsiento;
+            document.getElementById('lblPrecio').innerText = `$${asientoObj.precio}`;
+        }
+
 
         function calcularMontoFinal(precioBase) {
             let precioFinal = precioBase;
