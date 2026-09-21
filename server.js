@@ -170,8 +170,8 @@ let configMemoria = {};
 async function generarAsientosParaEvento(eventoObj) {
     const pGen = Number(eventoObj.precioGeneral) || 1500;
     const pGrada = Number(eventoObj.precioGradas) || 3000;
-    const totalGen = Math.min(Number(eventoObj.dispGen) || 112, 112);
-    const totalGrada = Math.min(Number(eventoObj.dispGrada) || 24, 24);
+    const totalGen = Math.min(Math.max(Number(eventoObj.dispGen) || 0, 0), 112);
+    const totalGrada = Math.min(Math.max(Number(eventoObj.dispGrada) || 0, 0), 24);
 
     if (db) {
         for (let i = 1; i <= totalGen; i++) {
@@ -235,35 +235,49 @@ app.post('/api/login', async (req, res) => {
     res.status(401).json({ exito: false, mensaje: 'Usuario o contraseña incorrectos' });
 });
 
-// 1. Endpoint para devolver el historial en JSON
 app.get('/api/eventos/:eventoId/historial', async (req, res) => {
     const { eventoId } = req.params;
+    const esTodos = !eventoId || eventoId.toUpperCase() === 'TODOS';
+
     try {
         let ventas = [];
         let asistentes = 0;
 
         if (db) {
-            const vRes = await db.execute({ sql: "SELECT * FROM ventas WHERE evento_id = ?", args: [eventoId] });
-            const aRes = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
+            const sqlVentas = esTodos ? "SELECT * FROM ventas" : "SELECT * FROM ventas WHERE evento_id = ?";
+            const sqlAsientos = esTodos ? "SELECT * FROM asientos" : "SELECT * FROM asientos WHERE evento_id = ?";
+            const args = esTodos ? [] : [eventoId];
+
+            const vRes = await db.execute({ sql: sqlVentas, args });
+            const aRes = await db.execute({ sql: sqlAsientos, args });
+
             ventas = vRes.rows || [];
-            asistentes = (aRes.rows || []).filter(a => a.vendido === 1 && a.asistio === 1).length;
+            asistentes = (aRes.rows || []).filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
         } else {
-            ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
-            const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
-            asistentes = listaA.filter(a => a.vendido === 1 && a.asistio === 1).length;
+            const todasVentas = typeof ventasMemoria !== 'undefined' ? ventasMemoria : [];
+            ventas = esTodos ? todasVentas : todasVentas.filter(v => v.evento_id === eventoId);
+
+            if (esTodos) {
+                const todosAsientos = Object.values(typeof asientosMemoria !== 'undefined' ? asientosMemoria : {}).flat();
+                asistentes = todosAsientos.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            } else {
+                const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
+                asistentes = listaA.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
+            }
         }
 
         const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
 
         return res.json({
-            nombre: `Evento ${eventoId}`,
+            nombre: esTodos ? "Todos los Eventos" : `Evento ${eventoId}`,
             recaudado,
             totalVentas: ventas.length,
             asistencia: asistentes,
             historialVentas: ventas.map(v => ({
                 idReserva: v.id || v.idReserva || '-',
+                eventoId: v.evento_id || eventoId,
                 fecha: v.fechaCompra || v.fecha || null,
-                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-'),
+                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}`.trim() : (v.cliente || '-'),
                 email: v.email || '-',
                 asiento: v.codigoAsiento || v.asiento || '-',
                 metodoPago: v.metodo_pago || v.metodoPago || '-',
@@ -277,7 +291,6 @@ app.get('/api/eventos/:eventoId/historial', async (req, res) => {
     }
 });
 
-// 2. Endpoint para descargar el reporte en formato CSV (compatible con Excel)
 app.get('/api/eventos/:eventoId/descargar-excel', async (req, res) => {
     const { eventoId } = req.params;
     try {
@@ -289,7 +302,6 @@ app.get('/api/eventos/:eventoId/descargar-excel', async (req, res) => {
             ventas = (typeof ventasMemoria !== 'undefined' ? ventasMemoria : []).filter(v => v.evento_id === eventoId);
         }
 
-        // Generación de cabecera e hileras CSV
         let csv = "\uFEFFID Reserva;Fecha;Cliente;Email;Asiento;Metodo Pago;Monto\n";
         ventas.forEach(v => {
             const cliente = v.nombre ? `${v.nombre} ${v.apellido || ''}` : (v.cliente || '-');
@@ -305,7 +317,6 @@ app.get('/api/eventos/:eventoId/descargar-excel', async (req, res) => {
     }
 });
 
-            
 app.get('/api/eventos', async (req, res) => {
     if (db) {
         try {
@@ -318,21 +329,31 @@ app.get('/api/eventos', async (req, res) => {
 
 app.post('/api/eventos/crear', async (req, res) => {
     const evento = req.body;
+    const dGen = Number(evento.dispGen) || 0;
+    const dGrada = Number(evento.dispGrada) || 0;
+
+    if (dGen < 0 || dGen > 112) {
+        return res.status(400).json({ exito: false, mensaje: 'La cantidad de asientos en General no puede superar el aforo máximo de 112.' });
+    }
+    if (dGrada < 0 || dGrada > 24) {
+        return res.status(400).json({ exito: false, mensaje: 'La cantidad de asientos en Gradas no puede superar el aforo máximo de 24.' });
+    }
+
     if (db) {
         try {
             await db.execute({
                 sql: "INSERT INTO eventos (id, nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                args: [evento.id, evento.nombre, evento.fecha, evento.hora, evento.precioGeneral, evento.dispGen, evento.precioGradas, evento.dispGrada]
+                args: [evento.id, evento.nombre, evento.fecha, evento.hora, evento.precioGeneral, dGen, evento.precioGradas, dGrada]
             });
-            await generarAsientosParaEvento(evento);
+            await generarAsientosParaEvento({ ...evento, dispGen: dGen, dispGrada: dGrada });
             return res.json({ exito: true, mensaje: 'Evento creado con éxito' });
         } catch (e) {
             console.error(e);
             return res.status(500).json({ exito: false, mensaje: 'Error al crear evento' });
         }
     } else {
-        eventosMemoria.push(evento);
-        await generarAsientosParaEvento(evento);
+        eventosMemoria.push({ ...evento, dispGen: dGen, dispGrada: dGrada });
+        await generarAsientosParaEvento({ ...evento, dispGen: dGen, dispGrada: dGrada });
         return res.json({ exito: true, mensaje: 'Evento creado (Memoria)' });
     }
 });
@@ -407,7 +428,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
     const vendedorNombre = venta.usuario_vendedor || venta.vendedor || 'Sistema';
     
-    // Función auxiliar para verificar si el evento ya superó las 5 hs
     const validarTiempoVenta = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -417,7 +437,6 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
     if (db) {
         try {
-            // Verificar tiempo del evento
             const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [venta.evento_id] });
             if (evRes.rows.length > 0) {
                 const { fecha, hora } = evRes.rows[0];
@@ -472,7 +491,7 @@ app.post('/api/ventas/procesar', async (req, res) => {
         res.json({ exito: true, mensaje: 'Venta registrada (Memoria)', ventaId: nuevaVentaId, sig });
     }
 });
-// 1. CANCELAR VENTA/ENTRADA (Acepta rol desde query o body)
+
 app.delete('/api/ventas/cancelar/:id', async (req, res) => {
     const ventaId = req.params.id;
     const rol = (req.query.rol || req.body?.rol || '').toLowerCase();
@@ -541,7 +560,7 @@ app.get('/api/informe/:eventoId', async (req, res) => {
 
             const vendidas = ventasRes.rows.length;
             const recaudado = ventasRes.rows.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-            const asistentes = asientosRes.rows.filter(a => a.vendido === 1 && a.asistio === 1).length;
+            const asistentes = asientosRes.rows.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
 
             return res.json({ vendidas, asistentes, recaudado });
         } catch (e) { console.error(e); }
@@ -551,12 +570,11 @@ app.get('/api/informe/:eventoId', async (req, res) => {
     const listaAsientos = asientosMemoria[eventoId] || [];
     const vendidas = ventasEvento.length;
     const recaudado = ventasEvento.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-    const asistentes = listaAsientos.filter(a => a.vendido === 1 && a.asistio === 1).length;
+    const asistentes = listaAsientos.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
 
     res.json({ vendidas, asistentes, recaudado });
 });
 
-// 2. REPORTE CONSOLIDADO POR EVENTOS (Alias de rutas y mapeo de nombres de campos SQL)
 app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (req, res) => {
     if (db) {
         try {
@@ -597,7 +615,6 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
             return res.status(500).json({ exito: false, mensaje: 'Error al generar reporte consolidado' });
         }
     } else {
-        // Modo Memoria
         const reportes = eventosMemoria.map(e => {
             const ventas = ventasMemoria.filter(v => v.evento_id === e.id);
             const listaAsientos = asientosMemoria[e.id] || [];
@@ -620,6 +637,7 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
         return res.json(reportes);
     }
 });
+
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
@@ -665,85 +683,268 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     }
 });
 
+// FUNCIÓN AUXILIAR PARA AJUSTAR ASIENTOS (AMPLIAR O ACHICAR SIN PERDER ASIENTOS VENDIDOS)
 async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada) {
-    const newGen = Math.min(Number(dispGen) || 0, 112);
-    const newGrada = Math.min(Number(dispGrada) || 0, 24);
+    const newGen = Math.min(Math.max(Number(dispGen) || 0, 0), 112);
+    const newGrada = Math.min(Math.max(Number(dispGrada) || 0, 0), 24);
 
     if (db) {
-        // Obtener todos los asientos del evento
         const resA = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [eventoId] });
         const asientosExistentes = resA.rows || [];
 
         // 1. Actualizar precios de asientos no vendidos
-        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'General' AND vendido = 0", args: [pGen, eventoId] });
-        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'Grada' AND vendido = 0", args: [pGrada, eventoId] });
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND (tipoZona = 'General' OR codigoAsiento LIKE 'GEN-%') AND vendido = 0", args: [pGen, eventoId] });
+        await db.execute({ sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND (tipoZona = 'Grada' OR codigoAsiento LIKE 'G1-%' OR codigoAsiento LIKE 'G2-%') AND vendido = 0", args: [pGrada, eventoId] });
 
-        // --- GENERAL ---
+        // --- ZONA GENERAL ---
         const genExistentes = asientosExistentes.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-'));
         const cantGenActual = genExistentes.length;
 
         if (newGen > cantGenActual) {
-            // Ampliar asientos General
             for (let i = cantGenActual + 1; i <= newGen; i++) {
-                await db.execute({
-                    sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)",
-                    args: [eventoId, `GEN-A${i}`, 'General', pGen]
-                });
+                const codigo = `GEN-A${i}`;
+                if (!genExistentes.some(a => a.codigoAsiento === codigo)) {
+                    await db.execute({
+                        sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, 'General', ?, 0, 1, 0)",
+                        args: [eventoId, codigo, pGen]
+                    });
+                }
             }
         } else if (newGen < cantGenActual) {
-            // Reducir asientos General (Solo elimina si NO está vendido)
-            for (let i = newGen + 1; i <= cantGenActual; i++) {
+            const aRemover = cantGenActual - newGen;
+            const genNoVendidos = genExistentes
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('GEN-A', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('GEN-A', ''), 10) || 0;
+                    return numB - numA;
+                });
+
+            const aEliminar = genNoVendidos.slice(0, aRemover);
+            for (const a of aEliminar) {
                 await db.execute({
-                    sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0",
-                    args: [eventoId, `GEN-A${i}`]
+                    sql: "DELETE FROM asientos WHERE id = ? AND vendido = 0",
+                    args: [a.id]
                 });
             }
         }
 
-        // --- GRADAS ---
-        const g1Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G1-')).length;
-        const g2Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G2-')).length;
+        // --- ZONA GRADAS ---
+        const g1Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G1-'));
+        const g2Existentes = asientosExistentes.filter(a => a.codigoAsiento.startsWith('G2-'));
 
-        const targetG1 = Math.ceil(newGrada / 2);
-        const targetG2 = newGrada - targetG1;
+        const soldG1 = g1Existentes.filter(a => Number(a.vendido) === 1).length;
+        const soldG2 = g2Existentes.filter(a => Number(a.vendido) === 1).length;
 
-        // Ajustar G1
-        if (targetG1 > g1Existentes) {
-            for (let i = g1Existentes + 1; i <= targetG1; i++) {
-                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G1-${i}`, 'Grada', pGrada] });
+        let targetG1 = Math.ceil(newGrada / 2);
+        let targetG2 = newGrada - targetG1;
+
+        if (targetG1 < soldG1) {
+            targetG1 = soldG1;
+            targetG2 = newGrada - targetG1;
+        } else if (targetG2 < soldG2) {
+            targetG2 = soldG2;
+            targetG1 = newGrada - targetG2;
+        }
+
+        // Ajustar Grada 1
+        const cantG1Actual = g1Existentes.length;
+        if (targetG1 > cantG1Actual) {
+            for (let i = cantG1Actual + 1; i <= targetG1; i++) {
+                const codigo = `G1-${i}`;
+                if (!g1Existentes.some(a => a.codigoAsiento === codigo)) {
+                    await db.execute({
+                        sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, 'Grada', ?, 0, 1, 0)",
+                        args: [eventoId, codigo, pGrada]
+                    });
+                }
             }
-        } else if (targetG1 < g1Existentes) {
-            for (let i = targetG1 + 1; i <= g1Existentes; i++) {
-                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G1-${i}`] });
+        } else if (targetG1 < cantG1Actual) {
+            const removerG1 = cantG1Actual - targetG1;
+            const g1NoVendidos = g1Existentes
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('G1-', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('G1-', ''), 10) || 0;
+                    return numB - numA;
+                });
+            const aEliminarG1 = g1NoVendidos.slice(0, removerG1);
+            for (const a of aEliminarG1) {
+                await db.execute({
+                    sql: "DELETE FROM asientos WHERE id = ? AND vendido = 0",
+                    args: [a.id]
+                });
             }
         }
 
-        // Ajustar G2
-        if (targetG2 > g2Existentes) {
-            for (let i = g2Existentes + 1; i <= targetG2; i++) {
-                await db.execute({ sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, ?, ?, 0, 1, 0)", args: [eventoId, `G2-${i}`, 'Grada', pGrada] });
+        // Ajustar Grada 2
+        const cantG2Actual = g2Existentes.length;
+        if (targetG2 > cantG2Actual) {
+            for (let i = cantG2Actual + 1; i <= targetG2; i++) {
+                const codigo = `G2-${i}`;
+                if (!g2Existentes.some(a => a.codigoAsiento === codigo)) {
+                    await db.execute({
+                        sql: "INSERT INTO asientos (evento_id, codigoAsiento, tipoZona, precio, vendido, habilitado, asistio) VALUES (?, ?, 'Grada', ?, 0, 1, 0)",
+                        args: [eventoId, codigo, pGrada]
+                    });
+                }
             }
-        } else if (targetG2 < g2Existentes) {
-            for (let i = targetG2 + 1; i <= targetG2; i++) {
-                await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ? AND codigoAsiento = ? AND vendido = 0", args: [eventoId, `G2-${i}`] });
+        } else if (targetG2 < cantG2Actual) {
+            const removerG2 = cantG2Actual - targetG2;
+            const g2NoVendidos = g2Existentes
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('G2-', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('G2-', ''), 10) || 0;
+                    return numB - numA;
+                });
+            const aEliminarG2 = g2NoVendidos.slice(0, removerG2);
+            for (const a of aEliminarG2) {
+                await db.execute({
+                    sql: "DELETE FROM asientos WHERE id = ? AND vendido = 0",
+                    args: [a.id]
+                });
             }
+        }
+    } else {
+        // --- MODO MEMORIA TEMPORAL ---
+        if (!asientosMemoria[eventoId]) asientosMemoria[eventoId] = [];
+        const lista = asientosMemoria[eventoId];
+
+        lista.forEach(a => {
+            if (Number(a.vendido) === 0) {
+                if (a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) a.precio = pGen;
+                if (a.tipoZona === 'Grada' || a.codigoAsiento.startsWith('G1-') || a.codigoAsiento.startsWith('G2-')) a.precio = pGrada;
+            }
+        });
+
+        // General Memoria
+        const genExistentes = lista.filter(a => a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-'));
+        const cantGenActual = genExistentes.length;
+
+        if (newGen > cantGenActual) {
+            let maxId = lista.reduce((max, item) => item.id > max ? item.id : max, 0);
+            for (let i = cantGenActual + 1; i <= newGen; i++) {
+                const codigo = `GEN-A${i}`;
+                if (!genExistentes.some(a => a.codigoAsiento === codigo)) {
+                    lista.push({
+                        id: ++maxId,
+                        codigoAsiento: codigo,
+                        tipoZona: 'General',
+                        precio: pGen,
+                        vendido: 0,
+                        habilitado: 1,
+                        asistio: 0
+                    });
+                }
+            }
+        } else if (newGen < cantGenActual) {
+            const aRemover = cantGenActual - newGen;
+            const genNoVendidos = genExistentes
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('GEN-A', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('GEN-A', ''), 10) || 0;
+                    return numB - numA;
+                });
+            const idsAEliminar = new Set(genNoVendidos.slice(0, aRemover).map(a => a.id));
+            asientosMemoria[eventoId] = lista.filter(a => !idsAEliminar.has(a.id));
+        }
+
+        // Gradas Memoria
+        const listaActualizada = asientosMemoria[eventoId];
+        const g1Existentes = listaActualizada.filter(a => a.codigoAsiento.startsWith('G1-'));
+        const g2Existentes = listaActualizada.filter(a => a.codigoAsiento.startsWith('G2-'));
+
+        const soldG1 = g1Existentes.filter(a => Number(a.vendido) === 1).length;
+        const soldG2 = g2Existentes.filter(a => Number(a.vendido) === 1).length;
+
+        let targetG1 = Math.ceil(newGrada / 2);
+        let targetG2 = newGrada - targetG1;
+
+        if (targetG1 < soldG1) {
+            targetG1 = soldG1;
+            targetG2 = newGrada - targetG1;
+        } else if (targetG2 < soldG2) {
+            targetG2 = soldG2;
+            targetG1 = newGrada - targetG2;
+        }
+
+        let maxId = listaActualizada.reduce((max, item) => item.id > max ? item.id : max, 0);
+
+        const cantG1Actual = g1Existentes.length;
+        if (targetG1 > cantG1Actual) {
+            for (let i = cantG1Actual + 1; i <= targetG1; i++) {
+                const codigo = `G1-${i}`;
+                if (!g1Existentes.some(a => a.codigoAsiento === codigo)) {
+                    asientosMemoria[eventoId].push({
+                        id: ++maxId,
+                        codigoAsiento: codigo,
+                        tipoZona: 'Grada',
+                        precio: pGrada,
+                        vendido: 0,
+                        habilitado: 1,
+                        asistio: 0
+                    });
+                }
+            }
+        } else if (targetG1 < cantG1Actual) {
+            const removerG1 = cantG1Actual - targetG1;
+            const g1NoVendidos = g1Existentes
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('G1-', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('G1-', ''), 10) || 0;
+                    return numB - numA;
+                });
+            const idsAEliminar = new Set(g1NoVendidos.slice(0, removerG1).map(a => a.id));
+            asientosMemoria[eventoId] = asientosMemoria[eventoId].filter(a => !idsAEliminar.has(a.id));
+        }
+
+        const listaPostG1 = asientosMemoria[eventoId];
+        const g2Actuales = listaPostG1.filter(a => a.codigoAsiento.startsWith('G2-'));
+        const cantG2Actual = g2Actuales.length;
+
+        if (targetG2 > cantG2Actual) {
+            for (let i = cantG2Actual + 1; i <= targetG2; i++) {
+                const codigo = `G2-${i}`;
+                if (!g2Actuales.some(a => a.codigoAsiento === codigo)) {
+                    asientosMemoria[eventoId].push({
+                        id: ++maxId,
+                        codigoAsiento: codigo,
+                        tipoZona: 'Grada',
+                        precio: pGrada,
+                        vendido: 0,
+                        habilitado: 1,
+                        asistio: 0
+                    });
+                }
+            }
+        } else if (targetG2 < cantG2Actual) {
+            const removerG2 = cantG2Actual - targetG2;
+            const g2NoVendidos = g2Actuales
+                .filter(a => Number(a.vendido) === 0)
+                .sort((a, b) => {
+                    const numA = parseInt(a.codigoAsiento.replace('G2-', ''), 10) || 0;
+                    const numB = parseInt(b.codigoAsiento.replace('G2-', ''), 10) || 0;
+                    return numB - numA;
+                });
+            const idsAEliminar = new Set(g2NoVendidos.slice(0, removerG2).map(a => a.id));
+            asientosMemoria[eventoId] = asientosMemoria[eventoId].filter(a => !idsAEliminar.has(a.id));
         }
     }
 }
 
-// 3. EDITAR / ACTUALIZAR EVENTO
-// 3. EDITAR / ACTUALIZAR EVENTO
+// EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { nombre, fecha, hora, precioGeneral, dispGen, precioGradas, dispGrada, rol } = req.body;
 
-    // Control de permisos por rol
     const rolConsulta = req.query.rol || rol;
     if (rolConsulta && !['super', 'adm', 'admin', 'administrador', 'organizador'].includes(rolConsulta.toLowerCase())) {
         return res.status(403).json({ exito: false, mensaje: "No tienes permisos para modificar eventos." });
     }
 
-    // Validación para impedir modificar eventos pasados
     if (fecha) {
         const fechaEvento = new Date(`${fecha}T23:59:59`);
         if (fechaEvento < new Date()) {
@@ -758,6 +959,44 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
     const pGrada = Number(precioGradas) || 0;
     const dGen = Number(dispGen) || 0;
     const dGrada = Number(dispGrada) || 0;
+
+    // 1. VALIDACIÓN DE AFORO MÁXIMO
+    if (dGen > 112) {
+        return res.status(400).json({ exito: false, mensaje: 'El aforo máximo para la zona General es de 112 asientos.' });
+    }
+    if (dGrada > 24) {
+        return res.status(400).json({ exito: false, mensaje: 'El aforo máximo para la zona de Gradas es de 24 asientos.' });
+    }
+
+    // 2. VALIDACIÓN DE ENTRADAS VENDIDAS
+    let asientosExistentes = [];
+    if (db) {
+        try {
+            const resA = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [id] });
+            asientosExistentes = resA.rows || [];
+        } catch (e) {
+            console.error("Error al consultar asientos:", e);
+        }
+    } else {
+        asientosExistentes = asientosMemoria[id] || [];
+    }
+
+    const genVendidos = asientosExistentes.filter(a => (a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) && Number(a.vendido) === 1).length;
+    const gradaVendidos = asientosExistentes.filter(a => (a.tipoZona === 'Grada' || a.codigoAsiento.startsWith('G1-') || a.codigoAsiento.startsWith('G2-')) && Number(a.vendido) === 1).length;
+
+    if (dGen < genVendidos) {
+        return res.status(400).json({
+            exito: false,
+            mensaje: `No se puede reducir el aforo de General a ${dGen} porque ya hay ${genVendidos} entrada(s) vendida(s) en esa zona.`
+        });
+    }
+
+    if (dGrada < gradaVendidos) {
+        return res.status(400).json({
+            exito: false,
+            mensaje: `No se puede reducir el aforo de Gradas a ${dGrada} porque ya hay ${gradaVendidos} entrada(s) vendida(s) en esa zona.`
+        });
+    }
 
     if (db) {
         try {
@@ -776,7 +1015,6 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: "Error al actualizar evento en base de datos." });
         }
     } else {
-        // Modo Memoria
         const idx = eventosMemoria.findIndex(e => e.id === id);
         if (idx === -1) {
             return res.status(404).json({ exito: false, mensaje: "Evento no encontrado." });
@@ -798,7 +1036,7 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
         return res.json({ exito: true, mensaje: "Evento y asientos actualizados correctamente (Modo Memoria)." });
     }
 });
-// 4. ELIMINAR EVENTO (Lee rol de req.body o req.query)
+
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
     const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
@@ -828,7 +1066,6 @@ app.delete('/api/eventos/eliminar/:id', async (req, res) => {
 app.put('/api/ventas/editar', async (req, res) => {
     const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
 
-    // Función auxiliar para verificar límite de 2hs desde el inicio del evento
     const validarLimite2Hs = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
         const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
@@ -838,7 +1075,6 @@ app.put('/api/ventas/editar', async (req, res) => {
 
     if (db) {
         try {
-            // 1. Obtener la venta y los datos del evento asociado
             const vRes = await db.execute({ 
                 sql: "SELECT v.*, e.fecha, e.hora FROM ventas v JOIN eventos e ON v.evento_id = e.id WHERE v.id = ?", 
                 args: [ventaId] 
@@ -847,7 +1083,6 @@ app.put('/api/ventas/editar', async (req, res) => {
             if (vRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
             const venta = vRes.rows[0];
 
-            // 2. Validar que no hayan transcurrido más de 2 horas desde el inicio del evento
             if (!validarLimite2Hs(venta.fecha, venta.hora)) {
                 return res.status(403).json({ 
                     exito: false, 
@@ -855,7 +1090,6 @@ app.put('/api/ventas/editar', async (req, res) => {
                 });
             }
 
-            // 3. Validar cambio de asiento si se especificó un nuevo asiento
             if (nuevoAsientoId && Number(nuevoAsientoId) !== Number(venta.asiento_id)) {
                 const aViejoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [venta.asiento_id] });
                 const aNuevoRes = await db.execute({ sql: "SELECT * FROM asientos WHERE id = ?", args: [nuevoAsientoId] });
@@ -873,7 +1107,6 @@ app.put('/api/ventas/editar', async (req, res) => {
                 if (aViejoRes.rows.length > 0) {
                     const asientoViejo = aViejoRes.rows[0];
                     
-                    // Restricción: Solo se permite dentro de la misma categoría (tipoZona)
                     if (asientoViejo.tipoZona !== asientoNuevo.tipoZona) {
                         return res.status(400).json({ 
                             exito: false, 
@@ -881,21 +1114,17 @@ app.put('/api/ventas/editar', async (req, res) => {
                         });
                     }
 
-                    // Liberar asiento anterior
                     await db.execute({ sql: "UPDATE asientos SET vendido = 0 WHERE id = ?", args: [asientoViejo.id] });
                 }
 
-                // Ocupar nuevo asiento
                 await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [nuevoAsientoId] });
 
-                // Actualizar registro en ventas
                 await db.execute({
                     sql: "UPDATE ventas SET asiento_id = ?, codigoAsiento = ? WHERE id = ?",
                     args: [nuevoAsientoId, asientoNuevo.codigoAsiento, ventaId]
                 });
             }
 
-            // 4. Actualizar información del comprador
             await db.execute({
                 sql: "UPDATE ventas SET nombre = ?, apellido = ?, contacto = ?, email = ? WHERE id = ?",
                 args: [nombre, apellido, contacto, email || '', ventaId]
@@ -907,7 +1136,6 @@ app.put('/api/ventas/editar', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al actualizar la venta' });
         }
     } else {
-        // Modo Memoria
         const venta = ventasMemoria.find(x => x.id == ventaId);
         if (!venta) return res.status(404).json({ exito: false, mensaje: 'Venta no encontrada' });
 
@@ -960,7 +1188,6 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
 
     if (db) {
         try {
-            // Se hace LEFT JOIN con la tabla asientos para obtener la columna 'asistio'
             const vRes = await db.execute({
                 sql: `SELECT v.*, e.nombre as evento_nombre, e.fecha as evento_fecha, e.hora as evento_hora, a.asistio
                       FROM ventas v
@@ -973,17 +1200,16 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
 
             const venta = vRes.rows[0];
 
-            // Determinar estado visual del ticket
-            let estado = 'pendiente'; // Azul por defecto
+            let estado = 'pendiente';
             const yaIngreso = Number(venta.asistio) === 1;
 
             if (yaIngreso) {
-                estado = 'ingresado'; // Verde
+                estado = 'ingresado';
             } else if (venta.evento_fecha && venta.evento_hora) {
                 const inicioEvento = new Date(`${venta.evento_fecha}T${venta.evento_hora}:00`);
                 const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
                 if (new Date() > limite6hs) {
-                    estado = 'expirado'; // Rojo
+                    estado = 'expirado';
                 }
             }
 
@@ -996,7 +1222,6 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al obtener la entrada' });
         }
     } else {
-        // Modo Memoria
         const venta = ventasMemoria.find(v => v.id == id);
         if (!venta) return res.status(404).json({ exito: false, mensaje: 'Entrada no encontrada' });
 
@@ -1005,14 +1230,14 @@ app.get('/api/entradas/:id', verificarFirmaMiddleware, async (req, res) => {
         const asientoObj = listaAsientos.find(a => a.id === venta.asiento_id);
         const yaIngreso = asientoObj ? Number(asientoObj.asistio) === 1 : false;
 
-        let estado = 'pendiente'; // Azul
+        let estado = 'pendiente';
         if (yaIngreso) {
-            estado = 'ingresado'; // Verde
+            estado = 'ingresado';
         } else if (evento.fecha && evento.hora) {
             const inicioEvento = new Date(`${evento.fecha}T${evento.hora}:00`);
             const limite6hs = new Date(inicioEvento.getTime() + (6 * 60 * 60 * 1000));
             if (new Date() > limite6hs) {
-                estado = 'expirado'; // Rojo
+                estado = 'expirado';
             }
         }
 
@@ -1313,70 +1538,10 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.get('/api/eventos/:eventoId/historial', async (req, res) => {
-    const { eventoId } = req.params;
-    const esTodos = !eventoId || eventoId.toUpperCase() === 'TODOS';
-
-    try {
-        let ventas = [];
-        let asistentes = 0;
-
-        if (db) {
-            // Consultas dinámicas para Base de Datos
-            const sqlVentas = esTodos ? "SELECT * FROM ventas" : "SELECT * FROM ventas WHERE evento_id = ?";
-            const sqlAsientos = esTodos ? "SELECT * FROM asientos" : "SELECT * FROM asientos WHERE evento_id = ?";
-            const args = esTodos ? [] : [eventoId];
-
-            const vRes = await db.execute({ sql: sqlVentas, args });
-            const aRes = await db.execute({ sql: sqlAsientos, args });
-
-            ventas = vRes.rows || [];
-            asistentes = (aRes.rows || []).filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
-        } else {
-            // Consultas dinámicas en Memoria
-            const todasVentas = typeof ventasMemoria !== 'undefined' ? ventasMemoria : [];
-            ventas = esTodos ? todasVentas : todasVentas.filter(v => v.evento_id === eventoId);
-
-            if (esTodos) {
-                const todosAsientos = Object.values(typeof asientosMemoria !== 'undefined' ? asientosMemoria : {}).flat();
-                asistentes = todosAsientos.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
-            } else {
-                const listaA = (typeof asientosMemoria !== 'undefined' && asientosMemoria[eventoId]) || [];
-                asistentes = listaA.filter(a => Number(a.vendido) === 1 && Number(a.asistio) === 1).length;
-            }
-        }
-
-        const recaudado = ventas.reduce((acc, curr) => acc + Number(curr.monto_total || curr.monto || 0), 0);
-
-        return res.json({
-            nombre: esTodos ? "Todos los Eventos" : `Evento ${eventoId}`,
-            recaudado,
-            totalVentas: ventas.length,
-            asistencia: asistentes,
-            historialVentas: ventas.map(v => ({
-                idReserva: v.id || v.idReserva || '-',
-                eventoId: v.evento_id || eventoId,
-                fecha: v.fechaCompra || v.fecha || null,
-                cliente: v.nombre ? `${v.nombre} ${v.apellido || ''}`.trim() : (v.cliente || '-'),
-                email: v.email || '-',
-                asiento: v.codigoAsiento || v.asiento || '-',
-                metodoPago: v.metodo_pago || v.metodoPago || '-',
-                monto: v.monto_total || v.monto || 0,
-                estado: 'Completado'
-            }))
-        });
-    } catch (e) {
-        console.error("Error al obtener historial:", e);
-        return res.status(500).json({ exito: false, mensaje: 'Error al obtener historial' });
-    }
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`===========================================`);
     console.log(`Servidor iniciado en http://localhost:${PORT}`);
     console.log(`===========================================`);
 });
-
-
 
