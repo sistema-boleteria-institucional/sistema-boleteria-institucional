@@ -828,6 +828,14 @@ async function procesarVenta() {
     } else if (descuentoAplicado.monto_fijo > 0) {
         tipoDescStr = `$${descuentoAplicado.monto_fijo}`;
     }
+	const selCupon = document.getElementById('selCuponVenta');
+    let codigoCuponUsado = '';
+    if (selCupon && selCupon.value && selCupon.value !== "-1") {
+        codigoCuponUsado = selCupon.options[selCupon.selectedIndex] ? selCupon.options[selCupon.selectedIndex].text.trim() : selCupon.value;
+        if (codigoCuponUsado.toLowerCase().includes('sin cupón')) {
+            codigoCuponUsado = '';
+        }
+    }
 
     const body = {
         evento_id: document.getElementById('selEventoVenta').value,
