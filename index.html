@@ -107,6 +107,12 @@
                 display: none !important;
             }
         }
+		.asiento.reservado {
+		    background-color: #64748b !important; /* Gris Slate */
+		    color: #ffffff;
+		    cursor: not-allowed;
+		    border: 1px solid #475569;
+		}
     </style>
 </head>
 <body>
@@ -701,25 +707,25 @@
 
 async function cargarMapaAsientos() {
     const selectVenta = document.getElementById('selEventoVenta');
-            const eventoId = selectVenta.value;
-            
-            // --- NUEVO: Mostrar/Ocultar la hora del evento seleccionado ---
-            const divDetalleHora = document.getElementById('detalleHoraEvento');
-            const lblHora = document.getElementById('lblHoraEvento');
-            
-            if (eventoId && selectVenta.selectedIndex > 0) {
-                const opcionSeleccionada = selectVenta.options[selectVenta.selectedIndex];
-                const horaSeleccionada = opcionSeleccionada.getAttribute('data-hora');
-                
-                divDetalleHora.style.display = 'block';
-                lblHora.innerText = horaSeleccionada || 'No especificada';
-            } else {
-                divDetalleHora.style.display = 'none';
-            }
+    const eventoId = selectVenta.value;
     
-    // Novedad: Capturar el nombre del evento seleccionado para mostrarlo al vendedor
-	const textoEvento = selectVenta.options[selectVenta.selectedIndex].text;
-	document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
+    // --- Mostrar/Ocultar la hora del evento seleccionado ---
+    const divDetalleHora = document.getElementById('detalleHoraEvento');
+    const lblHora = document.getElementById('lblHoraEvento');
+    
+    if (eventoId && selectVenta.selectedIndex > 0) {
+        const opcionSeleccionada = selectVenta.options[selectVenta.selectedIndex];
+        const horaSeleccionada = opcionSeleccionada.getAttribute('data-hora');
+        
+        divDetalleHora.style.display = 'block';
+        lblHora.innerText = horaSeleccionada || 'No especificada';
+    } else {
+        divDetalleHora.style.display = 'none';
+    }
+
+    // Capturar el nombre del evento seleccionado para mostrarlo al vendedor
+    const textoEvento = selectVenta.options[selectVenta.selectedIndex].text;
+    document.getElementById('lblEventoSeleccionado').innerText = eventoId ? textoEvento : 'Ninguno';
 
     const gridIzq = document.getElementById('gridPlateaIzq');
     const gridDer = document.getElementById('gridPlateaDer');
@@ -734,47 +740,58 @@ async function cargarMapaAsientos() {
     document.getElementById('lblPrecio').innerText = '$0';
 
     if(!eventoId) return;
-            try {
-                const res = await fetch(`/api/eventos/${eventoId}/asientos`);
-                if(!res.ok) return;
-                const asientos = await res.json();
 
-                if(Array.isArray(asientos)){
-                    asientos.forEach(a => {
-                        const div = document.createElement('div');
-                        div.classList.add('asiento');
+    try {
+        const res = await fetch(`/api/eventos/${eventoId}/asientos`);
+        if(!res.ok) return;
+        const asientos = await res.json();
 
-                        if (a.vendido === 1) div.classList.add('vendido');
-                        else if (a.habilitado === 0) div.classList.add('bloqueado');
-                        else {
-                            div.classList.add('disponible');
-                            div.onclick = () => seleccionarAsiento(div, a);
-                        }
+        if(Array.isArray(asientos)){
+            asientos.forEach(a => {
+                const div = document.createElement('div');
+                div.classList.add('asiento');
 
-                        const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
-                        div.innerText = codigoLimpio;
+                // --- EVALUAR SI EL ASIENTO SE COMPRÓ CON CUPÓN DE RESERVA ---
+                const cuponUsado = (a.cupon_codigo || '').toString().trim().toUpperCase();
+                const esCuponReserva = cuponUsado === 'RESERVA' || cuponUsado === 'RESERVADO';
 
-                        if(a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) {
-                            const matchNum = codigoLimpio.match(/\d+$/);
-                            const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
-                            
-                            const posEnFila = ((numAsiento - 1) % 16) + 1;
-                            if (posEnFila >= 1 && posEnFila <= 8) {
-                                gridIzq.appendChild(div);
-                            } else {
-                                gridDer.appendChild(div);
-                            }
-                        } else if(a.codigoAsiento.startsWith('G1')) {
-                            gridG1.appendChild(div);
-                        } else if(a.codigoAsiento.startsWith('G2')) {
-                            gridG2.appendChild(div);
-                        }
-                    });
+                if (a.vendido === 1) {
+                    if (esCuponReserva) {
+                        div.classList.add('reservado'); // Se pinta de gris (sin costo)
+                    } else {
+                        div.classList.add('vendido');   // Se pinta de rojo
+                    }
+                } else if (a.habilitado === 0) {
+                    div.classList.add('bloqueado');
+                } else {
+                    div.classList.add('disponible');
+                    div.onclick = () => seleccionarAsiento(div, a);
                 }
-            } catch(e) {
-                console.error("Error al cargar asientos:", e);
-            }
+
+                const codigoLimpio = a.codigoAsiento.replace('GEN-', '');
+                div.innerText = codigoLimpio;
+
+                if(a.tipoZona === 'General' || a.codigoAsiento.startsWith('GEN-')) {
+                    const matchNum = codigoLimpio.match(/\d+$/);
+                    const numAsiento = matchNum ? parseInt(matchNum[0], 10) : 0;
+                    
+                    const posEnFila = ((numAsiento - 1) % 16) + 1;
+                    if (posEnFila >= 1 && posEnFila <= 8) {
+                        gridIzq.appendChild(div);
+                    } else {
+                        gridDer.appendChild(div);
+                    }
+                } else if(a.codigoAsiento.startsWith('G1')) {
+                    gridG1.appendChild(div);
+                } else if(a.codigoAsiento.startsWith('G2')) {
+                    gridG2.appendChild(div);
+                }
+            });
         }
+    } catch(e) {
+        console.error("Error al cargar asientos:", e);
+    }
+}
 
         function calcularMontoFinal(precioBase) {
             let precioFinal = precioBase;
