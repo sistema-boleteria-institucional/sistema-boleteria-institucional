@@ -410,53 +410,54 @@
             </table>
         </div>
 
-        <!-- PESTAÑA CUPONES -->
-        <div id="tabCupones" class="tab-content">
-            <h3>Gestión de Cupones de Descuento</h3>
-            <div style="max-width: 400px;">
-                <div class="form-group">
-                    <label>Seleccionar Evento:</label>
-                    <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;">
-                        <option value="">-- Seleccionar Evento --</option>
-                    </select>
-                </div>
-                <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO2026"></div>
-                
-                <div class="form-group">
-                    <label>Tipo de Descuento:</label>
-                    <select id="cupTipo" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cambiarTipoCupon()">
-                        <option value="porcentaje">Porcentaje (%)</option>
-                        <option value="monto">Monto Fijo ($)</option>
-                    </select>
-                </div>
-
-                <div class="form-group" id="grpPorcentaje">
-                    <label>Porcentaje de Descuento (%):</label>
-                    <input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100">
-                </div>
-
-                <div class="form-group" id="grpMonto" style="display:none;">
-                    <label>Monto de Descuento ($):</label>
-                    <input type="number" id="cupMontoFijo" placeholder="2000" min="1">
-                </div>
-
-                <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
-            </div>
-			<table class="tabla-admin" style="width: 100%; margin-top: 15px;">
-			    <thead>
-			        <tr>
-			            <th>Código</th>
-			            <th>% Descuento</th>
-			            <th>$ Fijo</th>
-			            <th style="text-align: center;">Acciones</th>
-			        </tr>
-			    </thead>
-			    <tbody id="tablaListaCupones">
-			        <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Seleccione un evento para ver sus cupones.</td></tr>
-			    </tbody>
-			</table>
-        </div>
-
+       <!-- PESTAÑA CUPONES -->
+		<div id="tabCupones" class="tab-content">
+		    <h3>Gestión de Cupones de Descuento</h3>
+		    <div style="max-width: 400px;">
+		        <div class="form-group">
+		            <label>Seleccionar Evento:</label>
+		            <!-- SE AGREGA EL onchange AQUÍ -->
+		            <select id="cupEventoId" class="form-control" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cargarCuponesPorEvento()">
+		                <option value="">-- Seleccionar Evento --</option>
+		            </select>
+		        </div>
+		        <div class="form-group"><label>Código del Cupón:</label><input type="text" id="cupCodigo" placeholder="PROMO2026"></div>
+		        
+		        <div class="form-group">
+		            <label>Tipo de Descuento:</label>
+		            <select id="cupTipo" style="width: 100%; padding: 8px; border-radius: 4px; background: #1e293b; color: #fff; border: 1px solid #334155;" onchange="cambiarTipoCupon()">
+		                <option value="porcentaje">Porcentaje (%)</option>
+		                <option value="monto">Monto Fijo ($)</option>
+		            </select>
+		        </div>
+		
+		        <div class="form-group" id="grpPorcentaje">
+		            <label>Porcentaje de Descuento (%):</label>
+		            <input type="number" id="cupPorcentaje" placeholder="10" min="1" max="100">
+		        </div>
+		
+		        <div class="form-group" id="grpMonto" style="display:none;">
+		            <label>Monto de Descuento ($):</label>
+		            <input type="number" id="cupMontoFijo" placeholder="2000" min="1">
+		        </div>
+		
+		        <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
+		    </div>
+		
+		    <table class="tabla-admin" style="width: 100%; margin-top: 25px;">
+		        <thead>
+		            <tr>
+		                <th>Código</th>
+		                <th>% Descuento</th>
+		                <th>$ Fijo</th>
+		                <th style="text-align: center;">Acciones</th>
+		            </tr>
+		        </thead>
+		        <tbody id="tablaListaCupones">
+		            <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Seleccione un evento para ver sus cupones.</td></tr>
+		        </tbody>
+		    </table>
+		</div>
         <!-- PESTAÑA USUARIOS -->
         <div id="tabCrearUsuario" class="tab-content">
             <h3>Gestión de Usuarios</h3>
@@ -943,7 +944,6 @@ async function crearCupon() {
             document.getElementById('cupCodigo').value = '';
             document.getElementById('cupPorcentaje').value = '';
             document.getElementById('cupMontoFijo').value = '';
-			alert(res.mensaje);
 			cargarCuponesPorEvento();
         }
     } catch (e) {
@@ -1669,9 +1669,13 @@ async function crearCupon() {
         });
     });
 
-		async function cargarCuponesPorEvento() {
-    const eventoId = document.getElementById('selEventoCupones').value;
+async function cargarCuponesPorEvento() {
+    // CORREGIDO: Ahora busca el ID real del HTML ('cupEventoId')
+    const select = document.getElementById('cupEventoId');
     const tbody = document.getElementById('tablaListaCupones');
+
+    if (!select || !tbody) return;
+    const eventoId = select.value;
 
     // Si no hay evento seleccionado, limpiamos la tabla
     if (!eventoId) {
@@ -1680,34 +1684,29 @@ async function crearCupon() {
     }
 
     try {
-        // Mostrar mensaje de carga
         tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Cargando cupones...</td></tr>';
         
-        // Llamada al endpoint que ya tienes en server (20).js
         const response = await fetch(`/api/cupones/evento/${eventoId}`);
         const cupones = await response.json();
 
-        // Si no hay cupones, mostramos un mensaje
-        if (cupones.length === 0) {
+        if (!Array.isArray(cupones) || cupones.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No hay cupones registrados para este evento.</td></tr>';
             return;
         }
 
-        // Limpiar tabla y dibujar los cupones
         tbody.innerHTML = '';
         cupones.forEach(cupon => {
             const tr = document.createElement('tr');
+            tr.style.borderBottom = "1px solid #334155";
             
-            // Formatear la vista (evitar mostrar 0 si aplica el otro descuento)
             const txtPorcentaje = cupon.porcentaje > 0 ? `${cupon.porcentaje}%` : '-';
             const txtMontoFijo = cupon.monto_fijo > 0 ? `$${cupon.monto_fijo}` : '-';
 
             tr.innerHTML = `
-                <td><strong>${cupon.codigo}</strong></td>
-                <td>${txtPorcentaje}</td>
-                <td>${txtMontoFijo}</td>
-                <td style="text-align: center;">
-                    <!-- Suponiendo que tengas una función para eliminar -->
+                <td style="padding: 10px;"><strong>${cupon.codigo}</strong></td>
+                <td style="padding: 10px; color: #38bdf8;">${txtPorcentaje}</td>
+                <td style="padding: 10px; color: #22c55e;">${txtMontoFijo}</td>
+                <td style="text-align: center; padding: 10px;">
                     <button class="btn-primary" style="background:#dc2626; padding: 4px 8px; font-size: 0.8em; width: auto;" onclick="eliminarCupon(${cupon.id})">Eliminar</button>
                 </td>
             `;
