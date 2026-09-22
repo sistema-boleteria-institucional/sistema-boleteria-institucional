@@ -502,6 +502,7 @@ app.get('/api/cupones', async (req, res) => {
 app.post('/api/ventas/procesar', async (req, res) => {
     const venta = req.body;
     const vendedorNombre = venta.usuario_vendedor || venta.vendedor || 'Sistema';
+    const cuponCodigo = venta.cupon_codigo || ''; // <--- Capturamos el cupón enviado por el frontend
     
     const validarTiempoVenta = (fechaStr, horaStr) => {
         if (!fechaStr || !horaStr) return true;
@@ -528,10 +529,24 @@ app.post('/api/ventas/procesar', async (req, res) => {
 
             await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
 
+            // SE AGREGÓ 'cupon_codigo' A LA INSERCIÓN SQL
             const insRes = await db.execute({
-                sql: `INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, vendedor, fechaCompra) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-                args: [venta.evento_id, venta.asiento_id, asiento.codigoAsiento, venta.nombre, venta.apellido, venta.contacto, venta.email || '', venta.metodo_pago, venta.monto_total, vendedorNombre, new Date().toISOString()]
+                sql: `INSERT INTO ventas (evento_id, asiento_id, codigoAsiento, nombre, apellido, contacto, email, metodo_pago, monto_total, vendedor, fechaCompra, cupon_codigo) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                args: [
+                    venta.evento_id, 
+                    venta.asiento_id, 
+                    asiento.codigoAsiento, 
+                    venta.nombre, 
+                    venta.apellido, 
+                    venta.contacto, 
+                    venta.email || '', 
+                    venta.metodo_pago, 
+                    venta.monto_total, 
+                    vendedorNombre, 
+                    new Date().toISOString(),
+                    cuponCodigo // <--- Se guarda el código del cupón en la BD
+                ]
             });
 
             const nuevaVentaId = insRes.rows[0].id;
@@ -559,7 +574,8 @@ app.post('/api/ventas/procesar', async (req, res) => {
             id: nuevaVentaId, 
             codigoAsiento: asiento.codigoAsiento, 
             vendedor: vendedorNombre, 
-            fechaCompra: new Date().toISOString() 
+            fechaCompra: new Date().toISOString(),
+            cupon_codigo: cuponCodigo // <--- Se guarda también en memoria de respaldo
         });
 
         const sig = generarFirma(nuevaVentaId, asiento.codigoAsiento);
