@@ -442,6 +442,19 @@
 
                 <button class="btn-primary" onclick="crearCupon()">Crear Cupón</button>
             </div>
+			<table class="tabla-admin" style="width: 100%; margin-top: 15px;">
+			    <thead>
+			        <tr>
+			            <th>Código</th>
+			            <th>% Descuento</th>
+			            <th>$ Fijo</th>
+			            <th style="text-align: center;">Acciones</th>
+			        </tr>
+			    </thead>
+			    <tbody id="tablaListaCupones">
+			        <tr><td colspan="4" style="text-align: center; color: #94a3b8;">Seleccione un evento para ver sus cupones.</td></tr>
+			    </tbody>
+			</table>
         </div>
 
         <!-- PESTAÑA USUARIOS -->
@@ -930,6 +943,8 @@ async function crearCupon() {
             document.getElementById('cupCodigo').value = '';
             document.getElementById('cupPorcentaje').value = '';
             document.getElementById('cupMontoFijo').value = '';
+			alert(res.mensaje);
+			cargarCuponesPorEvento();
         }
     } catch (e) {
         alert('Error al guardar el cupón.');
@@ -1653,7 +1668,57 @@ async function crearCupon() {
             window.addEventListener(evento, reiniciarTimerInactividad, true);
         });
     });
-		
+
+		async function cargarCuponesPorEvento() {
+    const eventoId = document.getElementById('selEventoCupones').value;
+    const tbody = document.getElementById('tablaListaCupones');
+
+    // Si no hay evento seleccionado, limpiamos la tabla
+    if (!eventoId) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8;">Seleccione un evento para ver sus cupones.</td></tr>';
+        return;
+    }
+
+    try {
+        // Mostrar mensaje de carga
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Cargando cupones...</td></tr>';
+        
+        // Llamada al endpoint que ya tienes en server (20).js
+        const response = await fetch(`/api/cupones/evento/${eventoId}`);
+        const cupones = await response.json();
+
+        // Si no hay cupones, mostramos un mensaje
+        if (cupones.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No hay cupones registrados para este evento.</td></tr>';
+            return;
+        }
+
+        // Limpiar tabla y dibujar los cupones
+        tbody.innerHTML = '';
+        cupones.forEach(cupon => {
+            const tr = document.createElement('tr');
+            
+            // Formatear la vista (evitar mostrar 0 si aplica el otro descuento)
+            const txtPorcentaje = cupon.porcentaje > 0 ? `${cupon.porcentaje}%` : '-';
+            const txtMontoFijo = cupon.monto_fijo > 0 ? `$${cupon.monto_fijo}` : '-';
+
+            tr.innerHTML = `
+                <td><strong>${cupon.codigo}</strong></td>
+                <td>${txtPorcentaje}</td>
+                <td>${txtMontoFijo}</td>
+                <td style="text-align: center;">
+                    <!-- Suponiendo que tengas una función para eliminar -->
+                    <button class="btn-primary" style="background:#dc2626; padding: 4px 8px; font-size: 0.8em; width: auto;" onclick="eliminarCupon(${cupon.id})">Eliminar</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+    } catch (error) {
+        console.error("Error al cargar los cupones:", error);
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error al cargar la lista de cupones.</td></tr>';
+    }
+}
     </script>
 </body>
 </html>
