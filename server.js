@@ -455,14 +455,28 @@ app.get('/api/eventos/:id/asientos', async (req, res) => {
     const { id } = req.params;
     if (db) {
         try {
-            const result = await db.execute({ sql: "SELECT * FROM asientos WHERE evento_id = ?", args: [id] });
+            const result = await db.execute({ 
+                sql: `SELECT a.*, v.cupon_codigo 
+                      FROM asientos a 
+                      LEFT JOIN ventas v ON a.id = v.asiento_id 
+                      WHERE a.evento_id = ?`, 
+                args: [id] 
+            });
             return res.json(result.rows);
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error(e); 
+            return res.status(500).json({ exito: false, mensaje: 'Error al obtener asientos' });
+        }
     }
+    
+    // Modo Memoria Temporal
     if (!asientosMemoria[id]) asientosMemoria[id] = [];
-    res.json(asientosMemoria[id]);
+    const listaConCupon = asientosMemoria[id].map(a => {
+        const venta = ventasMemoria.find(v => v.asiento_id === a.id);
+        return { ...a, cupon_codigo: venta ? venta.cupon_codigo : null };
+    });
+    res.json(listaConCupon);
 });
-
 app.get('/api/cupones/evento/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
     if (db) {
