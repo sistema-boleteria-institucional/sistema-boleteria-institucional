@@ -1670,14 +1670,12 @@ async function crearCupon() {
     });
 
 async function cargarCuponesPorEvento() {
-    // CORREGIDO: Ahora busca el ID real del HTML ('cupEventoId')
     const select = document.getElementById('cupEventoId');
     const tbody = document.getElementById('tablaListaCupones');
 
     if (!select || !tbody) return;
     const eventoId = select.value;
 
-    // Si no hay evento seleccionado, limpiamos la tabla
     if (!eventoId) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94a3b8;">Seleccione un evento para ver sus cupones.</td></tr>';
         return;
@@ -1694,6 +1692,9 @@ async function cargarCuponesPorEvento() {
             return;
         }
 
+        const rol = (usuarioSesion?.tipo || '').toLowerCase();
+        const esAdminOSuper = ['adm', 'super', 'admin', 'administrador'].includes(rol);
+
         tbody.innerHTML = '';
         cupones.forEach(cupon => {
             const tr = document.createElement('tr');
@@ -1702,13 +1703,20 @@ async function cargarCuponesPorEvento() {
             const txtPorcentaje = cupon.porcentaje > 0 ? `${cupon.porcentaje}%` : '-';
             const txtMontoFijo = cupon.monto_fijo > 0 ? `$${cupon.monto_fijo}` : '-';
 
+            // Control de tiempo (15 minutos)
+            const fechaCreacion = cupon.fecha_creacion ? new Date(cupon.fecha_creacion) : new Date();
+            const minutosTranscurridos = (new Date() - fechaCreacion) / (1000 * 60);
+            const puedeEliminar = esAdminOSuper || (minutosTranscurridos <= 15);
+
+            const botonEliminar = puedeEliminar
+                ? `<button class="btn-primary" style="background:#dc2626; padding: 4px 8px; font-size: 0.8em; width: auto;" onclick="eliminarCupon(${cupon.id})">❌ Eliminar</button>`
+                : `<button class="btn-primary" style="background:#64748b; padding: 4px 8px; font-size: 0.8em; width: auto; cursor: not-allowed;" disabled title="Límite de 15 min expirado">⏳ Expirado</button>`;
+
             tr.innerHTML = `
                 <td style="padding: 10px;"><strong>${cupon.codigo}</strong></td>
                 <td style="padding: 10px; color: #38bdf8;">${txtPorcentaje}</td>
                 <td style="padding: 10px; color: #22c55e;">${txtMontoFijo}</td>
-                <td style="text-align: center; padding: 10px;">
-                    <button class="btn-primary" style="background:#dc2626; padding: 4px 8px; font-size: 0.8em; width: auto;" onclick="eliminarCupon(${cupon.id})">Eliminar</button>
-                </td>
+                <td style="text-align: center; padding: 10px;">${botonEliminar}</td>
             `;
             tbody.appendChild(tr);
         });
