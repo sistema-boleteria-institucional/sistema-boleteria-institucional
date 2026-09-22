@@ -410,9 +410,9 @@ app.delete('/api/cupones/eliminar/:id', async (req, res) => {
 
             const cupon = cRes.rows[0];
 
-            if (cupon.fecha_creacion) {
+                if (cupon.fecha_creacion) {
                 const minutosTranscurridos = (new Date() - new Date(cupon.fecha_creacion)) / (1000 * 60);
-                if (minutosTranscurridos > 15 && !esAdminOSuper) {
+                if (minutosTranscurridos > 15) {
                     return res.status(403).json({ 
                         exito: false, 
                         mensaje: 'Límite expirado: Han transcurrido más de 15 minutos desde la creación del cupón.' 
