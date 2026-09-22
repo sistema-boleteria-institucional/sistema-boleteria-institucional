@@ -103,10 +103,15 @@ async function inicializarTablasDB() {
                 evento_id TEXT,
                 codigo TEXT,
                 porcentaje REAL DEFAULT 0,
-                monto_fijo REAL DEFAULT 0
+                monto_fijo REAL DEFAULT 0,
+                fecha_creacion TEXT
             );
         `);
-
+        try {
+                await db.execute("ALTER TABLE cupones ADD COLUMN fecha_creacion TEXT");
+            } catch (e) {
+                // Si la columna ya existe, se ignora el error de forma segura
+            }
         await db.execute(`
             CREATE TABLE IF NOT EXISTS asientos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
