@@ -735,16 +735,28 @@ app.get(['/api/reportes/consolidado', '/api/eventos/reporte-general'], async (re
 
 app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
     const { eventoId } = req.params;
+    const esTodos = !eventoId || eventoId.toUpperCase() === 'TODOS';
+
     if (db) {
         try {
-            const result = await db.execute({
-                sql: `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
-                             v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id
-                      FROM ventas v
-                      WHERE v.evento_id = ?
-                      ORDER BY v.id DESC`,
-                args: [eventoId]
-            });
+            const sql = esTodos 
+                ? `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
+                          v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id,
+                          a.asistio, e.nombre as eventoNombre
+                   FROM ventas v
+                   LEFT JOIN asientos a ON v.asiento_id = a.id
+                   LEFT JOIN eventos e ON v.evento_id = e.id
+                   ORDER BY v.id DESC`
+                : `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
+                          v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id,
+                          a.asistio
+                   FROM ventas v
+                   LEFT JOIN asientos a ON v.asiento_id = a.id
+                   WHERE v.evento_id = ?
+                   ORDER BY v.id DESC`;
+
+            const args = esTodos ? [] : [eventoId];
+            const result = await db.execute({ sql, args });
 
             const ventasConFirma = result.rows.map(v => ({
                 ...v,
@@ -757,9 +769,15 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al consultar ventas' });
         }
     } else {
-        const lista = ventasMemoria
-            .filter(v => v.evento_id === eventoId)
-            .map(v => ({
+        const todasVentas = typeof ventasMemoria !== 'undefined' ? ventasMemoria : [];
+        const ventasFiltradas = esTodos ? todasVentas : todasVentas.filter(v => v.evento_id === eventoId);
+
+        const lista = ventasFiltradas.map(v => {
+            const listaAsientos = (typeof asientosMemoria !== 'undefined' && asientosMemoria[v.evento_id]) || [];
+            const asientoObj = listaAsientos.find(a => a.id === v.asiento_id);
+            const eventoObj = (typeof eventosMemoria !== 'undefined' && eventosMemoria.find(e => e.id === v.evento_id)) || {};
+
+            return {
                 id: v.id,
                 nombre: v.nombre,
                 apellido: v.apellido,
@@ -772,8 +790,11 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
                 fechaCompra: v.fechaCompra,
                 evento_id: v.evento_id,
                 asiento_id: v.asiento_id,
+                asistio: asientoObj ? Number(asientoObj.asistio) : 0,
+                eventoNombre: eventoObj.nombre || v.evento_id,
                 sig: generarFirma(v.id, v.codigoAsiento)
-            }));
+            };
+        });
         res.json(lista);
     }
 });
