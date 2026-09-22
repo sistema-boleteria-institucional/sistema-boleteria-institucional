@@ -1035,41 +1035,54 @@ async function crearCupon() {
                 alert('Error al guardar evento.');
             }
         }
-
-     function cargarListaGestionEventos() {
-    const tbody = document.getElementById('tablaGestionEventos');
+async function cargarListaGestionEventos() {
+    // Corregido el ID para que coincida con el HTML: 'tbodyGestionEventos'
+    const tbody = document.getElementById('tbodyGestionEventos');
     if (!tbody) return;
-    tbody.innerHTML = '';
+    
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 10px; color: #94a3b8;">Cargando eventos...</td></tr>`;
 
-    // Asegúrate de que 'eventos' sea tu array con los datos actuales
-    if (!window.eventos || window.eventos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 10px; color: #94a3b8;">No hay eventos registrados</td></tr>`;
-        return;
-    }
-
-    window.eventos.forEach(e => {
-        const evId = e.id || e.evento_id;
-        const nombreEscapado = (e.nombre || '').replace(/'/g, "\\'");
+    try {
+        const res = await fetch('/api/eventos');
+        if (!res.ok) throw new Error('Error al obtener eventos');
         
-        tbody.innerHTML += `
-            <tr style="border-bottom: 1px solid #334155;">
-                <td style="padding: 8px;"><strong>${evId}</strong></td>
-                <td style="padding: 8px;">${e.nombre}</td>
-                <td style="padding: 8px;">${e.fecha} ${e.hora || ''}</td>
-                <td style="padding: 8px; text-align: center;">
-                    <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;"
-                        onclick="abrirModalEditarEvento('${evId}', '${nombreEscapado}', '${e.fecha}', '${e.hora || ''}', ${e.precioGeneral || 0}, ${e.precioGradas || 0}, ${e.dispGen || 0}, ${e.dispGrada || 0})">
-                        ✏️ Editar
-                    </button>
-                    <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
-                        onclick="eliminarEvento('${evId}')">
-                        🗑️ Eliminar
-                    </button>
-                </td>
-            </tr>
-        `;
-    });
+        const eventos = await res.json();
+        window.eventos = eventos; // Guardamos de forma global para otros modales
+
+        if (!Array.isArray(eventos) || eventos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 10px; color: #94a3b8;">No hay eventos registrados</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = '';
+        eventos.forEach(e => {
+            const evId = e.id || e.evento_id;
+            const nombreEscapado = (e.nombre || '').replace(/'/g, "\\'");
+            
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid #334155;">
+                    <td style="padding: 8px;"><strong>${evId}</strong></td>
+                    <td style="padding: 8px;">${e.nombre}</td>
+                    <td style="padding: 8px;">${e.fecha} ${e.hora || ''}</td>
+                    <td style="padding: 8px; text-align: center;">
+                        <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;"
+                            onclick="abrirModalEditarEvento('${evId}', '${nombreEscapado}', '${e.fecha}', '${e.hora || ''}', ${e.precioGeneral || 0}, ${e.precioGradas || 0}, ${e.dispGen || 0}, ${e.dispGrada || 0})">
+                            ✏️ Editar
+                        </button>
+                        <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
+                            onclick="eliminarEvento('${evId}')">
+                            🗑️ Eliminar
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (err) {
+        console.error("Error al cargar la lista de gestión de eventos:", err);
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 10px; color: #ef4444;">Error al cargar la lista desde el servidor.</td></tr>`;
+    }
 }
+
    
    function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas, dispGen, dispGrada) {
     const inputId = document.getElementById('editEvId');
