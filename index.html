@@ -1726,6 +1726,27 @@ async function cargarCuponesPorEvento() {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error al cargar la lista de cupones.</td></tr>';
     }
 }
+
+		async function eliminarCupon(id) {
+    if (!confirm('¿Estás seguro de que deseas eliminar este cupón?')) return;
+
+    const rol = (typeof usuarioSesion !== 'undefined' && usuarioSesion) ? usuarioSesion.tipo : '';
+    try {
+        const res = await fetch(`/api/cupones/eliminar/${id}?rol=${rol}`, { 
+            method: 'DELETE' 
+        });
+        const data = await res.json();
+        
+        alert(data.mensaje || 'Cupón eliminado');
+        
+        if (data.exito) {
+            cargarCuponesPorEvento(); // Vuelve a cargar la tabla
+        }
+    } catch (err) {
+        console.error("Error al eliminar cupón:", err);
+        alert('Error de conexión al intentar eliminar el cupón.');
+    }
+}
     </script>
 </body>
 </html>
