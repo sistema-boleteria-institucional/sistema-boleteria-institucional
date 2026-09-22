@@ -753,8 +753,8 @@ async function cargarMapaAsientos() {
 
                 // --- EVALUAR SI EL ASIENTO SE COMPRÓ CON CUPÓN DE RESERVA ---
                 const cuponUsado = (a.cupon_codigo || '').toString().trim().toUpperCase();
-                const esCuponReserva = cuponUsado === 'RESERVA' || cuponUsado === 'RESERVADO';
-
+				const esCuponReserva = cuponUsado.includes('RESERVA') || cuponUsado.includes('RESERVADO');
+				
                 if (a.vendido === 1) {
                     if (esCuponReserva) {
                         div.classList.add('reservado'); // Se pinta de gris (sin costo)
