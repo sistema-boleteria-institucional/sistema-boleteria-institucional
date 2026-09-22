@@ -252,3 +252,53 @@ h2, h3, h4 { color: #ffffff; margin-top: 0; }
 .btn-puerta:hover {
     background-color: #0369a1;
 }
+
+/* =========================================
+   AJUSTES RESPONSIVE (Añadir al final)
+   ========================================= */
+
+@media (max-width: 768px) {
+    body {
+        padding: 10px; /* Reduce márgenes en pantallas pequeñas */
+    }
+
+    /* 1. Encabezado: los elementos pasan a apilarse verticalmente */
+    header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+
+    /* 2. Pantalla de ventas: el mapa y el formulario pasan de 2 columnas a 1 sola */
+    .layout-venta {
+        grid-template-columns: 1fr;
+    }
+
+    /* 3. Distribución de plateas y gradas: se apilan para evitar desbordes */
+    .platea-container {
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .gradas-container {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+
+    /* 4. Tarjetas de resumen del panel: se apilan en columna */
+    .tarjetas-resumen {
+        flex-direction: column;
+        gap: 10px;
+    }
+}
+
+/* 5. Tablas adaptativas: permite desplazamiento horizontal en celulares si son muy anchas */
+.tabla-admin {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
