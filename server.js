@@ -371,22 +371,78 @@ app.post('/api/cupones/crear', async (req, res) => {
 
         const pct = parseFloat(porcentaje) || 0;
         const monto = parseFloat(monto_fijo) || 0;
+        const fechaCreacion = new Date().toISOString();
 
         if (pct > 0 && monto > 0) return res.status(400).json({ exito: false, mensaje: 'No puedes aplicar Porcentaje y Monto Fijo simultáneamente.' });
         if (pct === 0 && monto === 0) return res.status(400).json({ exito: false, mensaje: 'El cupón debe tener un valor mayor a 0.' });
 
         if (db) {
             await db.execute({
-                sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo) VALUES (?, ?, ?, ?)',
-                args: [evento_id, codigo.toUpperCase(), pct, monto]
+                sql: 'INSERT INTO cupones (evento_id, codigo, porcentaje, monto_fijo, fecha_creacion) VALUES (?, ?, ?, ?, ?)',
+                args: [evento_id, codigo.toUpperCase(), pct, monto, fechaCreacion]
             });
             return res.json({ exito: true, mensaje: 'Cupón creado con éxito' });
         } else {
-            cuponesMemoria.push({ evento_id, codigo: codigo.toUpperCase(), porcentaje: pct, monto_fijo: monto });
+            cuponesMemoria.push({ 
+                id: cuponesMemoria.length + 1,
+                evento_id, 
+                codigo: codigo.toUpperCase(), 
+                porcentaje: pct, 
+                monto_fijo: monto,
+                fecha_creacion: fechaCreacion 
+            });
             return res.json({ exito: true, mensaje: 'Cupón guardado (Memoria)' });
         }
     } catch (error) {
         res.status(500).json({ exito: false, mensaje: 'Error al guardar cupón: ' + error.message });
+    }
+});
+
+app.delete('/api/cupones/eliminar/:id', async (req, res) => {
+    const { id } = req.params;
+    const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
+    const esAdminOSuper = ['super', 'admin', 'adm', 'administrador'].includes(rol);
+
+    if (db) {
+        try {
+            const cRes = await db.execute({ sql: "SELECT * FROM cupones WHERE id = ?", args: [id] });
+            if (cRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Cupón no encontrado.' });
+
+            const cupon = cRes.rows[0];
+
+            if (cupon.fecha_creacion) {
+                const minutosTranscurridos = (new Date() - new Date(cupon.fecha_creacion)) / (1000 * 60);
+                if (minutosTranscurridos > 15 && !esAdminOSuper) {
+                    return res.status(403).json({ 
+                        exito: false, 
+                        mensaje: 'Límite expirado: Han transcurrido más de 15 minutos desde la creación del cupón.' 
+                    });
+                }
+            }
+
+            await db.execute({ sql: "DELETE FROM cupones WHERE id = ?", args: [id] });
+            return res.json({ exito: true, mensaje: 'Cupón eliminado correctamente' });
+        } catch (e) {
+            console.error("Error al eliminar cupón:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el cupón' });
+        }
+    } else {
+        const index = cuponesMemoria.findIndex(c => c.id == id);
+        if (index === -1) return res.status(404).json({ exito: false, mensaje: 'Cupón no encontrado.' });
+
+        const cupon = cuponesMemoria[index];
+        if (cupon.fecha_creacion) {
+            const minutosTranscurridos = (new Date() - new Date(cupon.fecha_creacion)) / (1000 * 60);
+            if (minutosTranscurridos > 15 && !esAdminOSuper) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: 'Límite expirado: Han transcurrido más de 15 minutos desde la creación del cupón.' 
+                });
+            }
+        }
+
+        cuponesMemoria.splice(index, 1);
+        return res.json({ exito: true, mensaje: 'Cupón eliminado (Memoria)' });
     }
 });
 
