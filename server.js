@@ -121,7 +121,8 @@ async function inicializarTablasDB() {
                 precio REAL,
                 vendido INTEGER DEFAULT 0,
                 habilitado INTEGER DEFAULT 1,
-                asistio INTEGER DEFAULT 0
+                asistio INTEGER DEFAULT 0,
+                cupon_codigo TEXT
             );
         `);
 
@@ -527,7 +528,10 @@ app.post('/api/ventas/procesar', async (req, res) => {
             const asiento = asientoRes.rows[0];
             if (asiento.vendido === 1) return res.json({ exito: false, mensaje: 'Asiento ocupado' });
 
-            await db.execute({ sql: "UPDATE asientos SET vendido = 1 WHERE id = ?", args: [venta.asiento_id] });
+            await db.execute({ 
+                sql: "UPDATE asientos SET vendido = 1, cupon_codigo = ? WHERE id = ?", 
+                args: [cuponCodigo, venta.asiento_id] 
+            });
 
             // SE AGREGÓ 'cupon_codigo' A LA INSERCIÓN SQL
             const insRes = await db.execute({
