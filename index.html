@@ -840,7 +840,8 @@ async function procesarVenta() {
         monto_total: montoCalculado,
         usuario_vendedor: usuarioSesion ? usuarioSesion.usuario : '',
         tipo_descuento: tipoDescStr,
-        rol: usuarioSesion ? usuarioSesion.tipo : ''
+        rol: usuarioSesion ? usuarioSesion.tipo : '',
+		cupon_codigo: codigoCuponUsado
     };
 
     if (!body.nombre || !body.apellido || !body.contacto) {
