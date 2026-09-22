@@ -529,16 +529,36 @@
                 </div>
             </div>
 
-            <div style="display:flex; gap:10px; margin-top:10px;">
-                <div style="flex:1;">
-                    <label>Precio General ($):</label>
-                    <input type="number" id="editEvPrecioGeneral" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
-                </div>
-                <div style="flex:1;">
-                    <label>Precio Gradas ($):</label>
-                    <input type="number" id="editEvPrecioGradas" style="width:100%; padding:8px; margin-top:4px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #334155;">
-                </div>
-            </div>
+            <!-- Agrega estos campos dentro del <form> de tu modal de edición en index.html -->
+
+<div class="row">
+    <!-- Precio General -->
+    <div class="col-md-6 mb-3">
+        <label for="editPrecioGeneral" class="form-label">Precio General ($)</label>
+        <input type="number" step="0.01" class="form-control" id="editPrecioGeneral" required>
+    </div>
+    <!-- Precio Gradas -->
+    <div class="col-md-6 mb-3">
+        <label for="editPrecioGradas" class="form-label">Precio Gradas ($)</label>
+        <input type="number" step="0.01" class="form-control" id="editPrecioGradas" required>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Aforo General (Ampliación) -->
+    <div class="col-md-6 mb-3">
+        <label for="editAforoGeneral" class="form-label">Aforo General Total</label>
+        <input type="number" class="form-control" id="editAforoGeneral" required>
+        <div class="form-text text-muted">Debe ser igual o mayor al aforo actual. Solo permite sumar asientos.</div>
+    </div>
+    <!-- Aforo Gradas (Ampliación) -->
+    <div class="col-md-6 mb-3">
+        <label for="editAforoGradas" class="form-label">Aforo Gradas Total</label>
+        <input type="number" class="form-control" id="editAforoGradas" required>
+        <div class="form-text text-muted">Debe ser igual o mayor al aforo actual. Solo permite sumar asientos.</div>
+    </div>
+</div>
+
 
             <div style="margin-top:20px; display:flex; justify-content:flex-end; gap:10px;">
                 <button onclick="cerrarModalEditarEvento()" style="padding:8px 16px; background:#64748b; color:#fff; border:none; border-radius:6px; cursor:pointer;">Cancelar</button>
@@ -1064,6 +1084,14 @@ async function crearCupon() {
             document.getElementById('editEvPrecioGeneral').value = precioGen;
             document.getElementById('editEvPrecioGradas').value = precioGradas;
             document.getElementById('modalEditarEvento').style.display = 'flex';
+
+		// Ejemplo al abrir el modal y cargar los datos del evento:
+document.getElementById('editAforoGeneral').value = evento.totalGeneral; // O el valor actual de asientos generales
+document.getElementById('editAforoGeneral').min = evento.totalGeneral; // Impide visualmente poner un número menor
+
+document.getElementById('editAforoGradas').value = evento.totalGradas; // O el valor actual de asientos de gradas
+document.getElementById('editAforoGradas').min = evento.totalGradas; // Impide visualmente poner un número menor
+
         }
 
         function cerrarModalEditarEvento() {
@@ -1078,6 +1106,8 @@ async function crearCupon() {
                 hora: document.getElementById('editEvHora').value,
                 precioGeneral: parseFloat(document.getElementById('editEvPrecioGeneral').value) || 0,
                 precioGradas: parseFloat(document.getElementById('editEvPrecioGradas').value) || 0,
+				nuevoAforoGeneral: parseInt(document.getElementById('editAforoGeneral').value),
+				nuevoAforoGradas: parseInt(document.getElementById('editAforoGradas').value),
                 rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
 
