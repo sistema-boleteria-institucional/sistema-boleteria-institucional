@@ -175,10 +175,10 @@ button.btn-primary {
 .asiento.seleccionado { background: var(--seleccionado); color: white; border: 2px solid white; }
 
 .asiento.reservado {
-		    background-color: #64748b !important; /* Gris Slate */
-		    color: #ffffff;
+			background-color: #94a3b8 !important; /* Gris más claro (Slate 400) */
+			color: #ffffff;
 		    cursor: not-allowed;
-		    border: 1px solid #475569;
+		    border: 1px solid #64748b;
 		}
 
 .leyenda {
