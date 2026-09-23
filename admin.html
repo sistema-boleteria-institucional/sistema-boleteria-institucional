@@ -445,6 +445,7 @@ function cerrarSesion() {
 
         function renderizarTablaYEstadisticas() {
             const tbody = document.getElementById('tablaVentas');
+            
             tbody.innerHTML = '';
 
             let totalRecaudado = 0;
@@ -454,7 +455,7 @@ function cerrarSesion() {
             if (totalEntradas === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="9" style="text-align: center; color: #94a3b8; padding: 20px;">
+                        <td colspan="10" style="text-align: center; color: #94a3b8; padding: 20px;">
                             No se encontraron registros de ventas para la selección actual.
                         </td>
                     </tr>
@@ -471,7 +472,12 @@ function cerrarSesion() {
                 const tel = v.telefono || v.contacto || '';
                 const contactoStr = `${email ? email : ''}${email && tel ? ' / ' : ''}${tel ? tel : ''}` || 'Sin Contacto';
                 const asiento = v.codigoAsiento || v.asiento || 'General';
-                
+                const cupon = v.cupon_codigo || '-';
+    const badgeCupon = cupon !== '-' 
+        ? `<span class="badge badge-info">${cupon}</span>` 
+        : `<span style="color: #94a3b8;">-</span>`;
+
+
                 const metodoPagoRaw = (v.metodo_pago || v.metodoPago || 'Efectivo').toLowerCase();
                 const metodoPago = metodoPagoRaw.includes('mercadopago') || metodoPagoRaw.includes('mp') ? 'Mercado Pago' : 'Efectivo';
                 
@@ -495,6 +501,7 @@ function cerrarSesion() {
                         <td><strong>${cliente}</strong></td>
                         <td><small style="color: #475569;">${contactoStr}</small></td>
                         <td><span class="badge badge-info">${asiento}</span></td>
+                        <td>${badgeCupon}</td>
                         <td>${metodoPago}</td>
                         <td style="font-weight: bold; color: #16a34a;">$${monto.toFixed(2)}</td>
                         <td>${badgeAsistencia}</td>
