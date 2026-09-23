@@ -1052,6 +1052,7 @@ async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada)
 }
 
 // EDITAR / ACTUALIZAR EVENTO
+// EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
     const { 
@@ -1070,61 +1071,112 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
         return res.status(403).json({ exito: false, mensaje: 'No tienes permisos de administrador.' });
     }
 
-    try {
-        // 1. Obtener aforo actual de la base de datos
-        const eventoActual = await db.execute({
-            sql: "SELECT dispGen, dispGrada FROM eventos WHERE id = ?",
-            args: [id]
-        });
+    const validarLimite2Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteEdicion = new Date(inicioEvento.getTime() + (2 * 60 * 60 * 1000));
+        return new Date() <= limiteEdicion;
+    };
 
-        if (eventoActual.rows.length === 0) {
-            return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
+    if (db) {
+        try {
+            // 1. Obtener datos actuales del evento en la base de datos (incluyendo fecha y hora)
+            const eventoActual = await db.execute({
+                sql: "SELECT fecha, hora, dispGen, dispGrada FROM eventos WHERE id = ?",
+                args: [id]
+            });
+
+            if (eventoActual.rows.length === 0) {
+                return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
+            }
+
+            const { fecha: fechaEv, hora: horaEv } = eventoActual.rows[0];
+
+            // Validar restricción de 2 horas transcurridas
+            if (!validarLimite2Hs(fechaEv, horaEv)) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: 'No es posible editar el evento: Han transcurrido más de 2 horas desde el inicio del mismo.' 
+                });
+            }
+
+            const aforoActualGen = Number(eventoActual.rows[0].dispGen) || 0;
+            const aforoActualGrada = Number(eventoActual.rows[0].dispGrada) || 0;
+
+            const pGen = Number(precioGeneral) || 0;
+            const pGrada = Number(precioGradas) || 0;
+            const nGen = Number(nuevoAforoGeneral);
+            const nGrada = Number(nuevoAforoGradas);
+
+            // 2. Validaciones de aforo
+            if (nGen < aforoActualGen) {
+                return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo general (${nGen}). El mínimo permitido es ${aforoActualGen}.` });
+            }
+            if (nGrada < aforoActualGrada) {
+                return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo de gradas (${nGrada}). El mínimo permitido es ${aforoActualGrada}.` });
+            }
+
+            if (nGen > 112) {
+                return res.status(400).json({ exito: false, mensaje: 'El aforo general no puede ser mayor a 112.' });
+            }
+            if (nGrada > 24) {
+                return res.status(400).json({ exito: false, mensaje: 'El aforo de gradas no puede ser mayor a 24.' });
+            }
+
+            // 3. Actualizar tabla de eventos
+            await db.execute({
+                sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?",
+                args: [nombre, fecha, hora, pGen, nGen, pGrada, nGrada, id]
+            });
+
+            // 4. Sincronizar asientos
+            await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
+
+            return res.json({ exito: true, mensaje: 'Evento actualizado correctamente.' });
+
+        } catch (e) {
+            console.error("Error al actualizar evento:", e);
+            return res.status(500).json({ exito: false, mensaje: 'Error al actualizar: ' + e.message });
         }
+    } else {
+        // Soporte para Modo Memoria Temporal
+        const evento = eventosMemoria.find(e => e.id === id);
+        if (!evento) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
 
-        const aforoActualGen = Number(eventoActual.rows[0].dispGen) || 0;
-        const aforoActualGrada = Number(eventoActual.rows[0].dispGrada) || 0;
+        if (!validarLimite2Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ 
+                exito: false, 
+                mensaje: 'No es posible editar el evento: Han transcurrido más de 2 horas desde el inicio del mismo.' 
+            });
+        }
 
         const pGen = Number(precioGeneral) || 0;
         const pGrada = Number(precioGradas) || 0;
         const nGen = Number(nuevoAforoGeneral);
         const nGrada = Number(nuevoAforoGradas);
 
-        // 2. VALIDACIONES ESTRICAS DE AFORO
-
-        // Regla A: No se puede achicar el aforo
-        if (nGen < aforoActualGen) {
-            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo general (${nGen}). El mínimo permitido es ${aforoActualGen}.` });
+        if (nGen < evento.dispGen) {
+            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo general.` });
         }
-        if (nGrada < aforoActualGrada) {
-            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo de gradas (${nGrada}). El mínimo permitido es ${aforoActualGrada}.` });
+        if (nGrada < evento.dispGrada) {
+            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo de gradas.` });
         }
 
-        // Regla B: Límites máximos permitidos (112 General, 24 Gradas)
-        if (nGen > 112) {
-            return res.status(400).json({ exito: false, mensaje: 'El aforo general no puede ser mayor a 112.' });
-        }
-        if (nGrada > 24) {
-            return res.status(400).json({ exito: false, mensaje: 'El aforo de gradas no puede ser mayor a 24.' });
-        }
+        evento.nombre = nombre;
+        evento.fecha = fecha;
+        evento.hora = hora;
+        evento.precioGeneral = pGen;
+        evento.precioGradas = pGrada;
+        evento.dispGen = nGen;
+        evento.dispGrada = nGrada;
 
-        // 3. Actualizar tabla eventos
-        await db.execute({
-            sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?",
-            args: [nombre, fecha, hora, pGen, nGen, pGrada, nGrada, id]
-        });
-
-        // 4. Sincronizar asientos (recrea asientos faltantes como G2-3 si el aforo es 24)
         await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
-
-        return res.json({ exito: true, mensaje: 'Evento actualizado correctamente.' });
-
-    } catch (e) {
-        console.error("Error al actualizar evento:", e);
-        return res.status(500).json({ exito: false, mensaje: 'Error al actualizar: ' + e.message });
+        return res.json({ exito: true, mensaje: 'Evento actualizado correctamente (Memoria).' });
     }
 });
 
 
+// ELIMINAR EVENTO
 app.delete('/api/eventos/eliminar/:id', async (req, res) => {
     const { id } = req.params;
     const rol = (req.body?.rol || req.query?.rol || '').toLowerCase();
@@ -1133,8 +1185,28 @@ app.delete('/api/eventos/eliminar/:id', async (req, res) => {
         return res.status(403).json({ exito: false, mensaje: 'Sin autorización para eliminar eventos.' });
     }
 
+    const validarLimite2Hs = (fechaStr, horaStr) => {
+        if (!fechaStr || !horaStr) return true;
+        const inicioEvento = new Date(`${fechaStr}T${horaStr}:00`);
+        const limiteEliminacion = new Date(inicioEvento.getTime() + (2 * 60 * 60 * 1000));
+        return new Date() <= limiteEliminacion;
+    };
+
     if (db) {
         try {
+            // Consulta de fecha y hora antes de proceder con la eliminación
+            const evRes = await db.execute({ sql: "SELECT fecha, hora FROM eventos WHERE id = ?", args: [id] });
+            if (evRes.rows.length === 0) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
+
+            const { fecha, hora } = evRes.rows[0];
+
+            if (!validarLimite2Hs(fecha, hora)) {
+                return res.status(403).json({ 
+                    exito: false, 
+                    mensaje: 'No es posible eliminar el evento: Han transcurrido más de 2 horas desde el inicio del mismo.' 
+                });
+            }
+
             await db.execute({ sql: "DELETE FROM ventas WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM asientos WHERE evento_id = ?", args: [id] });
             await db.execute({ sql: "DELETE FROM cupones WHERE evento_id = ?", args: [id] });
@@ -1144,13 +1216,22 @@ app.delete('/api/eventos/eliminar/:id', async (req, res) => {
             return res.status(500).json({ exito: false, mensaje: 'Error al eliminar el evento' });
         }
     } else {
+        const evento = eventosMemoria.find(e => e.id === id);
+        if (!evento) return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
+
+        if (!validarLimite2Hs(evento.fecha, evento.hora)) {
+            return res.status(403).json({ 
+                exito: false, 
+                mensaje: 'No es posible eliminar el evento: Han transcurrido más de 2 horas desde el inicio del mismo.' 
+            });
+        }
+
         eventosMemoria = eventosMemoria.filter(e => e.id !== id);
         delete asientosMemoria[id];
         ventasMemoria = ventasMemoria.filter(v => v.evento_id !== id);
         return res.json({ exito: true, mensaje: 'Evento eliminado (Memoria)' });
     }
 });
-
 app.put('/api/ventas/editar', async (req, res) => {
     const { ventaId, nombre, apellido, contacto, email, nuevoAsientoId } = req.body;
 
