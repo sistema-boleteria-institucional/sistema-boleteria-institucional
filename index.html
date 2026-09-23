@@ -1091,43 +1091,44 @@ async function cargarListaGestionEventos() {
    
 // FUNCIÓN PARA ABRIR EL MODAL Y CARGAR DATOS
 function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas, dispGen, dispGrada) {
-    const inputId = document.getElementById('editEvId');
-    const inputNombre = document.getElementById('editEvNombre');
-    const inputFecha = document.getElementById('editEvFecha');
-    const inputHora = document.getElementById('editEvHora');
-    const inputPrecioGen = document.getElementById('editEvPrecioGeneral');
-    const inputPrecioGradas = document.getElementById('editEvPrecioGradas');
-    const inputAforoGen = document.getElementById('editAforoGeneral');
-    const inputAforoGrada = document.getElementById('editAforoGradas');
+    const elId = document.getElementById('editEvId');
+    const elNombre = document.getElementById('editEvNombre');
+    const elFecha = document.getElementById('editEvFecha');
+    const elHora = document.getElementById('editEvHora');
+    const elPrecioGen = document.getElementById('editEvPrecioGeneral');
+    const elPrecioGradas = document.getElementById('editEvPrecioGradas');
+    const elAforoGen = document.getElementById('editAforoGeneral');
+    const elAforoGradas = document.getElementById('editAforoGradas');
 
-    if (inputId) inputId.value = id || '';
-    if (inputNombre) inputNombre.value = nombre || '';
-    if (inputFecha) inputFecha.value = fecha || '';
-    if (inputHora) inputHora.value = hora || '';
+    const actualGen = Number(dispGen) || 0;
+    const actualGrada = Number(dispGrada) || 0;
 
-    // Asignar precio general
-    if (inputPrecioGen) {
-        inputPrecioGen.value = precioGen !== undefined && precioGen !== null ? precioGen : 0;
-    } else {
-        console.warn("⚠️ No se encontró el elemento con ID 'editEvPrecioGeneral' en el HTML.");
+    if (elId) elId.value = id || '';
+    if (elNombre) elNombre.value = nombre || '';
+    if (elFecha) elFecha.value = fecha || '';
+    if (elHora) elHora.value = hora || '';
+    if (elPrecioGen) elPrecioGen.value = precioGen ?? 0;
+    if (elPrecioGradas) elPrecioGradas.value = precioGradas ?? 0;
+
+    // Configuración de Aforo General (Mínimo = actual, Máximo = 112)
+    if (elAforoGen) {
+        elAforoGen.value = actualGen;
+        elAforoGen.min = actualGen;
+        elAforoGen.max = 112;
+        elAforoGen.dataset.min = actualGen;
     }
 
-    // Asignar precio gradas
-    if (inputPrecioGradas) {
-        inputPrecioGradas.value = precioGradas !== undefined && precioGradas !== null ? precioGradas : 0;
-    } else {
-        console.warn("⚠️ No se encontró el elemento con ID 'editEvPrecioGradas' en el HTML.");
+    // Configuración de Aforo Gradas (Mínimo = actual, Máximo = 24)
+    if (elAforoGradas) {
+        elAforoGradas.value = actualGrada;
+        elAforoGradas.min = actualGrada;
+        elAforoGradas.max = 24;
+        elAforoGradas.dataset.min = actualGrada;
     }
 
-    // Asignar aforos
-    if (inputAforoGen) inputAforoGen.value = dispGen ?? 0;
-    if (inputAforoGrada) inputAforoGrada.value = dispGrada ?? 0;
-
-    // Mostrar modal
     const modal = document.getElementById('modalEditarEvento');
     if (modal) modal.style.display = 'flex';
 }
-     
         
         function cerrarModalEditarEvento() {
             document.getElementById('modalEditarEvento').style.display = 'none';
@@ -1135,31 +1136,47 @@ function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas
             
 // FUNCIÓN PARA GUARDAR LOS CAMBIOS HACIENDO EL PUT AL SERVIDOR
 async function guardarEdicionEvento() {
-    const inputId = document.getElementById('editEvId');
-    const inputNombre = document.getElementById('editEvNombre');
-    const inputFecha = document.getElementById('editEvFecha');
-    const inputHora = document.getElementById('editEvHora');
-    const inputPrecioGen = document.getElementById('editEvPrecioGeneral');
-    const inputPrecioGradas = document.getElementById('editEvPrecioGradas');
-    const inputAforoGen = document.getElementById('editAforoGeneral');
-    const inputAforoGradas = document.getElementById('editAforoGradas');
+    const elId = document.getElementById('editEvId');
+    const elNombre = document.getElementById('editEvNombre');
+    const elFecha = document.getElementById('editEvFecha');
+    const elHora = document.getElementById('editEvHora');
+    const elPrecioGen = document.getElementById('editEvPrecioGeneral');
+    const elPrecioGradas = document.getElementById('editEvPrecioGradas');
+    const elAforoGen = document.getElementById('editAforoGeneral');
+    const elAforoGradas = document.getElementById('editAforoGradas');
 
-    // Validación para evitar errores de 'Cannot read properties of null'
-    if (!inputId || !inputNombre || !inputPrecioGen || !inputPrecioGradas) {
-        alert("❌ Error: No se encontraron los campos del formulario en el HTML. Revisa los IDs de los inputs.");
+    const id = elId ? elId.value : '';
+    const nGen = parseInt(elAforoGen ? elAforoGen.value : 0, 10);
+    const nGrada = parseInt(elAforoGradas ? elAforoGradas.value : 0, 10);
+    const minGen = parseInt(elAforoGen ? elAforoGen.dataset.min : 0, 10);
+    const minGrada = parseInt(elAforoGradas ? elAforoGradas.dataset.min : 0, 10);
+
+    // Validación local previa al envío
+    if (nGen < minGen) {
+        alert(`❌ No puedes reducir el aforo General. El mínimo es ${minGen}.`);
+        return;
+    }
+    if (nGen > 112) {
+        alert('❌ El aforo General no puede superar los 112 asientos.');
+        return;
+    }
+    if (nGrada < minGrada) {
+        alert(`❌ No puedes reducir el aforo de Gradas. El mínimo es ${minGrada}.`);
+        return;
+    }
+    if (nGrada > 24) {
+        alert('❌ El aforo de Gradas no puede superar los 24 asientos.');
         return;
     }
 
-    const id = inputId.value;
-
-    const bodyData = {
-        nombre: inputNombre.value,
-        fecha: inputFecha ? inputFecha.value : '',
-        hora: inputHora ? inputHora.value : '',
-        precioGeneral: parseFloat(inputPrecioGen.value) || 0,
-        precioGradas: parseFloat(inputPrecioGradas.value) || 0,
-        nuevoAforoGeneral: parseInt(inputAforoGen ? inputAforoGen.value : 0, 10) || 0,
-        nuevoAforoGradas: parseInt(inputAforoGradas ? inputAforoGradas.value : 0, 10) || 0,
+    const body = {
+        nombre: elNombre ? elNombre.value.trim() : '',
+        fecha: elFecha ? elFecha.value : '',
+        hora: elHora ? elHora.value : '',
+        precioGeneral: parseFloat(elPrecioGen ? elPrecioGen.value : 0) || 0,
+        precioGradas: parseFloat(elPrecioGradas ? elPrecioGradas.value : 0) || 0,
+        nuevoAforoGeneral: nGen,
+        nuevoAforoGradas: nGrada,
         rol: (window.usuarioSesion && window.usuarioSesion.tipo) ? window.usuarioSesion.tipo : 'admin'
     };
 
@@ -1167,27 +1184,22 @@ async function guardarEdicionEvento() {
         const res = await fetch(`/api/eventos/editar/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bodyData)
+            body: JSON.stringify(body)
         });
 
         const data = await res.json();
 
         if (data.exito) {
             alert('✅ ' + data.mensaje);
-            const modal = document.getElementById('modalEditarEvento');
-            if (modal) modal.style.display = 'none';
-            
-            if (typeof cargarEventos === 'function') {
-                cargarEventos();
-            } else {
-                location.reload();
-            }
+            document.getElementById('modalEditarEvento').style.display = 'none';
+            if (typeof cargarEventos === 'function') cargarEventos();
+            else location.reload();
         } else {
-            alert('❌ Error: ' + data.mensaje);
+            alert('❌ ' + data.mensaje);
         }
     } catch (e) {
-        console.error("Error al guardar cambios:", e);
-        alert('❌ Error de conexión al servidor al guardar los cambios.');
+        console.error('Error al guardar:', e);
+        alert('❌ Error al conectar con el servidor.');
     }
 }
         
