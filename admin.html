@@ -348,13 +348,14 @@
             await cargarDashboard();
         }
 
-        function cerrarSesion() {
-            clearTimeout(timerInactividad);
-            sessionStorage.removeItem('usuarioLogueado');
-            document.getElementById('clave').value = '';
-            document.getElementById('contenidoDashboard').style.display = 'none';
-            document.getElementById('modalLogin').style.display = 'flex';
-        }
+function cerrarSesion() {
+    clearTimeout(timerInactividad);
+    sessionStorage.removeItem('usuarioLogueado');
+    
+    // Redirige a index.html
+    window.location.href = 'index.html';
+}
+
 
         async function cargarEventosEnSelect() {
             const select = document.getElementById('selectEvento');
