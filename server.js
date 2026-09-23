@@ -1059,62 +1059,68 @@ app.put('/api/eventos/editar/:id', async (req, res) => {
         fecha, 
         hora, 
         precioGeneral, 
-        precio_general,
         precioGradas, 
-        precio_gradas,
         nuevoAforoGeneral, 
-        dispGen, 
-        aforoGeneral,
         nuevoAforoGradas, 
-        dispGrada, 
-        aforoGradas,
         rol 
     } = req.body;
 
-    const esAdminOSuper = ['super', 'admin', 'adm', 'administrador'].includes((rol || '').toLowerCase());
-    if (!esAdminOSuper) {
+    const esAdmin = ['super', 'admin', 'adm', 'administrador'].includes((rol || '').toLowerCase());
+    if (!esAdmin) {
         return res.status(403).json({ exito: false, mensaje: 'No tienes permisos de administrador.' });
     }
 
-    // Normalización de parámetros con valores por defecto
-    const pGen = Number(precioGeneral ?? precio_general) || 0;
-    const pGrada = Number(precioGradas ?? precio_gradas) || 0;
-    const nGen = Number(nuevoAforoGeneral ?? dispGen ?? aforoGeneral) || 0;
-    const nGrada = Number(nuevoAforoGradas ?? dispGrada ?? aforoGradas) || 0;
-
     try {
-        if (db) {
-            // 1. Actualizar datos generales y aforos en la tabla 'eventos'
-            await db.execute({
-                sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?",
-                args: [nombre, fecha, hora, pGen, nGen, pGrada, nGrada, id]
-            });
+        // 1. Obtener aforo actual de la base de datos
+        const eventoActual = await db.execute({
+            sql: "SELECT dispGen, dispGrada FROM eventos WHERE id = ?",
+            args: [id]
+        });
 
-            // 2. Ajustar asientos usando la función auxiliar preexistente (actualiza precios y sincroniza asientos)
-            await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
-
-            return res.json({ exito: true, mensaje: 'Evento y aforo actualizados correctamente' });
-        } else {
-            // Modo memoria temporal (backup)
-            const idx = eventosMemoria.findIndex(e => e.id === id);
-            if (idx !== -1) {
-                eventosMemoria[idx] = {
-                    ...eventosMemoria[idx],
-                    nombre,
-                    fecha,
-                    hora,
-                    precioGeneral: pGen,
-                    dispGen: nGen,
-                    precioGradas: pGrada,
-                    dispGrada: nGrada
-                };
-            }
-            await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
-            return res.json({ exito: true, mensaje: 'Evento actualizado correctamente (Memoria)' });
+        if (eventoActual.rows.length === 0) {
+            return res.status(404).json({ exito: false, mensaje: 'Evento no encontrado.' });
         }
+
+        const aforoActualGen = Number(eventoActual.rows[0].dispGen) || 0;
+        const aforoActualGrada = Number(eventoActual.rows[0].dispGrada) || 0;
+
+        const pGen = Number(precioGeneral) || 0;
+        const pGrada = Number(precioGradas) || 0;
+        const nGen = Number(nuevoAforoGeneral);
+        const nGrada = Number(nuevoAforoGradas);
+
+        // 2. VALIDACIONES ESTRICAS DE AFORO
+
+        // Regla A: No se puede achicar el aforo
+        if (nGen < aforoActualGen) {
+            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo general (${nGen}). El mínimo permitido es ${aforoActualGen}.` });
+        }
+        if (nGrada < aforoActualGrada) {
+            return res.status(400).json({ exito: false, mensaje: `No se puede reducir el aforo de gradas (${nGrada}). El mínimo permitido es ${aforoActualGrada}.` });
+        }
+
+        // Regla B: Límites máximos permitidos (112 General, 24 Gradas)
+        if (nGen > 112) {
+            return res.status(400).json({ exito: false, mensaje: 'El aforo general no puede ser mayor a 112.' });
+        }
+        if (nGrada > 24) {
+            return res.status(400).json({ exito: false, mensaje: 'El aforo de gradas no puede ser mayor a 24.' });
+        }
+
+        // 3. Actualizar tabla eventos
+        await db.execute({
+            sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?",
+            args: [nombre, fecha, hora, pGen, nGen, pGrada, nGrada, id]
+        });
+
+        // 4. Sincronizar asientos (recrea asientos faltantes como G2-3 si el aforo es 24)
+        await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
+
+        return res.json({ exito: true, mensaje: 'Evento actualizado correctamente.' });
+
     } catch (e) {
-        console.error("Error al actualizar evento y aforo:", e);
-        return res.status(500).json({ exito: false, mensaje: 'Error al actualizar el evento: ' + e.message });
+        console.error("Error al actualizar evento:", e);
+        return res.status(500).json({ exito: false, mensaje: 'Error al actualizar: ' + e.message });
     }
 });
 
