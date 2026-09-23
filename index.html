@@ -1090,7 +1090,7 @@ async function cargarListaGestionEventos() {
 
    
    function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas, dispGen, dispGrada) {
-    const inputId = document.getElementById('editEvId');
+	const inputId = document.getElementById('editEvId');
     const inputNombre = document.getElementById('editEvNombre');
     const inputFecha = document.getElementById('editEvFecha');
     const inputHora = document.getElementById('editEvHora');
@@ -1099,25 +1099,23 @@ async function cargarListaGestionEventos() {
     const inputAforoGen = document.getElementById('editAforoGeneral');
     const inputAforoGrada = document.getElementById('editAforoGradas');
 
-    if (inputId) inputId.value = id;
-    if (inputNombre) inputNombre.value = nombre;
-    if (inputFecha) inputFecha.value = fecha;
-    if (inputHora) inputHora.value = hora;
-    if (inputPrecioGen) inputPrecioGen.value = precioGen;
-    if (inputPrecioGradas) inputPrecioGradas.value = precioGradas;
+	if (inputId) inputId.value = id || '';
+    if (inputNombre) inputNombre.value = nombre || '';
+    if (inputFecha) inputFecha.value = fecha || '';
+    if (inputHora) inputHora.value = hora || '';
     
-    // Asignar los valores de aforo de forma segura
+// Asignación segura con valor por defecto (0) en caso de venir undefined o null
+    if (inputPrecioGen) inputPrecioGen.value = (precioGen !== undefined && precioGen !== null && precioGen !== '') ? precioGen : 0;
+    if (inputPrecioGradas) inputPrecioGradas.value = (precioGradas !== undefined && precioGradas !== null && precioGradas !== '') ? precioGradas : 0;
+
     if (inputAforoGen) {
-        inputAforoGen.value = dispGen;
-        inputAforoGen.min = dispGen;
+        inputAforoGen.value = (dispGen !== undefined && dispGen !== null) ? dispGen : 0;
     }
 
-    if (inputAforoGrada) {
-        inputAforoGrada.value = dispGrada;
-        inputAforoGrada.min = dispGrada;
+	if (inputAforoGrada) {
+        inputAforoGrada.value = (dispGrada !== undefined && dispGrada !== null) ? dispGrada : 0;
     }
-
-    // Mostrar el modal en pantalla
+// Mostrar el modal en pantalla
     const modal = document.getElementById('modalEditarEvento');
     if (modal) {
         modal.style.display = 'flex';
@@ -1856,6 +1854,38 @@ window.addEventListener('click', function(event) {
     }
 });
 
+		async function guardarCambiosEvento() {
+    const id = document.getElementById('editEventoId').value;
+    const bodyData = {
+        nombre: document.getElementById('editNombre').value,
+        fecha: document.getElementById('editFecha').value,
+        hora: document.getElementById('editHora').value,
+        precioGeneral: parseFloat(document.getElementById('editPrecioGeneral').value) || 0,
+        precioGradas: parseFloat(document.getElementById('editPrecioGradas').value) || 0,
+        nuevoAforoGeneral: parseInt(document.getElementById('editAforoGeneral').value, 10) || 0,
+        nuevoAforoGradas: parseInt(document.getElementById('editAforoGradas').value, 10) || 0,
+        rol: usuarioSesion ? usuarioSesion.tipo : 'admin'
+    };
+
+    try {
+        const res = await fetch(`/api/eventos/editar/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData)
+        });
+
+        const data = await res.json();
+        if (data.exito) {
+            alert('✅ ' + data.mensaje);
+            cerrarModalEditarEvento();
+            if (typeof cargarEventos === 'function') cargarEventos();
+        } else {
+            alert('❌ ' + data.mensaje);
+        }
+    } catch (e) {
+        alert('Error al conectar con el servidor.');
+    }
+}
 		
     </script>
 </body>
