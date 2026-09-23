@@ -175,11 +175,11 @@ button.btn-primary {
 .asiento.seleccionado { background: var(--seleccionado); color: white; border: 2px solid white; }
 
 .asiento.reservado {
-			background-color: #94a3b8 !important; /* Gris más claro (Slate 400) */
-			color: #ffffff;
-		    cursor: not-allowed;
-		    border: 1px solid #64748b;
-		}
+    background-color: #94a3b8 !important;
+    color: #ffffff;
+    cursor: not-allowed;
+    border: 1px solid #64748b;
+}
 
 .leyenda {
     display: flex;
@@ -207,19 +207,43 @@ button.btn-primary {
     border: 1px solid #334155;
 }
 
-table.tabla-admin {
+/* =========================================
+   ESTILOS DE TABLAS
+   ========================================= */
+
+.tabla-container {
     width: 100%;
-    border-collapse: collapse;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     margin-top: 15px;
 }
 
-table.tabla-admin th, table.tabla-admin td {
-    border: 1px solid #334155;
-    padding: 10px;
-    text-align: left;
+table.tabla-admin {
+    width: 100%;
+    border-collapse: collapse;
+    display: table;
 }
 
-table.tabla-admin th { background: #0f172a; }
+table.tabla-admin th, 
+table.tabla-admin td {
+    border: 1px solid #334155;
+    padding: 10px 12px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+table.tabla-admin th { 
+    background: #0f172a; 
+    white-space: nowrap;
+}
+
+table.tabla-admin td:last-child {
+    white-space: nowrap;
+}
+
+/* =========================================
+   COMPONENTES DE PANEL Y TARJETAS
+   ========================================= */
 
 .tarjetas-resumen {
     display: flex;
@@ -254,27 +278,24 @@ h2, h3, h4 { color: #ffffff; margin-top: 0; }
 }
 
 /* =========================================
-   AJUSTES RESPONSIVE (Añadir al final)
+   AJUSTES RESPONSIVE
    ========================================= */
 
 @media (max-width: 768px) {
     body {
-        padding: 10px; /* Reduce márgenes en pantallas pequeñas */
+        padding: 10px;
     }
 
-    /* 1. Encabezado: los elementos pasan a apilarse verticalmente */
     header {
         flex-direction: column;
         gap: 10px;
         text-align: center;
     }
 
-    /* 2. Pantalla de ventas: el mapa y el formulario pasan de 2 columnas a 1 sola */
     .layout-venta {
         grid-template-columns: 1fr;
     }
 
-    /* 3. Distribución de plateas y gradas: se apilan para evitar desbordes */
     .platea-container {
         flex-direction: column;
         align-items: center;
@@ -287,18 +308,8 @@ h2, h3, h4 { color: #ffffff; margin-top: 0; }
         align-items: stretch;
     }
 
-    /* 4. Tarjetas de resumen del panel: se apilan en columna */
     .tarjetas-resumen {
         flex-direction: column;
         gap: 10px;
     }
 }
-
-/* 5. Tablas adaptativas: permite desplazamiento horizontal en celulares si son muy anchas */
-.tabla-admin {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
