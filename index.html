@@ -179,18 +179,20 @@
 
         <!-- MENÚ NAVEGACIÓN DESPLEGABLE -->
         <div class="navbar-container">
-            <div class="dropdown">
-                <button class="dropbtn">☰</button>
-                <div class="dropdown-content">
-                    <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
-                    <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
-                    <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
-                    <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reportes por Evento</button>
-                    <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
-                    <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
-                    <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
-                    <button id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">👑 Superusuario</button>
-                </div>
+            <div class="dropdown" style="position: relative; display: inline-block;">
+    <button class="dropbtn" onclick="toggleMenu(event)">☰</button>
+    <div id="dropdownContent" class="dropdown-content" style="display: none; position: absolute; top: 100%; left: 0; z-index: 9999;">
+        <button id="btnTabVenta" onclick="mostrarTab('tabVenta', this)">🎟️ Venta de Entradas</button>
+        <button id="btnIrPuerta" class="item-puerta-btn" style="display:none;" onclick="irAPuerta()">📷 Control de Acceso (Puerta)</button>
+        <button id="btnTabInformes" onclick="mostrarTab('tabInformes', this)">📊 Informes de Ventas</button>
+        <button id="btnTabReporteEventos" style="display:none;" onclick="mostrarTab('tabReporteEventos', this)">📈 Reportes por Evento</button>
+        <button id="btnTabCrear" style="display:none;" onclick="mostrarTab('tabCrearEvento', this)">⚙️ Configurar Eventos</button>
+        <button id="btnTabCupones" style="display:none;" onclick="mostrarTab('tabCupones', this)">🏷️ Cupones</button>
+        <button id="btnTabUsuarios" style="display:none;" onclick="mostrarTab('tabCrearUsuario', this)">👤 Gestión Usuarios</button>
+        <button id="btnTabSuper" style="display:none;" onclick="mostrarTab('tabSuperAdmin', this)">👑 Superusuario</button>
+    </div>
+</div>
+
             </div>
             
             <button class="btn-primary" style="width: auto; background: #dc2626; padding: 8px 15px;" onclick="cerrarSesion()">Cerrar Sesión</button>
@@ -1839,6 +1841,22 @@ async function cargarCuponesPorEvento() {
         alert('Error de conexión al intentar eliminar el cupón.');
     }
 }
+
+function toggleMenu(event) {
+    event.stopPropagation();
+    const content = document.getElementById('dropdownContent');
+    content.style.display = content.style.display === 'block' ? 'none' : 'block';
+}
+
+// Cierra el menú si se hace clic fuera de él
+window.addEventListener('click', function(event) {
+    const content = document.getElementById('dropdownContent');
+    if (content && content.style.display === 'block') {
+        content.style.display = 'none';
+    }
+});
+
+		
     </script>
 </body>
 </html>
