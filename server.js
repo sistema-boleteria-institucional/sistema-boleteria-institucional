@@ -1054,77 +1054,67 @@ async function ajustarAsientosEvento(eventoId, pGen, dispGen, pGrada, dispGrada)
 // EDITAR / ACTUALIZAR EVENTO
 app.put('/api/eventos/editar/:id', async (req, res) => {
     const { id } = req.params;
-    const { nombre, fecha, hora, precioGeneral, precioGradas, nuevoAforoGeneral, nuevoAforoGradas, rol } = req.body;
+    const { 
+        nombre, 
+        fecha, 
+        hora, 
+        precioGeneral, 
+        precio_general,
+        precioGradas, 
+        precio_gradas,
+        nuevoAforoGeneral, 
+        dispGen, 
+        aforoGeneral,
+        nuevoAforoGradas, 
+        dispGrada, 
+        aforoGradas,
+        rol 
+    } = req.body;
 
     const esAdminOSuper = ['super', 'admin', 'adm', 'administrador'].includes((rol || '').toLowerCase());
     if (!esAdminOSuper) {
         return res.status(403).json({ exito: false, mensaje: 'No tienes permisos de administrador.' });
     }
 
+    // Normalización de parámetros con valores por defecto
+    const pGen = Number(precioGeneral ?? precio_general) || 0;
+    const pGrada = Number(precioGradas ?? precio_gradas) || 0;
+    const nGen = Number(nuevoAforoGeneral ?? dispGen ?? aforoGeneral) || 0;
+    const nGrada = Number(nuevoAforoGradas ?? dispGrada ?? aforoGradas) || 0;
+
     try {
         if (db) {
-            // 1. Obtener conteo actual de asientos por zona para este evento
-            const resGen = await db.execute({ sql: "SELECT COUNT(*) as total FROM asientos WHERE evento_id = ? AND tipoZona = 'General'", args: [id] });
-            const resGrad = await db.execute({ sql: "SELECT COUNT(*) as total FROM asientos WHERE evento_id = ? AND tipoZona = 'Grada'", args: [id] });
-            
-            const actualGeneral = resGen.rows[0].total;
-            const actualGradas = resGrad.rows[0].total;
-
-            // 2. Validar que no se reduzca el aforo
-            if (nuevoAforoGeneral < actualGeneral || nuevoAforoGradas < actualGradas) {
-                return res.status(400).json({ 
-                    exito: false, 
-                    mensaje: `No se puede reducir el aforo. General actual: ${actualGeneral}, Gradas actual: ${actualGradas}` 
-                });
-            }
-
-            // 3. Actualizar datos generales y precios de asientos no vendidos
+            // 1. Actualizar datos generales y aforos en la tabla 'eventos'
             await db.execute({
-                sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, precioGradas = ? WHERE id = ?",
-                args: [nombre, fecha, hora, precioGeneral, precioGradas, id]
+                sql: "UPDATE eventos SET nombre = ?, fecha = ?, hora = ?, precioGeneral = ?, dispGen = ?, precioGradas = ?, dispGrada = ? WHERE id = ?",
+                args: [nombre, fecha, hora, pGen, nGen, pGrada, nGrada, id]
             });
 
-            await db.execute({
-                sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'General' AND vendido = 0",
-                args: [precioGeneral, id]
-            });
-            await db.execute({
-                sql: "UPDATE asientos SET precio = ? WHERE evento_id = ? AND tipoZona = 'Grada' AND vendido = 0",
-                args: [precioGradas, id]
-            });
-
-            // 4. Si el aforo General aumentó, crear los nuevos asientos adicionales
-            if (nuevoAforoGeneral > actualGeneral) {
-                const diffGeneral = nuevoAforoGeneral - actualGeneral;
-                for (let i = 1; i <= diffGeneral; i++) {
-                    const numeroAsiento = actualGeneral + i;
-                    await db.execute({
-                        sql: "INSERT INTO asientos (evento_id, numero, tipoZona, precio, vendido) VALUES (?, ?, 'General', ?, 0)",
-                        args: [id, numeroAsiento, precioGeneral]
-                    });
-                }
-            }
-
-            // 5. Si el aforo de Gradas aumentó, crear los nuevos asientos adicionales
-            if (nuevoAforoGradas > actualGradas) {
-                const diffGradas = nuevoAforoGradas - actualGradas;
-                for (let i = 1; i <= diffGradas; i++) {
-                    const numeroAsiento = actualGradas + i;
-                    await db.execute({
-                        sql: "INSERT INTO asientos (evento_id, numero, tipoZona, precio, vendido) VALUES (?, ?, 'Grada', ?, 0)",
-                        args: [id, numeroAsiento, precioGradas]
-                    });
-                }
-            }
+            // 2. Ajustar asientos usando la función auxiliar preexistente (actualiza precios y sincroniza asientos)
+            await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
 
             return res.json({ exito: true, mensaje: 'Evento y aforo actualizados correctamente' });
         } else {
-            // Lógica equivalente para modo memoria temporal si la usas
-            // ...
+            // Modo memoria temporal (backup)
+            const idx = eventosMemoria.findIndex(e => e.id === id);
+            if (idx !== -1) {
+                eventosMemoria[idx] = {
+                    ...eventosMemoria[idx],
+                    nombre,
+                    fecha,
+                    hora,
+                    precioGeneral: pGen,
+                    dispGen: nGen,
+                    precioGradas: pGrada,
+                    dispGrada: nGrada
+                };
+            }
+            await ajustarAsientosEvento(id, pGen, nGen, pGrada, nGrada);
+            return res.json({ exito: true, mensaje: 'Evento actualizado correctamente (Memoria)' });
         }
     } catch (e) {
         console.error("Error al actualizar evento y aforo:", e);
-        return res.status(500).json({ exito: false, mensaje: 'Error al actualizar el evento' });
+        return res.status(500).json({ exito: false, mensaje: 'Error al actualizar el evento: ' + e.message });
     }
 });
 
