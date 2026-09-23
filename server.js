@@ -742,14 +742,14 @@ app.get('/api/ventas/detalle/:eventoId', async (req, res) => {
             const sql = esTodos 
                 ? `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
                           v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id,
-                          a.asistio, e.nombre as eventoNombre
+                          v.cupon_codigo, a.asistio, e.nombre as eventoNombre
                    FROM ventas v
                    LEFT JOIN asientos a ON v.asiento_id = a.id
                    LEFT JOIN eventos e ON v.evento_id = e.id
                    ORDER BY v.id DESC`
                 : `SELECT v.id, v.nombre, v.apellido, v.email, v.contacto as telefono, 
                           v.codigoAsiento, v.monto_total, v.metodo_pago, v.vendedor, v.fechaCompra, v.evento_id, v.asiento_id,
-                          a.asistio
+                          v.cupon_codigo, a.asistio
                    FROM ventas v
                    LEFT JOIN asientos a ON v.asiento_id = a.id
                    WHERE v.evento_id = ?
