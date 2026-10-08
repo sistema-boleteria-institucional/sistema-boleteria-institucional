@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrada Digital - Pass</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .ticket-card {
+            max-width: 420px;
+            margin: 40px auto;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            background: #fff;
+            transition: all 0.3s ease;
+        }
+        .ticket-header {
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            transition: background 0.3s ease;
+        }
+        /* Estilos por estado */
+        .estado-pendiente .ticket-header { background: linear-gradient(135deg, #0d6efd, #0a58ca); }
+        .estado-ingresado .ticket-header { background: linear-gradient(135deg, #198754, #146c43); }
+        .estado-expirado .ticket-header { background: linear-gradient(135deg, #dc3545, #b02a37); }
+
+        .ticket-body { padding: 25px; }
+
+        .qr-container {
+            text-align: center;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 10px;
+            border: 2px dashed #ccc;
+            transition: all 0.3s ease;
+        }
+        .estado-pendiente .qr-container { border-color: #0d6efd; background: #f0f7ff; }
+        .estado-ingresado .qr-container { border-color: #198754; background: #f0fff4; }
+        .estado-expirado .qr-container { border-color: #dc3545; background: #fff0f0; opacity: 0.75; }
+
+        .qr-container img { width: 180px; height: 180px; }
+
+        .estado-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        .estado-pendiente .estado-badge { background: #e7f1ff; color: #0d6efd; }
+        .estado-ingresado .estado-badge { background: #d1e7dd; color: #0f5132; }
+        .estado-expirado .estado-badge { background: #f8d7da; color: #842029; }
+
+        @media print {
+            body { background: #fff; }
+            .no-print { display: none !important; }
+            .ticket-card { box-shadow: none; margin: 0 auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ticket-card estado-pendiente" id="ticketCard">
+        <div class="ticket-header" id="headerTicket">
+            <h4 class="mb-1" id="nombreEvento">Cargando...</h4>
+            <small class="text-white-50">ENTRADA OFICIAL SEGURO</small>
+        </div>
+        <div class="ticket-body">
+            <div id="contenedorError" class="alert alert-danger d-none text-center" role="alert"></div>
+
+            <div id="contenedorTicket">
+                <div class="text-center">
+                    <span id="badgeEstado" class="estado-badge">Cargando estado...</span>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">Titular</small>
+                    <strong id="nombreCliente" class="fs-5">-</strong>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <small class="text-muted d-block">Fecha</small>
+                        <strong id="fechaEvento">-</strong>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted d-block">Hora</small>
+                        <strong id="horaEvento">-</strong>
+                    </div>
+                </div>
+
+                <div class="mb-4 text-center p-2 bg-light rounded">
+                    <small class="text-muted d-block">Ubicación / Asiento</small>
+                    <span id="asientoCliente" class="badge bg-primary fs-4 mt-1">-</span>
+                </div>
+
+                <div class="qr-container">
+                    <img id="imgQR" src="" alt="Cargando QR...">
+                    <small id="txtMensajeQR" class="d-block mt-2 fw-bold text-muted">Muestra este QR en el ingreso</small>
+                </div>
+
+                <div class="mt-4 text-center no-print">
+                    <button id="btnImprimir" class="btn btn-outline-primary btn-sm w-100" onclick="window.print()">
+                        🖨️ Imprimir / Guardar como PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function cargarTicket() {
+            const params = new URLSearchParams(window.location.search);
+            const ventaId = params.get('id');
+            const sig = params.get('sig');
+
+            const divError = document.getElementById('contenedorError');
+            const divTicket = document.getElementById('contenedorTicket');
+            const card = document.getElementById('ticketCard');
+            const badgeEstado = document.getElementById('badgeEstado');
+            const txtMensajeQR = document.getElementById('txtMensajeQR');
+            const asientoBadge = document.getElementById('asientoCliente');
+            const btnImprimir = document.getElementById('btnImprimir');
+
+            if (!ventaId || !sig) {
+                divTicket.classList.add('d-none');
+                divError.classList.remove('d-none');
+                divError.innerText = '⚠️ Acceso no autorizado: Parámetros de seguridad faltantes.';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/entradas/${ventaId}?sig=${encodeURIComponent(sig)}`);
+                const data = await res.json();
+
+                if (!res.ok || !data.exito) {
+                    divTicket.classList.add('d-none');
+                    divError.classList.remove('d-none');
+                    divError.innerText = `⛔ ${data.mensaje || 'Entrada inválida o alterada.'}`;
+                    return;
+                }
+
+                const t = data.ticket;
+                document.getElementById('nombreEvento').innerText = t.evento_nombre || 'Evento Institucional';
+                document.getElementById('nombreCliente').innerText = `${t.nombre} ${t.apellido}`;
+                document.getElementById('fechaEvento').innerText = t.evento_fecha || '-';
+                document.getElementById('horaEvento').innerText = t.evento_hora ? `${t.evento_hora} hs` : '-';
+                document.getElementById('asientoCliente').innerText = t.codigoAsiento;
+                document.getElementById('imgQR').src = t.qr;
+
+                // Aplicar estado visual (Azul, Verde o Rojo)
+                card.classList.remove('estado-pendiente', 'estado-ingresado', 'estado-expirado');
+                asientoBadge.classList.remove('bg-primary', 'bg-success', 'bg-danger');
+                btnImprimir.classList.remove('btn-outline-primary', 'btn-outline-success', 'btn-outline-danger');
+
+                if (t.estado === 'ingresado') {
+                    // VERDE: Ya escaneado / ingresó
+                    card.classList.add('estado-ingresado');
+                    asientoBadge.classList.add('bg-success');
+                    btnImprimir.classList.add('btn-outline-success');
+                    badgeEstado.innerText = '✅ ENTRADA INGRESADA';
+                    txtMensajeQR.innerText = '✅ Esta entrada ya fue utilizada en el ingreso.';
+                    txtMensajeQR.className = 'd-block mt-2 fw-bold text-success';
+                } else if (t.estado === 'expirado') {
+                    // ROJO: Pasaron más de 6 hs del inicio del evento
+                    card.classList.add('estado-expirado');
+                    asientoBadge.classList.add('bg-danger');
+                    btnImprimir.classList.add('btn-outline-danger');
+                    badgeEstado.innerText = '⛔ ENTRADA EXPIRADA';
+                    txtMensajeQR.innerText = '⛔ Esta entrada ha expirado (+2 hs del evento).';
+                    txtMensajeQR.className = 'd-block mt-2 fw-bold text-danger';
+                } else {
+                    // AZUL: Válida y pendiente de ingreso
+                    card.classList.add('estado-pendiente');
+                    asientoBadge.classList.add('bg-primary');
+                    btnImprimir.classList.add('btn-outline-primary');
+                    badgeEstado.innerText = '🎟️ ENTRADA VÁLIDA';
+                    txtMensajeQR.innerText = 'Muestra este QR en el ingreso';
+                    txtMensajeQR.className = 'd-block mt-2 text-muted';
+                }
+
+            } catch (err) {
+                divTicket.classList.add('d-none');
+                divError.classList.remove('d-none');
+                divError.innerText = '❌ Error de comunicación con el servidor.';
+            }
+        }
+
+        cargarTicket();
+    </script>
+</body>
+</html>
+
+        
