@@ -265,6 +265,7 @@
                     <p>Asientos seleccionados: <strong id="lblAsiento" style="color:#38bdf8;">Ninguno</strong>
                         <button type="button" id="btnLimpiarSel" onclick="limpiarSeleccion()" style="display:none; width:auto; margin-left:8px; padding:2px 8px; font-size:0.8em; background:#334155; color:#e2e8f0; border:1px solid #475569; border-radius:4px; cursor:pointer;">Limpiar</button></p>
                     <p style="font-size:0.8em; color:#94a3b8; margin-top:-6px;">Tocá varios asientos para venderlos juntos (hasta 10). Los cupones 2X1 y DESCUENTOXXX solo valen para exactamente 2 entradas y el descuento se aplica sobre la 2.ª entrada. Los demás cupones se calculan sobre el total y se descuentan desde la última entrada elegida.</p>
+                    <div id="avisoPuerta" style="display:none; background:#052e2b; border:1px solid #0f766e; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-size:0.85em; color:#99f6e4;">🚪 Hoy es el día del evento: rige el <strong>precio de Puerta</strong>.</div>
                     <div id="panelSobreventa" style="display:none; background:#431407; border:1px solid #c2410c; border-radius:6px; padding:10px; margin-bottom:10px;">
                         <p style="margin:0 0 8px; font-size:0.85em; color:#fed7aa;">⚠️ Los asientos generales están agotados. Podés vender entradas de <strong>sobreventa</strong>: no tienen asiento asignado y el QR dice «SIN ASIGNAR».</p>
                         <button type="button" onclick="agregarSobreventa()" style="width:auto; padding:5px 10px; font-size:0.85em; background:#f97316; color:#fff; border:none; border-radius:4px; cursor:pointer;">➕ Agregar entrada sin asignar</button>
@@ -406,6 +407,10 @@
                     <input type="number" id="evPrecioGen" value="1500" min="0">
                 </div>
                 <div class="form-group">
+                    <label>Precio Puerta General ($) <small>(opcional: rige todo el día del evento)</small>:</label>
+                    <input type="number" id="evPrecioPuertaGen" placeholder="Vacío = mismo precio" min="0">
+                </div>
+                <div class="form-group">
                     <label>Cantidad Asientos General (Máximo 112):</label>
                     <input type="number" id="evDispGen" value="112" min="1" max="112">
                 </div>
@@ -415,6 +420,10 @@
                 <div class="form-group">
                     <label>Precio Gradas ($):</label>
                     <input type="number" id="evPrecioGrada" value="3000" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Precio Puerta Gradas ($) <small>(opcional: rige todo el día del evento)</small>:</label>
+                    <input type="number" id="evPrecioPuertaGrada" placeholder="Vacío = mismo precio" min="0">
                 </div>
                 <div class="form-group">
                     <label>Cantidad Asientos Gradas (Máximo 24):</label>
@@ -567,6 +576,18 @@
     <div class="col-md-6 mb-3">
         <label for="editEvPrecioGradas" class="form-label">Precio Gradas ($)</label>
         <input type="number" step="0.01" class="form-control" id="editEvPrecioGradas" required>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Precio de Puerta (rige todo el día del evento) -->
+    <div class="col-md-6 mb-3">
+        <label for="editEvPrecioPuertaGeneral" class="form-label">Precio Puerta General ($)</label>
+        <input type="number" step="0.01" class="form-control" id="editEvPrecioPuertaGeneral" placeholder="Vacío = mismo precio">
+    </div>
+    <div class="col-md-6 mb-3">
+        <label for="editEvPrecioPuertaGradas" class="form-label">Precio Puerta Gradas ($)</label>
+        <input type="number" step="0.01" class="form-control" id="editEvPrecioPuertaGradas" placeholder="Vacío = mismo precio">
     </div>
 </div>
 
@@ -754,7 +775,7 @@
                     eventos.forEach(ev => {
                         const evId = ev.id || ev.evento_id;
                         const horaTexto = ev.hora ? ev.hora : 'Sin hora';
-                        const opt = `<option value="${esc(evId)}" data-hora="${esc(ev.hora || '')}" data-pgen="${esc(ev.precioGeneral || 0)}">${esc(ev.nombre)} (${esc(ev.fecha)} - ${esc(horaTexto)} hs)</option>`;
+                        const opt = `<option value="${esc(evId)}" data-hora="${esc(ev.hora || '')}" data-pgen="${esc(ev.precioGeneralVigente ?? ev.precioGeneral ?? 0)}" data-puerta="${ev.puertaActiva ? '1' : '0'}">${esc(ev.nombre)} (${esc(ev.fecha)} - ${esc(horaTexto)} hs)</option>`;
                         selVenta.innerHTML += opt;
                         selInf.innerHTML += opt;
                         if (selCup) selCup.innerHTML += opt;
@@ -802,6 +823,7 @@ async function cargarMapaAsientos() {
     sobreventaDisponible = false;
     const optSel = selectVenta.options[selectVenta.selectedIndex];
     precioGeneralActual = Number(optSel && optSel.getAttribute('data-pgen')) || 0;
+    document.getElementById('avisoPuerta').style.display = (optSel && optSel.getAttribute('data-puerta') === '1') ? 'block' : 'none';
     asientosSeleccionados = [];
     actualizarPanelVenta();
 
@@ -1169,6 +1191,8 @@ async function crearCupon() {
                 precioGeneral: parseFloat(document.getElementById('evPrecioGen').value) || 0,
                 dispGen: dispGenVal,
                 precioGradas: parseFloat(document.getElementById('evPrecioGrada').value) || 0,
+                precioPuertaGeneral: parseFloat(document.getElementById('evPrecioPuertaGen').value) || 0,
+                precioPuertaGradas: parseFloat(document.getElementById('evPrecioPuertaGrada').value) || 0,
                 dispGrada: dispGradaVal,
                 rol: usuarioSesion ? usuarioSesion.tipo : ''
             };
@@ -1228,7 +1252,7 @@ async function cargarListaGestionEventos() {
                     <td style="padding: 8px;">${esc(e.fecha)} ${esc(e.hora || '')}</td>
                     <td style="padding: 8px; text-align: center;">
                         <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #eab308; margin-right: 4px;"
-                            onclick="abrirModalEditarEvento('${jsq(evId)}', '${nombreEscapado}', '${jsq(e.fecha)}', '${jsq(e.hora || '')}', ${Number(e.precioGeneral) || 0}, ${Number(e.precioGradas) || 0}, ${Number(e.dispGen) || 0}, ${Number(e.dispGrada) || 0})">
+                            onclick="abrirModalEditarEvento('${jsq(evId)}', '${nombreEscapado}', '${jsq(e.fecha)}', '${jsq(e.hora || '')}', ${Number(e.precioGeneral) || 0}, ${Number(e.precioGradas) || 0}, ${Number(e.dispGen) || 0}, ${Number(e.dispGrada) || 0}, ${Number(e.precioPuertaGeneral) || 0}, ${Number(e.precioPuertaGradas) || 0})">
                             ✏️ Editar
                         </button>
                         <button class="btn-primary" style="padding: 4px 8px; width: auto; font-size: 0.8em; background: #ef4444;"
@@ -1247,7 +1271,7 @@ async function cargarListaGestionEventos() {
 
    
 // FUNCIÓN PARA ABRIR EL MODAL Y CARGAR DATOS
-function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas, dispGen, dispGrada) {
+function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas, dispGen, dispGrada, precioPuertaGen, precioPuertaGradas) {
     const elId = document.getElementById('editEvId');
     const elNombre = document.getElementById('editEvNombre');
     const elFecha = document.getElementById('editEvFecha');
@@ -1266,6 +1290,10 @@ function abrirModalEditarEvento(id, nombre, fecha, hora, precioGen, precioGradas
     if (elHora) elHora.value = hora || '';
     if (elPrecioGen) elPrecioGen.value = precioGen ?? 0;
     if (elPrecioGradas) elPrecioGradas.value = precioGradas ?? 0;
+    const elPuertaGen = document.getElementById('editEvPrecioPuertaGeneral');
+    const elPuertaGradas = document.getElementById('editEvPrecioPuertaGradas');
+    if (elPuertaGen) elPuertaGen.value = Number(precioPuertaGen) > 0 ? precioPuertaGen : '';
+    if (elPuertaGradas) elPuertaGradas.value = Number(precioPuertaGradas) > 0 ? precioPuertaGradas : '';
 
     // Configuración de Aforo General (Mínimo = actual, Máximo = 112)
     if (elAforoGen) {
@@ -1332,6 +1360,8 @@ async function guardarEdicionEvento() {
         hora: elHora ? elHora.value : '',
         precioGeneral: parseFloat(elPrecioGen ? elPrecioGen.value : 0) || 0,
         precioGradas: parseFloat(elPrecioGradas ? elPrecioGradas.value : 0) || 0,
+        precioPuertaGeneral: parseFloat((document.getElementById('editEvPrecioPuertaGeneral') || {}).value) || 0,
+        precioPuertaGradas: parseFloat((document.getElementById('editEvPrecioPuertaGradas') || {}).value) || 0,
         nuevoAforoGeneral: nGen,
         nuevoAforoGradas: nGrada,
         rol: (window.usuarioSesion && window.usuarioSesion.tipo) ? window.usuarioSesion.tipo : 'admin'
